@@ -828,7 +828,7 @@ await step('fonts: the UI, the conversation and its code each have their own; th
     });
   const before = await fonts();
   if (!before.input.includes('"Noto Sans SC"')) throw new Error(`message input font: ${before.input}`);
-  if (before.inputSize !== '15px') throw new Error(`message input size: ${before.inputSize}`);
+  if (before.inputSize !== '14px') throw new Error(`message input size: ${before.inputSize}`);
   if (!before.button.includes('"Microsoft YaHei UI"') || before.button.includes('Noto')) throw new Error(`button font: ${before.button}`);
   if (!before.code.startsWith('Consolas')) throw new Error(`code font: ${before.code}`);
   if (before.noto === 0) throw new Error('Noto Sans SC did not load in the conversation page');
@@ -839,7 +839,7 @@ await step('fonts: the UI, the conversation and its code each have their own; th
   await waitFor(async () => (await fonts()).inputSize === '18px', 10_000, 'the conversation at 18px');
   const { 'chat.fontSize': _removed, ...rest } = readSettings();
   writeFileSync(settingsFile, JSON.stringify(rest, null, 2), 'utf8');
-  await waitFor(async () => (await fonts()).inputSize === '15px', 10_000, 'the conversation back at 15px');
+  await waitFor(async () => (await fonts()).inputSize === '14px', 10_000, 'the conversation back at 14px');
   return `input ${before.inputSize}, ${before.noto} Noto Sans SC slice(s) loaded`;
 });
 

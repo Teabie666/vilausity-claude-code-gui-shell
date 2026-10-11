@@ -15,9 +15,9 @@ describe('withFontVariables', () => {
     assert.equal(vars['vscode-foreground'], '#ccc');
     assert.equal(vars['vscode-font-family'], DEFAULT_FONTS.family);
     assert.match(vars['vscode-font-family']!, /Microsoft YaHei UI/);
-    assert.equal(vars['vscode-font-size'], '13.5px');
+    assert.equal(vars['vscode-font-size'], '13px');
     assert.match(vars['vilaus-chat-font-family']!, /"Segoe UI", "Noto Sans SC"/);
-    assert.equal(vars['vilaus-chat-font-size'], '15px');
+    assert.equal(vars['vilaus-chat-font-size'], '14px');
     assert.equal(vars['vilaus-chat-code-font-family'], DEFAULT_FONTS.editorFamily);
     assert.equal(vars['vilaus-chat-code-font-size'], '13px');
     assert.equal(vars['vscode-markdown-font-family'], vars['vilaus-chat-font-family']);
@@ -48,7 +48,7 @@ describe('withFontVariables', () => {
     const vars = withFontVariables(theme, { 'chat.editor.fontFamily': 'Consolas', 'chat.editor.fontSize': -3, 'chat.fontSize': '16' }).variables;
     assert.equal(vars['vilaus-chat-code-font-family'], 'Consolas');
     assert.equal(vars['vilaus-chat-code-font-size'], '13px');
-    assert.equal(vars['vilaus-chat-font-size'], '15px');
+    assert.equal(vars['vilaus-chat-font-size'], '14px');
   });
 
   test('every font setting the settings editor lists changes the theme data, and only those', () => {

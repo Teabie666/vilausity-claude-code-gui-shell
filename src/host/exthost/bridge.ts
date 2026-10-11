@@ -124,9 +124,7 @@ const CONVERSATION_STYLES = `
  * - no Local / Web switch (remote sessions are not used from here);
  * - the "Active" toggle and the status filter's caret as one control;
  * - the search button as a search box taking the rest of its row (clicking it opens the
- *   page's own search field, as before); "New group" as just its icon, to leave it room;
- * - sizes in steps around the UI font size: the sessions a step above it in taller rows, the
- *   section's title at it (not small capitals), times, filters and group names a step below.
+ *   page's own search field, as before); "New group" as just its icon, to leave it room.
  */
 const SESSION_LIST_STYLES = `
 .root_djirOA { overflow-y: hidden; }
@@ -188,19 +186,6 @@ const SESSION_LIST_STYLES = `
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.sectionLabel_djirOA { font-size: 1em; letter-spacing: 0; text-transform: none; }
-.accountValue_JuUW3A { font-size: inherit; }
-.newSessionButton_djirOA { min-height: 30px; }
-.activeFilterToggle_OOQiHg,
-.statusFilterMenuButton_OOQiHg,
-.searchToggleButton_OOQiHg,
-.searchToggleButton_OOQiHg:hover,
-.searchToggleButton_OOQiHg:focus { height: 26px; font-size: calc(var(--vscode-font-size) - 1px); }
-.sessionItem_OOQiHg { height: 32px; font-size: calc(var(--vscode-font-size) + 1px); }
-.sessionTime_OOQiHg { font-size: calc(var(--vscode-font-size) - 1px); }
-.groupHeader_OOQiHg { height: 28px; }
-.groupName_OOQiHg { font-size: calc(var(--vscode-font-size) - 1px); }
 `;
 
 /**

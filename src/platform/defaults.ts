@@ -10,11 +10,10 @@
  */
 export const DEFAULT_FONTS = {
   family: '"Segoe WPC", "Segoe UI", "Microsoft YaHei UI", sans-serif',
-  /** Half a step above VS Code's 13: Chinese reads small at 13px. */
-  size: 13.5,
+  size: 13,
   /** The conversation (`chat.fontFamily`, `chat.fontSize`) and, unless set, Markdown previews. */
   chatFamily: '"Segoe WPC", "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif',
-  chatSize: 15,
+  chatSize: 14,
   chatLineHeight: 1.6,
   /** Code in the conversation (`chat.editor.fontSize`); its font is the editor's unless set. */
   chatCodeSize: 13,
