@@ -43,4 +43,4 @@ electron . [文件夹] [--folder <dir>] [--extension-dir <dir>] [--user-data-dir
 
 Copyright (C) 2026 Teabie
 
-Vilausity 以 [GNU General Public License v3.0 或更高版本](LICENSE)（GPL-3.0-or-later）发布。许可证只覆盖本仓库的代码；Claude Code 插件不在其中，它的条款由 Anthropic 规定。
+Vilausity 以 [GNU General Public License v3.0 或更高版本](LICENSE)（GPL-3.0-or-later）发布。许可证只覆盖本仓库的代码；Claude Code 插件不在其中，它的条款由 Anthropic 规定。随软件附带的字体 Noto Sans SC（思源黑体）以 [SIL Open Font License 1.1](https://openfontlicense.org) 发布，许可证文件跟字体放在一起（`fonts/noto-sans-sc/LICENSE`）。

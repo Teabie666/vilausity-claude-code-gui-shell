@@ -3,7 +3,7 @@
 import type { ShellModule } from '../../core/module';
 import { CommandCategory, SettingsSection } from '../../core/messages';
 import { ICommands, IDialogs, ISettings, IThemes } from '../../core/serviceIds';
-import { DEFAULT_FONTS, DEFAULT_THEME_ID } from '../../platform/defaults';
+import { DEFAULT_THEME_ID } from '../../platform/defaults';
 import { t, themeLabel } from './messages';
 
 export const themesModule: ShellModule = {
@@ -37,23 +37,8 @@ export const themesModule: ShellModule = {
       ),
     );
 
-    // Main applies these (theme, and the UI font through the theme variables).
+    // Main applies it (the fonts are in features/fonts).
     const settings = services.get(ISettings);
-    const fonts = settings.register([
-      {
-        key: 'workbench.fontFamily',
-        section: SettingsSection.workbench,
-        order: 1,
-        schema: { type: 'string', default: DEFAULT_FONTS.family, description: t('uiFontFamily') },
-      },
-      {
-        key: 'workbench.fontSize',
-        section: SettingsSection.workbench,
-        order: 2,
-        schema: { type: 'number', default: DEFAULT_FONTS.size, minimum: 6, maximum: 32, description: t('uiFontSize') },
-      },
-    ]);
-    subscriptions.add(fonts);
     void themes.list().then((available) => {
       subscriptions.add(
         settings.register([

@@ -38,6 +38,14 @@ export const settingTitleName = defineNames('settingTitles', {
   'vilaus.extension.version': 'Vilaus › Extension: Version',
   'vilaus.extension.openVsxUrl': 'Vilaus › Extension: Open Vsx Url',
 
+  'chat.fontFamily': 'Chat: Font Family',
+  'chat.fontSize': 'Chat: Font Size',
+  'chat.editor.fontFamily': 'Chat › Editor: Font Family',
+  'chat.editor.fontSize': 'Chat › Editor: Font Size',
+  'markdown.preview.fontFamily': 'Markdown › Preview: Font Family',
+  'markdown.preview.fontSize': 'Markdown › Preview: Font Size',
+  'markdown.preview.lineHeight': 'Markdown › Preview: Line Height',
+
   'editor.fontFamily': 'Editor: Font Family',
   'editor.fontSize': 'Editor: Font Size',
   'editor.fontWeight': 'Editor: Font Weight',

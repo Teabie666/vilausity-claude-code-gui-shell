@@ -804,6 +804,45 @@ await step('Diff Editor: Font Size applies to diffs only', async () => {
   return `diff ${diffSize}, editor ${editorSize}`;
 });
 
+await step('fonts: the UI, the conversation and its code each have their own; the bundled Noto Sans SC loads in webviews; chat.fontSize applies at once', async () => {
+  const chat = await waitFor(async () => {
+    for (const frame of webviewFrames()) {
+      if ((await frame.locator('[role="textbox"][aria-label="Message input"]').count().catch(() => 0)) > 0) return frame;
+    }
+    return undefined;
+  }, 10_000, 'a conversation page');
+  const fonts = () =>
+    chat.evaluate(async () => {
+      const input = getComputedStyle(document.querySelector('[role="textbox"][aria-label="Message input"]'));
+      const button = getComputedStyle(document.querySelector('form button'));
+      const root = getComputedStyle(document.documentElement);
+      // Loading it goes through the page's CSP (font-src) and the font file's CORS headers.
+      const loaded = await document.fonts.load(`${input.fontSize} "Noto Sans SC"`, '中文');
+      return {
+        input: input.fontFamily,
+        inputSize: input.fontSize,
+        button: button.fontFamily,
+        code: root.getPropertyValue('--vscode-editor-font-family').trim(),
+        noto: loaded.filter((face) => face.status === 'loaded').length,
+      };
+    });
+  const before = await fonts();
+  if (!before.input.includes('"Noto Sans SC"')) throw new Error(`message input font: ${before.input}`);
+  if (before.inputSize !== '15px') throw new Error(`message input size: ${before.inputSize}`);
+  if (!before.button.includes('"Microsoft YaHei UI"') || before.button.includes('Noto')) throw new Error(`button font: ${before.button}`);
+  if (!before.code.startsWith('Consolas')) throw new Error(`code font: ${before.code}`);
+  if (before.noto === 0) throw new Error('Noto Sans SC did not load in the conversation page');
+  const shellNoto = await page.evaluate(async () => (await document.fonts.load('14px "Noto Sans SC"', '中文')).length);
+  if (shellNoto === 0) throw new Error('Noto Sans SC did not load in the shell');
+
+  writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'chat.fontSize': 18 }, null, 2), 'utf8');
+  await waitFor(async () => (await fonts()).inputSize === '18px', 10_000, 'the conversation at 18px');
+  const { 'chat.fontSize': _removed, ...rest } = readSettings();
+  writeFileSync(settingsFile, JSON.stringify(rest, null, 2), 'utf8');
+  await waitFor(async () => (await fonts()).inputSize === '15px', 10_000, 'the conversation back at 15px');
+  return `input ${before.inputSize}, ${before.noto} Noto Sans SC slice(s) loaded`;
+});
+
 await step('settings.json reaches every Monaco option; Default Settings (JSON) lists them all', async () => {
   // Not in the settings editor, only in settings.json.
   writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'editor.rulers': [12] }, null, 2), 'utf8');

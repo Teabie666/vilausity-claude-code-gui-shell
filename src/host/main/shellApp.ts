@@ -65,7 +65,7 @@ import { claudeProjectsDir, SessionSearch } from './sessionSearch';
 import { SettingsStore } from './settingsStore';
 import { isExternalUrl, nextZoomLevel } from './shellWindow';
 import { StateStore } from './stateStore';
-import { DEFAULT_THEME_ID, listThemeSummaries, loadTheme, withFontVariables } from './themes';
+import { DEFAULT_THEME_ID, FONT_SETTING_KEYS, listThemeSummaries, loadTheme, readFontFaces, withFontVariables } from './themes';
 import { WebviewDocumentStore } from './webviewDocuments';
 import { WindowContext, type WindowHost } from './windowContext';
 import {
@@ -82,14 +82,7 @@ export const VSCODE_COMPAT_VERSION = '1.121.0';
 
 const THEME_SETTING = 'vilaus.theme';
 /** Settings that change the theme data (colors or font variables). */
-const THEME_SETTING_KEYS = new Set([
-  THEME_SETTING,
-  'workbench.fontFamily',
-  'workbench.fontSize',
-  'editor.fontFamily',
-  'editor.fontSize',
-  'editor.fontWeight',
-]);
+const THEME_SETTING_KEYS = new Set<string>([THEME_SETTING, ...FONT_SETTING_KEYS]);
 /** Automatic updates of the extension: this long after the start, then at this interval. */
 const FIRST_UPDATE_CHECK_MS = 15_000;
 const UPDATE_CHECK_INTERVAL_MS = 12 * 60 * 60_000;
@@ -189,7 +182,12 @@ export class ShellApp extends Disposable implements WindowHost {
     this.currentTheme = withFontVariables(loadTheme(this.themesDir, themeId, this.logger), this.settings.all);
     const bootstrap = fs.readFileSync(path.join(env.appDir, 'webview-bootstrap.js'), 'utf8');
     this.extensionTable = extensionTranslations(this.language);
-    this.documents = new WebviewDocumentStore(bootstrap, () => this.theme, () => this.extensionTranslations());
+    this.documents = new WebviewDocumentStore(
+      bootstrap,
+      () => this.theme,
+      () => this.extensionTranslations(),
+      readFontFaces(path.join(env.appDir, 'renderer', 'fonts', 'fonts.css'), this.logger),
+    );
   }
 
   get theme(): ThemeData {

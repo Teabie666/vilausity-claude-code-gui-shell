@@ -3,7 +3,7 @@
 //   node scripts/build.mjs --watch      rebuild on change
 //   node scripts/build.mjs --production no source maps, minified
 import * as esbuild from 'esbuild';
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -87,6 +87,33 @@ function copyStatic() {
   if (existsSync(themes)) {
     cpSync(themes, path.join(dist, 'themes'), { recursive: true });
   }
+  copyFonts();
+}
+
+/**
+ * The bundled font: Noto Sans SC (Source Han Sans' glyphs, SIL Open Font License 1.1, its
+ * license file goes along), variable weight, in the slices Google Fonts cuts it into so a page
+ * loads only the ones its text needs. fonts.css declares it as "Noto Sans SC" with absolute
+ * ccw://app URLs (src/platform/webviewUrls.ts), so the shell links it and main inlines it into
+ * every webview document.
+ */
+function copyFonts() {
+  const pkg = path.join(root, 'node_modules/@fontsource-variable/noto-sans-sc');
+  const out = path.join(dist, 'renderer', 'fonts');
+  cpSync(path.join(pkg, 'files'), path.join(out, 'noto-sans-sc'), { recursive: true });
+  cpSync(path.join(pkg, 'LICENSE'), path.join(out, 'noto-sans-sc', 'LICENSE'));
+  const css = readFileSync(path.join(pkg, 'index.css'), 'utf8')
+    .replace(/\/\*[^*]*\*\//g, '')
+    .replaceAll("'Noto Sans SC Variable'", "'Noto Sans SC'")
+    .replaceAll('url(./files/', 'url(ccw://app/fonts/noto-sans-sc/')
+    // A local file: waiting for it beats showing the fallback font first and then moving the text.
+    .replaceAll('font-display: swap', 'font-display: block')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (!css.includes("font-family: 'Noto Sans SC';") || css.includes('./files/')) {
+    throw new Error('unexpected @fontsource-variable/noto-sans-sc stylesheet; check copyFonts()');
+  }
+  writeFileSync(path.join(out, 'fonts.css'), `${css}\n`, 'utf8');
 }
 
 if (!watch) {

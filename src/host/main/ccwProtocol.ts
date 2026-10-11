@@ -1,7 +1,7 @@
 /**
  * The `ccw:` scheme serves everything the renderer loads:
  *
- *   ccw://app/<file>          the shell UI (dist/renderer)
+ *   ccw://app/<file>          the shell UI (dist/renderer), and the fonts webviews share
  *   ccw://wv<id>/index.html   one webview's document, bootstrap injected
  *   ccw://res/<abs path>      files a webview may load (only under its resource roots)
  *
@@ -66,6 +66,7 @@ export interface CcwProtocolOptions {
 }
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.bmp']);
+const FONT_EXTENSIONS = new Set(['.woff', '.woff2', '.ttf']);
 
 const APP_CSP = [
   "default-src 'none'",
@@ -96,7 +97,12 @@ async function route(url: URL, options: CcwProtocolOptions): Promise<Response> {
     if (!file) {
       return notFound();
     }
-    const extra: Record<string, string> = file.endsWith('.html') ? { 'Content-Security-Policy': APP_CSP } : {};
+    // Webviews use the shell's fonts too (webviewDocuments.ts), and fonts load with CORS.
+    const extra: Record<string, string> = file.endsWith('.html')
+      ? { 'Content-Security-Policy': APP_CSP }
+      : FONT_EXTENSIONS.has(path.extname(file).toLowerCase())
+        ? { 'Access-Control-Allow-Origin': '*' }
+        : {};
     return serveFile(file, extra);
   }
   if (host === 'res') {

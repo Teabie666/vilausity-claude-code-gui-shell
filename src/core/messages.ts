@@ -17,6 +17,7 @@ export const t = defineMessages('core', {
   categoryPreferences: 'Preferences',
   categoryFile: 'File',
   sectionWorkbench: 'Workbench',
+  sectionFonts: 'Fonts',
   quickAccess: 'Search and commands',
   searchPlaceholder: 'Search conversations, files and folders (type > for commands)',
 });
@@ -25,6 +26,10 @@ export const t = defineMessages('core', {
 export const SettingsSection = {
   get workbench(): string {
     return t('sectionWorkbench');
+  },
+  /** Every font: the UI's, the conversation's, the editor's, Markdown's. */
+  get fonts(): string {
+    return t('sectionFonts');
   },
 };
 

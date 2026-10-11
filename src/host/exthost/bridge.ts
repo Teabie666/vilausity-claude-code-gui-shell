@@ -72,15 +72,61 @@ const PAGE_CONTENT = [
 const PLAN_PREVIEW_CONTENT = '#content, #selected-text-preview';
 
 /**
+ * The extension's pages in the shell's fonts (anthropic.claude-code 2.1.296). The extension
+ * sets one font for its whole page from VS Code's chat settings: `--vscode-chat-font-family`
+ * and `--vscode-chat-font-size` (buttons, menus, the session list and the conversation alike),
+ * and `--vscode-editor-font-*` for code, which it writes on the root element itself
+ * (`font_configuration_changed`). The shell makes the first the UI font (`workbench.*`) and
+ * the second the conversation's code font (`chat.editor.*`); `!important` wins over the
+ * values on the root element. The conversation's own text gets the conversation font below.
+ */
+const FONT_STYLES = `
+:root {
+  --vscode-chat-font-family: var(--vscode-font-family) !important;
+  --vscode-chat-font-size: var(--vscode-font-size) !important;
+  --vscode-editor-font-family: var(--vilaus-chat-code-font-family) !important;
+  --vscode-editor-font-size: var(--vilaus-chat-code-font-size) !important;
+}
+`;
+
+/**
+ * The conversation's text in the conversation font (`chat.fontFamily`, `chat.fontSize`): a
+ * user message, Claude's Markdown, thinking, and the message input with the mirror the page
+ * draws its text in (both must agree, or the caret drifts from the text). Code in Markdown is
+ * sized by the code font size instead of the page's `.9em`. Tool calls, buttons and menus stay
+ * in the UI font. Class names of anthropic.claude-code 2.1.296.
+ */
+const CONVERSATION_STYLES = `
+.userMessage_07S1Yg,
+.root_-a7MRw,
+.thinkingContent_aHyQPQ,
+.messageInput_cKsPxg,
+.mentionMirror_cKsPxg {
+  font-family: var(--vilaus-chat-font-family);
+  font-size: var(--vilaus-chat-font-size);
+  line-height: var(--vilaus-chat-line-height);
+}
+.root_-a7MRw code,
+.root_-a7MRw pre {
+  font-size: var(--vilaus-chat-code-font-size);
+}
+.root_-a7MRw pre { line-height: 1.5; }
+.root_-a7MRw pre code { font-size: inherit; }
+`;
+
+/**
  * The session list (the sidebar) in the shell's look (anthropic.claude-code 2.1.282 class
- * names; once a newer extension renames them, it just shows its own look again):
+ * names, the same in 2.1.296; once a newer extension renames them, it just shows its own look
+ * again):
  * - only the sessions scroll, the account and usage above them stay in place;
  * - "Account" and the address on one line, without the "Email" label;
  * - "New session" as a button;
  * - no Local / Web switch (remote sessions are not used from here);
  * - the "Active" toggle and the status filter's caret as one control;
  * - the search button as a search box taking the rest of its row (clicking it opens the
- *   page's own search field, as before); "New group" as just its icon, to leave it room.
+ *   page's own search field, as before); "New group" as just its icon, to leave it room;
+ * - sizes in steps around the UI font size: the sessions a step above it in taller rows, the
+ *   section's title at it (not small capitals), times, filters and group names a step below.
  */
 const SESSION_LIST_STYLES = `
 .root_djirOA { overflow-y: hidden; }
@@ -142,6 +188,19 @@ const SESSION_LIST_STYLES = `
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.sectionLabel_djirOA { font-size: 1em; letter-spacing: 0; text-transform: none; }
+.accountValue_JuUW3A { font-size: inherit; }
+.newSessionButton_djirOA { min-height: 30px; }
+.activeFilterToggle_OOQiHg,
+.statusFilterMenuButton_OOQiHg,
+.searchToggleButton_OOQiHg,
+.searchToggleButton_OOQiHg:hover,
+.searchToggleButton_OOQiHg:focus { height: 26px; font-size: calc(var(--vscode-font-size) - 1px); }
+.sessionItem_OOQiHg { height: 32px; font-size: calc(var(--vscode-font-size) + 1px); }
+.sessionTime_OOQiHg { font-size: calc(var(--vscode-font-size) - 1px); }
+.groupHeader_OOQiHg { height: 28px; }
+.groupName_OOQiHg { font-size: calc(var(--vscode-font-size) - 1px); }
 `;
 
 /**
@@ -263,9 +322,9 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   pageHints(webview: WebviewImpl): WebviewPageHints | undefined {
     switch (webview.viewType) {
       case CHAT_PANEL_VIEW_TYPE:
-        return { commentsAnchor: CHAT_INPUT_FORM, untranslated: PAGE_CONTENT };
+        return { commentsAnchor: CHAT_INPUT_FORM, untranslated: PAGE_CONTENT, styles: FONT_STYLES + CONVERSATION_STYLES };
       case SESSION_LIST_VIEW_TYPE:
-        return { untranslated: PAGE_CONTENT, styles: SESSION_LIST_STYLES };
+        return { untranslated: PAGE_CONTENT, styles: FONT_STYLES + SESSION_LIST_STYLES };
       case PLAN_PREVIEW_VIEW_TYPE:
         return { untranslated: PLAN_PREVIEW_CONTENT };
       default:

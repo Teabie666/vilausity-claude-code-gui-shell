@@ -2,10 +2,12 @@
  * Holds the HTML each webview should show and renders it with the vilaus bootstrap
  * injected. The bootstrap (src/host/webview/bootstrap.ts) provides `acquireVsCodeApi`,
  * theme variables and VS Code's default webview styles before the extension's own
- * scripts run, mirroring what VS Code's `pre/index.html` does.
+ * scripts run, mirroring what VS Code's `pre/index.html` does. It also brings the shell's
+ * fonts (their @font-face rules), so pages can use them like system fonts.
  */
 
 import type { ExtensionTranslations, ThemeData, WebviewBootstrapData, WebviewDocument } from '../../platform/protocol';
+import { WEBVIEW_CSP_SOURCE } from '../../platform/webviewUrls';
 
 export class WebviewDocumentStore {
   /** Webview ids are random, so the documents of every window share one map. */
@@ -16,6 +18,8 @@ export class WebviewDocumentStore {
     private readonly getTheme: () => ThemeData,
     /** The table that translates the extension's UI, when that is on. */
     private readonly getTranslations: () => ExtensionTranslations | undefined = () => undefined,
+    /** The shell's @font-face rules (dist/renderer/fonts/fonts.css, absolute ccw://app URLs). */
+    private readonly fontFaces = '',
   ) {}
 
   /** `owner`: whose webview it is (a window), so its documents can go when it does. */
@@ -59,24 +63,43 @@ export class WebviewDocumentStore {
       hints: document.hints,
       // Only pages whose content the bridge knows are translated.
       translations: document.hints?.untranslated !== undefined ? this.getTranslations() : undefined,
+      fontFaces: this.fontFaces || undefined,
     };
-    return injectBootstrap(allowInlineFonts(document.html), this.bootstrapSource, data);
+    return injectBootstrap(allowShellFonts(document.html), this.bootstrapSource, data);
   }
 }
 
+/** Font sources every webview needs: inline fonts, and the shell's own (ccw://app/fonts). */
+const FONT_SOURCES = ['data:', WEBVIEW_CSP_SOURCE];
+
 /**
- * The Claude Code webview embeds its icon font (codicon) as a `data:` URL but declares
- * `font-src <cspSource>`, which blocks it, so icons render as empty boxes. We add `data:`
- * to font-src only; every other directive stays exactly as the extension wrote it.
+ * Lets a page's CSP load the fonts webviews need, changing font-src only; every other
+ * directive stays exactly as the extension wrote it:
+ * - the Claude Code webview embeds its icon font (codicon) as a `data:` URL but declares
+ *   `font-src <cspSource>`, which blocks it, so icons render as empty boxes;
+ * - the shell's fonts (the conversation's Noto Sans SC) come from `ccw:`; a page without
+ *   font-src whose default-src blocks fonts (the plan preview's `default-src 'none'`) gets one.
  */
-export function allowInlineFonts(html: string): string {
-  return html.replace(/(<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>)/i, (meta) =>
-    // Sources run to the next `;` or the end of the (double-quoted) content attribute;
-    // single quotes are part of sources like 'self'.
-    meta.replace(/font-src([^;"]*)/i, (directive, sources: string) =>
-      /(^|\s)data:(\s|$)/.test(sources) ? directive : `font-src${sources.trimEnd()} data:`,
-    ),
-  );
+export function allowShellFonts(html: string): string {
+  return html.replace(/(<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>)/i, (meta) => {
+    if (/font-src/i.test(meta)) {
+      // Sources run to the next `;` or the end of the (double-quoted) content attribute;
+      // single quotes are part of sources like 'self'.
+      return meta.replace(/font-src([^;"]*)/i, (directive, sources: string) => {
+        const present = new Set(sources.trim().toLowerCase().split(/\s+/));
+        const missing = FONT_SOURCES.filter((source) => !present.has(source));
+        return missing.length > 0 ? `font-src${sources.trimEnd()} ${missing.join(' ')}` : directive;
+      });
+    }
+    // Without default-src nothing blocks fonts, and a font-src would.
+    if (!/default-src/i.test(meta)) {
+      return meta;
+    }
+    return meta.replace(
+      /content="([^"]*)"/i,
+      (_attribute, content: string) => `content="${content.replace(/[\s;]*$/, '')}; font-src ${FONT_SOURCES.join(' ')}"`,
+    );
+  });
 }
 
 /**

@@ -11,7 +11,11 @@
 5. **图标用 codicon**，跟 VS Code 一致；不用 emoji 当图标。
 6. **不要**：大圆角卡片、渐变、彩色大块背景、玻璃拟态、弹跳动画。阴影只给浮层，而且要淡：用 VS Code 的阴影变量 `--vscode-shadow-*`（数值照搬 VS Code，深色主题下几乎看不出来），一般浮层用 lg，命令面板和对话框用 xl。骨架（标题栏、标签页）不加阴影，靠 1px 线分隔。阴影和弹出面板后面的遮罩（VS Code 的 modal 用 30% 的黑）是样式表里仅有的字面颜色，跟 VS Code 一样。
 7. **滚动条**：全软件一个样子：跟插件页面一样用 Chromium 自己的滚动条（细的圆角滑块），颜色用 `scrollbarSlider.*`；Monaco 自己画的滑块画成同样 8px 宽的圆角（`styles.css` 的"scrollbars"一节）。
-8. 字体：界面用 `--vscode-font-family`，代码用 `--vscode-editor-font-family`，都来自设置（`workbench.fontFamily`、`editor.fontFamily`）。中文界面靠页面的 `lang="zh-CN"` 让 Chromium 选系统的中文字体，不在样式表里写死字体名。
+8. **字体分三档**（2026-10-11）：界面、对话、代码各一套，靠中文字体和字号拉开；英文照 VS Code（Segoe UI，代码 Consolas）。全都在设置的"字体"分区里可以改（键名和变量见 ARCHITECTURE 的"字体"）。
+   - 界面：Segoe UI + 微软雅黑 UI（Microsoft YaHei UI，比普通雅黑行距紧，适合密的界面），13.5px（比 VS Code 的 13px 大半号，中文在 13px 偏小）。标题栏、标签页、菜单、设置，以及插件页面里的按钮、菜单、会话列表。
+   - 对话：Segoe UI + 思源黑体（Noto Sans SC，随软件附带，干净的 Windows 上也一样），15px，行高 1.6。你的消息、Claude 的回复、thinking、输入框；Markdown 预览和插件的计划预览默认也用它。
+   - 代码：编辑器默认 Consolas 14px，中文落到系统的宋体，跟非代码的部分一眼分开；对话里的代码默认跟编辑器同一个字体，13px。
+   - 字号分层：同一块界面里，标题和主要的条目比界面字号大 1px（标题栏的软件名、侧栏的会话），次要的信息小 1px（时间、筛选按钮、分组名、搜索框里的文字）。写成 `calc(var(--vscode-font-size) ± 1px)` 或 em，跟着界面字号一起缩放，不写死 px。
 
 ## 文案（English / 简体中文）
 

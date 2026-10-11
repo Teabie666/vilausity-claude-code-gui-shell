@@ -54,7 +54,7 @@ const THEME_CLASSES = [
     shell.postMessage({ ccw: data.webviewId, ...message }, '*');
   };
 
-  installDefaultStyles();
+  installDefaultStyles(data.fontFaces);
   const pageStyles = data.hints?.styles;
   if (pageStyles) {
     onDomReady(() => installPageStyles(pageStyles));
@@ -140,12 +140,19 @@ const THEME_CLASSES = [
   window.addEventListener('blur', () => post({ kind: 'blur' }));
 })();
 
-function installDefaultStyles(): void {
+function installDefaultStyles(fontFaces: string | undefined): void {
+  const parent = document.head ?? document.documentElement;
+  if (fontFaces) {
+    const fonts = document.createElement('style');
+    fonts.id = '_shellFonts';
+    fonts.textContent = fontFaces;
+    parent.appendChild(fonts);
+  }
   const style = document.createElement('style');
   style.id = '_defaultStyles';
   style.textContent = DEFAULT_WEBVIEW_STYLES;
   // We run while <head> is being parsed, so this lands before the page's own stylesheets.
-  (document.head ?? document.documentElement).appendChild(style);
+  parent.appendChild(style);
 }
 
 /** The bridge's styles for this page; added once the page's own are in, so they win ties. */

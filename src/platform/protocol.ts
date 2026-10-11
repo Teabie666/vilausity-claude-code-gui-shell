@@ -774,6 +774,8 @@ export interface WebviewBootstrapData {
   readonly hints?: WebviewPageHints;
   /** Shows the extension's UI text in the display language (pages with `hints.untranslated` only). */
   readonly translations?: ExtensionTranslations;
+  /** The shell's @font-face rules (the bundled fonts), for the page's own styles to use. */
+  readonly fontFaces?: string;
 }
 
 /** An element's box in a webview's viewport, in CSS pixels. */

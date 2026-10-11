@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   WebviewDocumentStore,
-  allowInlineFonts,
+  allowShellFonts,
   findNonce,
   injectBootstrap,
   serializeForScript,
@@ -77,10 +77,10 @@ describe('serializeForScript', () => {
   });
 });
 
-describe('allowInlineFonts', () => {
+describe('allowShellFonts', () => {
   test('adds data: to font-src and leaves every other directive unchanged', () => {
     const html = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-x'; style-src ccw:; font-src ccw:; img-src ccw: data:">`;
-    const out = allowInlineFonts(html);
+    const out = allowShellFonts(html);
     assert.ok(out.includes('font-src ccw: data:;'));
     assert.ok(out.includes('style-src ccw:;'));
     assert.ok(out.includes("script-src 'nonce-x'"));
@@ -88,26 +88,34 @@ describe('allowInlineFonts', () => {
     assert.ok(out.includes('img-src ccw: data:'));
   });
 
-  test('keeps quoted sources such as self intact', () => {
-    const html = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src 'self' ccw:; img-src data:">`;
-    const out = allowInlineFonts(html);
-    assert.ok(out.includes("font-src 'self' ccw: data:;"), out);
+  test("adds ccw: for the shell's fonts and keeps quoted sources such as self intact", () => {
+    const html = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src 'self'; img-src data:">`;
+    const out = allowShellFonts(html);
+    assert.ok(out.includes("font-src 'self' data: ccw:;"), out);
     assert.ok(out.includes("default-src 'none'"));
   });
 
-  test('does not add data: twice when font-src already has it', () => {
+  test('adds nothing when font-src has both already', () => {
     const html = `<meta http-equiv="Content-Security-Policy" content="font-src ccw: data:">`;
-    assert.equal(allowInlineFonts(html), html);
+    assert.equal(allowShellFonts(html), html);
   });
 
-  test('leaves the document unchanged when there is no font-src', () => {
-    const html = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ccw:">`;
-    assert.equal(allowInlineFonts(html), html);
+  test('adds a font-src when default-src would block fonts', () => {
+    const html = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:;">`;
+    assert.equal(
+      allowShellFonts(html),
+      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data: ccw:">`,
+    );
+  });
+
+  test('leaves a CSP without font-src and default-src alone: nothing blocks fonts there', () => {
+    const html = `<meta http-equiv="Content-Security-Policy" content="style-src ccw:">`;
+    assert.equal(allowShellFonts(html), html);
   });
 
   test('leaves the document unchanged when there is no CSP meta', () => {
     const html = `<meta name="viewport" content="width=device-width"><script>1</script>`;
-    assert.equal(allowInlineFonts(html), html);
+    assert.equal(allowShellFonts(html), html);
   });
 });
 
@@ -121,6 +129,15 @@ describe('WebviewDocumentStore', () => {
     assert.equal(store.render('missing'), undefined);
     store.set(makeDoc('a', '<html><head></head></html>', []));
     assert.ok(store.render('a')!.includes('BOOT'));
+  });
+
+  test("passes the shell's @font-face rules to every page", () => {
+    const store = new WebviewDocumentStore('BOOT', () => theme, () => undefined, "@font-face { font-family: 'Noto Sans SC'; }");
+    store.set(makeDoc('a', '<html><head></head></html>', []));
+    assert.ok(store.render('a')!.includes(`"fontFaces":"@font-face { font-family: 'Noto Sans SC'; }"`));
+    const without = new WebviewDocumentStore('BOOT', () => theme);
+    without.set(makeDoc('a', '<html><head></head></html>', []));
+    assert.ok(!without.render('a')!.includes('fontFaces'));
   });
 
   test('resourceRoots returns the deduplicated union of live documents', () => {

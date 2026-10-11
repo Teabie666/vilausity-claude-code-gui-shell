@@ -5,7 +5,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { DEFAULT_FONTS, DEFAULT_THEME_ID } from '../../platform/defaults';
+import { DEFAULT_FONT_VALUE, DEFAULT_FONTS, DEFAULT_THEME_ID } from '../../platform/defaults';
 import type { ILogger } from '../../platform/log';
 import type { ThemeData, ThemeSummary } from '../../platform/protocol';
 import { readJsonFile } from '../node/jsonFile';
@@ -25,16 +25,44 @@ export function listThemeSummaries(themesDir: string): ThemeSummary[] {
   });
 }
 
-/** Adds the `--vscode-*font*` variables from settings (VS Code setting names) or defaults. Fonts are user settings, never part of a captured theme. */
+/** The settings `withFontVariables` reads: a change to one of them changes the theme data. */
+export const FONT_SETTING_KEYS = [
+  'workbench.fontFamily',
+  'workbench.fontSize',
+  'chat.fontFamily',
+  'chat.fontSize',
+  'chat.editor.fontFamily',
+  'chat.editor.fontSize',
+  'editor.fontFamily',
+  'editor.fontSize',
+  'editor.fontWeight',
+  'markdown.preview.fontFamily',
+  'markdown.preview.fontSize',
+  'markdown.preview.lineHeight',
+] as const;
+
+/**
+ * Adds the font variables from settings (VS Code setting names) or defaults. Fonts are user
+ * settings, never part of a captured theme.
+ * - `--vscode-font-*`: the UI, the shell's and the extension's own (its buttons, menus,
+ *   session list);
+ * - `--vilaus-chat-*`: the conversation's text and the code in it, which the extension's pages
+ *   apply (bridge.ts);
+ * - `--vscode-editor-font-*`: the code editors;
+ * - `--vscode-markdown-*`: Markdown previews.
+ */
 export function withFontVariables(theme: ThemeData, settings: Readonly<Record<string, unknown>>): ThemeData {
   const text = (key: string, fallback: string): string => {
     const value = settings[key];
-    return typeof value === 'string' && value.trim() ? value : fallback;
+    return typeof value === 'string' && value.trim() && value.trim() !== DEFAULT_FONT_VALUE ? value : fallback;
   };
-  const size = (key: string, fallback: number): string => {
+  const number = (key: string, fallback: number): number => {
     const value = settings[key];
-    return `${typeof value === 'number' && value > 0 ? value : fallback}px`;
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
   };
+  const size = (key: string, fallback: number): string => `${number(key, fallback)}px`;
+  const editorFamily = text('editor.fontFamily', DEFAULT_FONTS.editorFamily);
+  const chatFamily = text('chat.fontFamily', DEFAULT_FONTS.chatFamily);
   return {
     ...theme,
     variables: {
@@ -42,11 +70,31 @@ export function withFontVariables(theme: ThemeData, settings: Readonly<Record<st
       'vscode-font-family': text('workbench.fontFamily', DEFAULT_FONTS.family),
       'vscode-font-weight': 'normal',
       'vscode-font-size': size('workbench.fontSize', DEFAULT_FONTS.size),
-      'vscode-editor-font-family': text('editor.fontFamily', DEFAULT_FONTS.editorFamily),
+      'vilaus-chat-font-family': chatFamily,
+      'vilaus-chat-font-size': size('chat.fontSize', DEFAULT_FONTS.chatSize),
+      'vilaus-chat-line-height': String(DEFAULT_FONTS.chatLineHeight),
+      // VS Code's "default" for code in chat: the editor's font.
+      'vilaus-chat-code-font-family': text('chat.editor.fontFamily', editorFamily),
+      'vilaus-chat-code-font-size': size('chat.editor.fontSize', DEFAULT_FONTS.chatCodeSize),
+      'vscode-editor-font-family': editorFamily,
       'vscode-editor-font-weight': text('editor.fontWeight', DEFAULT_FONTS.editorWeight),
       'vscode-editor-font-size': size('editor.fontSize', DEFAULT_FONTS.editorSize),
+      // An empty font family: the conversation's.
+      'vscode-markdown-font-family': text('markdown.preview.fontFamily', chatFamily),
+      'vscode-markdown-font-size': size('markdown.preview.fontSize', DEFAULT_FONTS.markdownSize),
+      'vscode-markdown-line-height': String(number('markdown.preview.lineHeight', DEFAULT_FONTS.markdownLineHeight)),
     },
   };
+}
+
+/** The bundled fonts' @font-face rules (scripts/build.mjs, copyFonts), for webviews; empty when missing. */
+export function readFontFaces(file: string, logger: ILogger): string {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch (error) {
+    logger.warn(`no bundled fonts at ${file}`, error);
+    return '';
+  }
 }
 
 export function loadTheme(themesDir: string, id: string, logger: ILogger): ThemeData {

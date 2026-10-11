@@ -198,7 +198,9 @@ kbd {
   white-space: nowrap;
 }
 
+/* The title bar's titles a step above the UI font; the search box's text a step below. */
 .titlebar-app {
+  font-size: calc(var(--vscode-font-size, 13px) + 1px);
   font-weight: 600;
 }
 
@@ -278,7 +280,7 @@ body.provider-accent .titlebar {
   width: 38vw;
   max-width: 600px;
   min-width: 160px;
-  height: 22px;
+  height: 24px;
   margin: 0 6px;
   overflow: hidden;
   color: var(--vscode-commandCenter-foreground, var(--vscode-titleBar-activeForeground));
@@ -305,7 +307,7 @@ body.provider-accent .titlebar {
   border: none;
   background: none;
   color: inherit;
-  font-size: 12px;
+  font-size: calc(var(--vscode-font-size, 13px) - 1px);
   cursor: pointer;
 }
 
@@ -700,8 +702,7 @@ body.resizing {
 }
 
 .settings-dialog-title {
-  font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .settings-dialog-body {
@@ -809,7 +810,7 @@ body.resizing {
 
 .settings-section-title {
   margin: 16px 0 4px 16px;
-  font-size: 1.4em;
+  font-size: 1.5em;
   font-weight: 600;
   color: var(--vscode-settings-headerForeground);
 }

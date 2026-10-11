@@ -25,6 +25,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
+    "@fontsource-variable/noto-sans-sc": "^5.3.1",
     "dompurify": "^3.4.16",
     "jsonc-parser": "^3.3.1",
     "marked": "^18.1.0",

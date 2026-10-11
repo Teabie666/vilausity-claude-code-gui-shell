@@ -4,6 +4,7 @@
  * from these same settings), so webviews and editors agree on them.
  */
 
+import { SettingsSection } from '../../core/messages';
 import type { SettingDefinition, SettingsService } from '../../core/settings';
 import { DEFAULT_FONTS } from '../../platform/defaults';
 import { t } from './messages';
@@ -24,15 +25,26 @@ export function editorSettingDefinitions(): SettingDefinition[] {
   const diffOption = (key: string, schema: SettingDefinition['schema']): SettingDefinition => ({ ...diffEditor(key, schema), hidden: true });
   // Shown with their description: the title alone does not say how the value is read.
   const described = (definition: SettingDefinition): SettingDefinition => ({ ...definition, showDescription: true });
+  // With every other font (features/fonts), after the UI's and the conversation's.
+  const font = (key: string, schema: SettingDefinition['schema'], fontOrder: number): SettingDefinition => ({
+    key,
+    schema,
+    section: SettingsSection.fonts,
+    order: 20 + fontOrder,
+  });
   return [
-    editor('editor.fontFamily', { type: 'string', default: DEFAULT_FONTS.editorFamily, description: t('fontFamily') }),
-    editor('editor.fontSize', { type: 'number', default: DEFAULT_FONTS.editorSize, minimum: 6, maximum: 100, description: t('fontSize') }),
-    editor('editor.fontWeight', {
-      type: 'string',
-      default: DEFAULT_FONTS.editorWeight,
-      enum: ['normal', 'bold', '100', '200', '300', '400', '500', '600', '700', '800', '900'],
-      description: t('fontWeight'),
-    }),
+    font('editor.fontFamily', { type: 'string', default: DEFAULT_FONTS.editorFamily, description: t('fontFamily') }, 0),
+    font('editor.fontSize', { type: 'number', default: DEFAULT_FONTS.editorSize, minimum: 6, maximum: 100, description: t('fontSize') }, 1),
+    font(
+      'editor.fontWeight',
+      {
+        type: 'string',
+        default: DEFAULT_FONTS.editorWeight,
+        enum: ['normal', 'bold', '100', '200', '300', '400', '500', '600', '700', '800', '900'],
+        description: t('fontWeight'),
+      },
+      2,
+    ),
     described(editor('editor.lineHeight', { type: 'number', default: 0, minimum: 0, maximum: 150, description: t('lineHeight') })),
     editor('editor.fontLigatures', { type: 'boolean', default: false, description: t('fontLigatures') }),
     editor('editor.tabSize', { type: 'number', default: 4, minimum: 1, maximum: 100, description: t('tabSize') }),
