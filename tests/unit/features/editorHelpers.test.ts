@@ -12,7 +12,7 @@ import {
 } from '../../../src/features/editor/editorSettings';
 import { minimalReplacement } from '../../../src/features/editor/textModels';
 import { shortDiffTitle } from '../../../src/features/editor/titles';
-import { scorePath } from '../../../src/features/quickOpen/fuzzy';
+import { matchRanges, scorePath } from '../../../src/features/quickOpen/fuzzy';
 
 describe('shortDiffTitle', () => {
   test('replaces a document path with spaces, whatever its case and separators', () => {
@@ -42,6 +42,18 @@ describe('scorePath', () => {
   test('consecutive and word-start characters score more', () => {
     assert.ok(scorePath('lib/textModels.ts', 'tm')! > scorePath('lib/atom.ts', 'tm')!);
     assert.ok(scorePath('a/editor.ts', 'edit')! > scorePath('a/e_d_i_t.ts', 'edit')!);
+  });
+});
+
+describe('matchRanges', () => {
+  test('the typed characters, first places in order, merged into runs', () => {
+    assert.deepEqual(matchRanges('a_b_cd.ts', 'ABCD'), [
+      [0, 1],
+      [2, 3],
+      [4, 6],
+    ]);
+    assert.deepEqual(matchRanges('Alpha.ts', 'al pha'), [[0, 5]]);
+    assert.equal(matchRanges('alpha.ts', 'xyz'), undefined);
   });
 });
 

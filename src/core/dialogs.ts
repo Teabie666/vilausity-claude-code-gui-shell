@@ -1,6 +1,6 @@
 /**
  * Implements the extension's `window.showXxxMessage`, `showQuickPick` and `showInputBox`
- * with shell-drawn UI in VS Code's visual language (square corners, theme colors).
+ * with shell-drawn UI in VS Code's visual language (theme colors and corners).
  */
 
 import type {
@@ -296,8 +296,11 @@ export class Dialogs {
     });
   }
 
-  /** A centered box over a dimmed backdrop; Escape or a backdrop click resolves `cancelValue`. */
-  private openOverlay<T>(
+  /**
+   * A box at the top of the window over a backdrop; Escape or a backdrop click resolves
+   * `cancelValue`. Quick access draws its picker in one too.
+   */
+  openOverlay<T>(
     resolve: (value: T) => void,
     cancelValue: T,
   ): { box: HTMLElement; finish: (value: T) => void } {

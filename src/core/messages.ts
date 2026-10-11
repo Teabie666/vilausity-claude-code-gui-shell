@@ -1,4 +1,4 @@
-/** Text of the core workbench: dialogs, window regions, startup failure. */
+/** Text of the core workbench: dialogs, quick access, window regions, startup failure. */
 
 import { defineMessages } from '../platform/nls';
 
@@ -17,6 +17,8 @@ export const t = defineMessages('core', {
   categoryPreferences: 'Preferences',
   categoryFile: 'File',
   sectionWorkbench: 'Workbench',
+  quickAccess: 'Search and commands',
+  searchPlaceholder: 'Search conversations, files and folders (type > for commands)',
 });
 
 /** Sections of the settings editor that several modules add to. */

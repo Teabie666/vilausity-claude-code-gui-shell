@@ -110,6 +110,47 @@ export interface ConversationRequest {
   readonly prompt?: string;
 }
 
+/** `[start, end)` of a match in a text. */
+export type TextRange = readonly [number, number];
+
+/** A search of Claude Code's sessions (their transcripts), see `sessions.search`. */
+export interface SessionSearchRequest {
+  /** Matched case-insensitively as one piece; empty: the latest sessions. */
+  readonly query: string;
+  /** Only sessions that ran in this folder; every folder's when undefined. */
+  readonly folder?: string;
+  readonly limit: number;
+}
+
+/** Why a session matched: its title, something said in it, or a file Claude read or changed. */
+export type SessionSearchMatch =
+  | { readonly kind: 'title'; readonly highlights: readonly TextRange[] }
+  | {
+      readonly kind: 'content';
+      readonly role: 'user' | 'assistant';
+      /** The passage around the match, on one line. */
+      readonly text: string;
+      readonly highlights: readonly TextRange[];
+    }
+  | {
+      readonly kind: 'file';
+      /** The file's path, relative to the session's folder when it is inside. */
+      readonly text: string;
+      readonly highlights: readonly TextRange[];
+      readonly edited: boolean;
+    };
+
+export interface SessionSearchResult {
+  readonly sessionId: string;
+  readonly title: string;
+  /** The folder the session ran in. */
+  readonly folder: string;
+  /** Last change, in ms since the epoch. */
+  readonly updatedAt: number;
+  /** Undefined for an empty query. */
+  readonly match?: SessionSearchMatch;
+}
+
 /**
  * What the shell's script in a webview needs to know about the extension's page. Only the
  * bridge (host/exthost/bridge.ts) knows the extension's pages, so it supplies these; most
@@ -613,6 +654,16 @@ export type MainApiForRenderer = {
   'window.openFolder': (p: { folder: string; newWindow: boolean }) => boolean;
   /** Recently opened folders, most recent first. */
   'window.recentFolders': (p: void) => string[];
+  /**
+   * Claude Code sessions whose title, conversation or files match, best first; with an
+   * empty query the latest. Read from the transcripts under ~/.claude/projects.
+   */
+  'sessions.search': (p: SessionSearchRequest) => SessionSearchResult[];
+  /**
+   * Opens a session in its folder's window (brought forward, or opened); a tab that shows
+   * it already comes to the front. False when the folder no longer exists.
+   */
+  'sessions.open': (p: { folder: string; sessionId: string }) => boolean;
   /** The folders the open windows show (the calling window's too). */
   'window.shownFolders': (p: void) => string[];
   /** Closes the calling window; closing the last one quits. */

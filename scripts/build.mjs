@@ -30,6 +30,14 @@ const common = {
 /** @type {import('esbuild').BuildOptions[]} */
 const builds = [
   { entryPoints: ['src/host/main/main.ts'], outfile: 'dist/main.js', platform: 'node', format: 'cjs', target: NODE_TARGET },
+  // main's worker thread that reads Claude Code's transcripts for the session search.
+  {
+    entryPoints: ['src/host/main/sessionSearchWorker.ts'],
+    outfile: 'dist/sessionSearchWorker.js',
+    platform: 'node',
+    format: 'cjs',
+    target: NODE_TARGET,
+  },
   { entryPoints: ['src/host/preload/preload.ts'], outfile: 'dist/preload.js', platform: 'node', format: 'cjs', target: NODE_TARGET },
   { entryPoints: ['src/host/exthost/main.ts'], outfile: 'dist/exthost.js', platform: 'node', format: 'cjs', target: NODE_TARGET },
   // ESM with code splitting: Monaco, Shiki grammars and the Markdown renderer sit behind

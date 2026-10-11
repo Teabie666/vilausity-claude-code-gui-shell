@@ -19,6 +19,7 @@ import { extensionHostStatusModule } from '../../features/extensionHostStatus';
 import { extensionMenusModule } from '../../features/extensionMenus';
 import { extensionUpdatesModule } from '../../features/extensionUpdates';
 import { languageModule } from '../../features/language';
+import { sessionSearchModule } from '../../features/sessionSearch';
 import { sessionsModule } from '../../features/sessions';
 import { settingsModule } from '../../features/settings';
 import { setupModule } from '../../features/setup';
@@ -36,6 +37,7 @@ const modules: ShellModule[] = [
   quickOpenModule,
   settingsModule,
   sessionsModule,
+  sessionSearchModule,
   themesModule,
   languageModule,
   commandPaletteModule,

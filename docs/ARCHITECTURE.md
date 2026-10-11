@@ -86,11 +86,17 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 ## 窗口和工作区（M4）
 
 - **全局和每个窗口**：`host/main/shellApp.ts` 持有窗口共用的东西（设置、插件的 globalState、主题、界面语言、webview 文档、`ccw:` 协议），`host/main/windowContext.ts` 是一个窗口：BrowserWindow、它的文件夹和 workspaceState、它的 extension host。渲染进程调主进程时按发送的窗口分发；设置、主题、语言变了通知所有窗口。插件的 globalState 所有窗口共用：一个窗口的 extension host 写了，主进程转给其他窗口的（`storage.didChange`，compat 的 Memento 跟着更新）。webview 的 id 是随机的，所以所有窗口的 webview 文档放在同一个表里，窗口关掉或插件进程重启时按窗口清掉。
-- **一个文件夹一个窗口**：打开一个已经有窗口的文件夹，就把那个窗口提到前面。在当前窗口打开别的文件夹（"打开文件夹…"、最近的文件夹、插件的"打开文件夹"按钮）先确认一句（有打开的对话或文件时），未保存的文件逐个问；然后主进程停掉这个窗口的 extension host（插件把打开的对话记在旧文件夹的 workspaceState 里，回到这个文件夹时恢复），换成新文件夹的 workspaceState，重新加载页面，页面加载完再起新的 extension host。界面在 `features/workspace`：标题栏的文件夹按钮和"打开最近的文件夹"（Ctrl+R，选择框里 Ctrl+Enter 在新窗口中打开）、新建窗口（Ctrl+Shift+N，选一个文件夹）。
+- **一个文件夹一个窗口**：打开一个已经有窗口的文件夹，就把那个窗口提到前面。在当前窗口打开别的文件夹（"打开文件夹…"、最近的文件夹、插件的"打开文件夹"按钮）先确认一句（有打开的对话或文件时），未保存的文件逐个问；然后主进程停掉这个窗口的 extension host（插件把打开的对话记在旧文件夹的 workspaceState 里，回到这个文件夹时恢复），换成新文件夹的 workspaceState，重新加载页面，页面加载完再起新的 extension host。界面在 `features/workspace`："打开最近的文件夹"（Ctrl+R，选择框里 Ctrl+Enter 在新窗口中打开）、新建窗口（Ctrl+Shift+N，选一个文件夹），以及搜索里的"文件夹"一组（标题栏的搜索框显示当前文件夹名，见下面的"标题栏搜索框"）。
 - **记住的东西**（`state/shell.json`，`host/main/windowHistory.ts`，跟插件的 globalState 分开）：每个文件夹的窗口位置（最多 50 个）、最近打开的文件夹、开着的窗口、所有窗口共用的缩放级别（同源页面的缩放在 Chromium 里本来就一起变）。开着的窗口随时更新，所以崩溃后也能恢复。启动时：命令行给了文件夹就只开它；没给就恢复上次开着的窗口，都没有才用主目录。一个个关窗口，最后一个关掉时退出，下次只恢复它；用"退出"命令或别处调 `app.quit()`（`before-quit` 被拦下来走同一条路）时开着几个记几个；换界面语言的重启（`app.relaunch`）不管命令行，恢复全部。
-- **单实例**：`app.requestSingleInstanceLock` 的锁在 userData 里，一个数据目录一个实例。第二次启动在写任何东西之前把原始参数和工作目录（`additionalData`）交给已经在跑的实例，然后退出；那边按自己的规则解析（相对路径按第二次启动的工作目录算）。参数交给哪个窗口：文件夹 → 它自己的窗口；文件（位置参数或 `--goto 文件:行:列`）→ 文件夹包含它的窗口，没有就交给最近的窗口；什么都没给 → 最近的窗口（`--new-window` 开一个主目录的新窗口）。`--session` / `--prompt` 在那个窗口里开对话：窗口是新开的，就放进插件进程的初始化数据，代替窗口默认打开的空对话；已经开着的，经 `conversation.open` 让插件进程执行插件的 `claude-vscode.primaryEditor.open`。`--prompt` 只是填进输入框，不会发出去。开发时（`electron <开关> <app 路径> <参数>`）用户参数是 app 路径之后的部分（`cli.ts` 的 `userArguments`，Playwright 会在 app 路径前面加 `--inspect=0`）。
+- **单实例**：`app.requestSingleInstanceLock` 的锁在 userData 里，一个数据目录一个实例。第二次启动在写任何东西之前把原始参数和工作目录（`additionalData`）交给已经在跑的实例，然后退出；那边按自己的规则解析（相对路径按第二次启动的工作目录算）。参数交给哪个窗口：文件夹 → 它自己的窗口；文件（位置参数或 `--goto 文件:行:列`）→ 文件夹包含它的窗口，没有就交给最近的窗口；什么都没给 → 最近的窗口（`--new-window` 开一个主目录的新窗口）。`--session` / `--prompt` 在那个窗口里开对话：窗口是新开的，就放进插件进程的初始化数据，代替窗口默认打开的空对话；已经开着的，经 `conversation.open` 让插件进程执行插件的 `claude-vscode.primaryEditor.open`；某个标签页已经显示这个会话时（插件页面存的状态里有会话 id），只把那个标签页提到前面，不开第二个。`--prompt` 只是填进输入框，不会发出去。开发时（`electron <开关> <app 路径> <参数>`）用户参数是 app 路径之后的部分（`cli.ts` 的 `userArguments`，Playwright 会在 app 路径前面加 `--inspect=0`）。
 - **`vilaus://` 链接**：Windows 打开协议链接时把 URL 当参数传给程序，于是跟别的参数一样走单实例转发。`vilaus://<插件 id>/<路径>?<参数>` 交给那个插件用 `window.registerUriHandler` 注册的处理器（Claude Code 有 `/open?session=&prompt=`），之前照 VS Code 先问用户一次（网页也能放这种链接）。把协议登记进注册表在 M6 的安装包里做。
 - **插件调的 VS Code 内置命令**（`host/exthost/workbenchCommands.ts`）：`vscode.openFolder`（插件的"打开文件夹 / 在新窗口中打开"按钮，没给文件夹就弹选择框）交给渲染进程走上面同一套流程；`workbench.action.openSettings` 打开设置编辑器并填好搜索词；`revealFileInOS` 在资源管理器里选中文件。
+
+## 标题栏搜索框和快速访问（M5.5）
+
+- **标题栏**：左边侧栏开关、软件名、API 接口按钮；中间搜索框（照 VS Code 的命令中心，显示当前文件夹名，右端一个按钮进命令面板）；右边设置、内容面板开关。左右两边平分剩下的宽度，搜索框在窗口正中。
+- **快速访问**（`core/quickAccess.ts`，照 VS Code 的 quick access）：一个输入框，开头的字符决定交给谁：`>` 是命令（`features/commandPalette`），没有前缀是搜索。搜索由各模块登记的分组拼成（`registerSearchContributor`，分组的顺序可以随输入变）：对话（`features/sessionSearch`）、新建对话（`features/conversations`）、文件（`features/quickOpen`；输入像文件名或路径时排到最前，Ctrl+P、文件名、回车照样打开文件）、文件夹（`features/workspace`）、"在所有文件夹中搜索"。异步的分组按 id 保留上一次的结果直到新结果回来，打字时列表不闪。快捷键：Ctrl+P / Ctrl+E 搜索，Ctrl+Shift+P / F1 命令，Ctrl+R 最近的文件夹。
+- **搜对话**：主进程读 Claude Code 的会话记录（`~/.claude/projects/<文件夹>/<会话 id>.jsonl`，`CLAUDE_CONFIG_DIR` 改了就跟着改；测试用 `VILAUS_SESSIONS_DIR` 指到别处）。这是 CLI 自己的存储格式，不是接口，所以只读、容错：不认识的行和字段跳过。只看标题（用户起的名字 > 旁路文件 `<会话 id>/custom-title.json` > 生成的标题 > 第一句话）、用户打的字和 Claude 的回复（不含工具输出、思考、IDE 和 CLI 附加的上下文），以及 Claude 读过和改过的文件。读取在主进程的 worker 线程里（`host/main/sessionSearch.ts`、`sessionSearchWorker.ts`，解析和匹配是纯函数 `sessionTranscripts.ts`），按文件大小和修改时间缓存，3 秒内的搜索直接用缓存。匹配不分大小写、整串子串匹配（中文直接能搜）：标题、文件、内容依次排，同类按时间新的在前。默认只搜当前文件夹的会话（按记录里的 `cwd`）。打开结果走主进程 `sessions.open`：找到（或打开）那个文件夹的窗口，再 `conversation.open`。
 
 ## API 接口（M4）
 
@@ -164,6 +170,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - 插件 webview 里某个请求要换成 Vilausity 自己的做法：`bridge.ts` 加一条拦截规则，并写清楚对照的插件版本。
 - 壳的界面功能（M1 起）：在 `src/features/<名字>/` 建模块，只通过 `core` 的贡献点接入（命令、快捷键、菜单、视图、编辑器类型、设置项）。以后的插件系统也会用同一套机制。
 - 内容面板里新的一种标签页：注册一个 `EditorProvider`（`core/editors.ts`），再用 `IContentPane.open(输入)` 打开。要跟插件共用的文档（插件能看到、能改的）一律经 exthost 打开（`documents.show`），别在 renderer 里自己读文件。
+- 搜索框（Ctrl+P）里多一组结果：`IQuickAccess.registerSearchContributor`（id、顺序、按输入给出一组行）；新的前缀模式（像 `>` 那样）用 `registerProvider`。
 - 选中文字旁边的按钮：往 `editor/selection` 菜单（`MenuId.EditorSelection`）登记一个命令，命令收到 `EditorSelectionContext`，可以用 `showWidget` 在原地显示自己的界面（评论的小窗就是这样）。
 - 快捷键注意：主进程会先截住所有注册过的组合键，页面（包括 Monaco）收不到。Monaco 自己要用的键（比如 Ctrl+F）如果被别的模块注册了，要在编辑器模块里用 `when: 'editorTextFocus'` 再注册一条转回给 Monaco。
 - 界面上的文字：在模块目录的 `messages.ts` 里用 `defineMessages('<命名空间>', {...})` 写英文，代码里用 `t('键')` 取；中文进 `src/nls/zh-cn.json`，没翻译的先显示英文，`npm run nls` 检查（规范见 `docs/design.md` 的"文案"）。界面语言在每个进程启动时定好（main 算出来，传给 renderer 和 extension host），换语言要重启。

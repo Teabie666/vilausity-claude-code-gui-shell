@@ -1,6 +1,6 @@
 /**
- * The window's workspace folder: the title bar button and the commands that open folders,
- * here (in place of the current one, as VS Code does) or in a new window. A folder has at
+ * The window's workspace folder: the commands that open folders, and the folders group of
+ * the search (the title bar's search box shows the folder's name). Folders open here (in place of the current one, as VS Code does) or in a new window. A folder has at
  * most one window: opening one that another window shows brings that window forward.
  * Opening a folder here closes this window's conversations and files (unsaved changes are
  * asked about first); the conversations come back when the old folder is opened again.
@@ -13,10 +13,11 @@ import {
   IDialogs,
   IExtensionHost,
   IKeybindings,
-  ILayout,
   INative,
+  IQuickAccess,
   IWorkspace,
 } from '../../core/serviceIds';
+import type { QuickAccessItem } from '../../core/quickAccess';
 import type { QuickPickItemDto } from '../../platform/protocol';
 import { IContentPane } from '../contentPane';
 import { IConversations } from '../conversations';
@@ -44,25 +45,12 @@ export const workspaceModule: ShellModule = {
   id: 'workspace',
   dependsOn: ['conversations', 'contentPane'],
   async activate({ services, subscriptions }) {
-    const layout = services.get(ILayout);
     const commands = services.get(ICommands);
     const keybindings = services.get(IKeybindings);
     const native = services.get(INative);
     const dialogs = services.get(IDialogs);
     const workspace = services.get(IWorkspace);
     const current = workspace.folders[0] ?? '';
-
-    const button = document.createElement('button');
-    button.className = 'titlebar-button titlebar-folder';
-    button.title = t('folderButtonTitle', workspace.folders.join('\n'));
-    const label = document.createElement('span');
-    label.className = 'titlebar-folder-label';
-    label.textContent = workspace.name;
-    const chevron = document.createElement('span');
-    chevron.className = 'titlebar-folder-chevron';
-    button.append(label, chevron);
-    button.addEventListener('click', () => void commands.execute('workspace.openRecent'));
-    subscriptions.add(layout.addTitleBarItem('left', button, 11));
 
     const openIn = async (folder: string, newWindow: boolean): Promise<void> => {
       if (!(await native.call('window.openFolder', { folder, newWindow }))) {
@@ -211,6 +199,53 @@ export const workspaceModule: ShellModule = {
     );
     subscriptions.add(keybindings.register({ key: 'ctrl+r', command: 'workspace.openRecent' }));
     subscriptions.add(keybindings.register({ key: 'ctrl+shift+n', command: 'workspace.newWindow' }));
+
+    // In the search: with nothing typed, the latest folders and ways to open others; with
+    // text, the recent folders it matches.
+    subscriptions.add(
+      services.get(IQuickAccess).registerSearchContributor({
+        id: 'folders',
+        order: 40,
+        provide: async (query) => {
+          const needle = query.toLowerCase();
+          const [recent, shown] = await Promise.all([
+            native.call('window.recentFolders', undefined),
+            native.call('window.shownFolders', undefined),
+          ]);
+          const items: QuickAccessItem[] = recent
+            .filter((folder) => !sameFolder(folder, current))
+            .flatMap((folder): QuickAccessItem[] => {
+              const name = folderName(folder);
+              const at = name.toLowerCase().indexOf(needle);
+              if (needle && at < 0 && !folder.toLowerCase().includes(needle)) {
+                return [];
+              }
+              return [
+                {
+                  label: name,
+                  labelHighlights: needle && at >= 0 ? [[at, at + needle.length]] : undefined,
+                  description: shown.some((other) => sameFolder(other, folder)) ? `${folder} - ${t('openElsewhere')}` : folder,
+                  icon: 'folder',
+                  accept: (alternate) => (alternate ? openIn(folder, true) : openHere(folder)),
+                },
+              ];
+            })
+            .slice(0, needle ? 5 : 3);
+          if (!needle) {
+            items.push(
+              { label: t('openFolder'), icon: 'folder', accept: (alternate) => browse(alternate) },
+              {
+                label: t('openRecent'),
+                icon: 'folder',
+                keybinding: keybindings.labelFor('workspace.openRecent'),
+                accept: () => commands.execute('workspace.openRecent'),
+              },
+            );
+          }
+          return items.length > 0 ? { label: t('folders'), items } : undefined;
+        },
+      }),
+    );
 
     // The extension's "open folder" buttons (`vscode.openFolder`).
     subscriptions.add(

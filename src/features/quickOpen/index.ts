@@ -1,20 +1,29 @@
 /**
- * Opening files by hand: Ctrl+P quick open over the workspace files, and files dropped onto
- * the window (outside the webviews, which handle their own drops). Both go through the
- * extension host, so the extension sees the document open like in VS Code.
+ * Search: the box in the middle of the title bar (after VS Code's command center) and
+ * Ctrl+P open quick access; this module adds its workspace files. Also opens files dropped
+ * onto the window (outside the webviews, which handle their own drops). Files open through
+ * the extension host, so the extension sees the document open like in VS Code.
  */
 
 import { URI } from 'vscode-uri';
 import type { ShellModule } from '../../core/module';
 import { native } from '../../core/native';
-import { ICommands, IDialogs, IExtensionHost, IKeybindings, IWorkspace } from '../../core/serviceIds';
-import { scorePath } from './fuzzy';
+import {
+  ICommands,
+  IDialogs,
+  IExtensionHost,
+  IKeybindings,
+  ILayout,
+  IQuickAccess,
+  IWorkspace,
+} from '../../core/serviceIds';
+import { matchRanges, scorePath } from './fuzzy';
 import { t } from './messages';
 
-/** Files listed for quick open; a huge workspace is cut off here. */
+/** Files listed for the search; a huge workspace is cut off here. */
 const MAX_FILES = 20_000;
-/** Rows rendered at once while typing. */
-const MAX_ROWS = 200;
+/** File rows shown at once. */
+const MAX_ROWS = 50;
 
 export const quickOpenModule: ShellModule = {
   id: 'quickOpen',
@@ -24,6 +33,7 @@ export const quickOpenModule: ShellModule = {
     const dialogs = services.get(IDialogs);
     const connection = services.get(IExtensionHost);
     const workspace = services.get(IWorkspace);
+    const quickAccess = services.get(IQuickAccess);
 
     const open = async (path: string, preview: boolean): Promise<void> => {
       const rpc = connection.rpc;
@@ -33,38 +43,75 @@ export const quickOpenModule: ShellModule = {
       }
     };
 
-    subscriptions.add(
-      commands.register(
-        'quickOpen.show',
-        async () => {
-          const root = workspace.folders[0];
-          const rpc = connection.rpc;
-          if (!root || !rpc) {
-            await dialogs.showMessage({ severity: 'info', message: t('noFolder'), modal: false, items: [] });
-            return;
-          }
-          const files = await rpc.call('documents.listFiles', { maxResults: MAX_FILES });
-          const items = files.map((file) => {
-            const slash = file.lastIndexOf('/');
-            return { label: file.slice(slash + 1), description: slash > 0 ? file.slice(0, slash) : undefined };
-          });
-          const picked = await dialogs.showQuickPick(
-            { items, placeHolder: t('placeholder'), canPickMany: false },
-            {
-              score: (item, query) => scorePath(item.description ? `${item.description}/${item.label}` : item.label, query),
-              limit: MAX_ROWS,
-            },
-          );
-          const index = picked?.[0];
-          if (index !== undefined && files[index] !== undefined) {
-            await open(`${root}/${files[index]}`, true);
-          }
-        },
-        { title: t('goToFile') },
-      ),
-    );
+    subscriptions.add(commands.register('quickOpen.show', () => quickAccess.show(''), { title: t('search') }));
     subscriptions.add(keybindings.register({ key: 'ctrl+p', command: 'quickOpen.show' }));
     subscriptions.add(keybindings.register({ key: 'ctrl+e', command: 'quickOpen.show' }));
+
+    // The box: the folder's name (it stands for the folder button too) and the command palette.
+    const box = document.createElement('div');
+    box.className = 'search-box';
+    const openButton = document.createElement('button');
+    openButton.className = 'search-box-open';
+    const label = document.createElement('span');
+    label.className = 'search-box-label';
+    label.textContent = workspace.name || t('search');
+    openButton.append(label);
+    openButton.addEventListener('click', () => void commands.execute('quickOpen.show'));
+    const paletteButton = document.createElement('button');
+    paletteButton.className = 'icon-button search-box-commands';
+    paletteButton.setAttribute('aria-label', t('commandPalette'));
+    paletteButton.addEventListener('click', () => void commands.execute('commandPalette.show'));
+    // Keybindings are known once every module has registered its own.
+    box.addEventListener('mouseenter', () => {
+      const shortcut = (id: string): string => keybindings.labelFor(id) ?? '';
+      openButton.title = [t('searchTooltip', shortcut('quickOpen.show')), ...workspace.folders].join('\n');
+      paletteButton.title = t('commandPaletteTooltip', shortcut('commandPalette.show'));
+    });
+    box.append(openButton, paletteButton);
+    services.get(ILayout).titleBarCenter.appendChild(box);
+    subscriptions.add({ dispose: () => box.remove() });
+
+    // The workspace's files, listed once per opening of the picker. Text that looks like a
+    // file name or path puts them first, so Ctrl+P, a name and Enter opens the file as in VS Code.
+    let files: Promise<string[]> | undefined;
+    subscriptions.add(
+      quickAccess.registerSearchContributor({
+        id: 'files',
+        order: (query) => (/[./\\]/.test(query) ? 5 : 30),
+        onDidOpen: () => {
+          files = undefined;
+        },
+        provide: async (query) => {
+          const root = workspace.folders[0];
+          const rpc = connection.rpc;
+          if (!query || !root || !rpc) {
+            return undefined;
+          }
+          files ??= rpc.call('documents.listFiles', { maxResults: MAX_FILES });
+          const scored = (await files)
+            .flatMap((file) => {
+              const score = scorePath(file, query);
+              return score === undefined ? [] : [{ file, score }];
+            })
+            .sort((a, b) => b.score - a.score)
+            .slice(0, MAX_ROWS);
+          return {
+            label: t('files'),
+            items: scored.map(({ file }) => {
+              const slash = file.lastIndexOf('/');
+              const name = file.slice(slash + 1);
+              return {
+                label: name,
+                labelHighlights: matchRanges(name, query),
+                description: slash > 0 ? file.slice(0, slash) : undefined,
+                icon: 'file',
+                accept: () => open(`${root}/${file}`, true),
+              };
+            }),
+          };
+        },
+      }),
+    );
 
     // Files dropped onto the shell (the content pane, empty states...) open as tabs.
     const onDragOver = (event: DragEvent): void => {

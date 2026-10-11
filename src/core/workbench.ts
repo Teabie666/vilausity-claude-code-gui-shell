@@ -20,6 +20,7 @@ import { t } from './messages';
 import { ModuleHost, type ShellModule } from './module';
 import { native } from './native';
 import { PanelRouter } from './panels';
+import { QuickAccess } from './quickAccess';
 import {
   ICommands,
   IContextKeys,
@@ -31,6 +32,7 @@ import {
   IMenus,
   INative,
   IPanels,
+  IQuickAccess,
   ISettings,
   IThemes,
   IWebviewFrames,
@@ -90,6 +92,7 @@ export async function startWorkbench(modules: readonly ShellModule[]): Promise<v
   services.register(IEditors, new EditorRegistry());
   services.register(IPanels, new PanelRouter(connection, logger.child('panels')));
   services.register(ISettings, settings);
+  services.register(IQuickAccess, new QuickAccess(dialogs, logger.child('quickAccess')));
 
   // Core RPC handlers: webview plumbing and the extension's message/picker UI.
   connection.onDidConnect((rpc) => {

@@ -61,6 +61,7 @@ import { ExtensionUpdater, type UpdateSettings } from './extensionUpdater';
 import { findGit } from './gitLocator';
 import { t } from './messages';
 import { ProviderStore, type SecretCipher } from './providerStore';
+import { claudeProjectsDir, SessionSearch } from './sessionSearch';
 import { SettingsStore } from './settingsStore';
 import { isExternalUrl, nextZoomLevel } from './shellWindow';
 import { StateStore } from './stateStore';
@@ -136,6 +137,7 @@ export class ShellApp extends Disposable implements WindowHost {
   private updater: ExtensionUpdater | undefined;
   private readonly shellState: StateStore;
   private readonly history: WindowHistory;
+  private readonly sessionSearch: SessionSearch;
   private readonly themesDir: string;
   private currentTheme: ThemeData;
   private currentZoom: number;
@@ -169,6 +171,13 @@ export class ShellApp extends Disposable implements WindowHost {
     this.currentZoom = this.history.zoomLevel() ?? 0;
     this.providers = this.register(
       new ProviderStore(env.paths.providersFile, electronCipher, this.logger.child('providers')),
+    );
+    this.sessionSearch = this.register(
+      new SessionSearch(
+        path.join(env.appDir, 'sessionSearchWorker.js'),
+        claudeProjectsDir(process.env, os.homedir()),
+        this.logger.child('sessionSearch'),
+      ),
     );
     this.extensionStore = new ExtensionStore(
       env.paths.extensionsDir,
@@ -696,6 +705,14 @@ export class ShellApp extends Disposable implements WindowHost {
       },
       'window.openFolder': ({ folder, newWindow }, window) => this.openFolder(folder, newWindow ? undefined : window),
       'window.recentFolders': () => this.history.recentFolders(),
+      'sessions.search': (request) => this.sessionSearch.search(request),
+      'sessions.open': async ({ folder, sessionId }) => {
+        if (!isDirectory(folder)) {
+          return false;
+        }
+        (await this.openWindow(folder)).openConversation({ sessionId });
+        return true;
+      },
       'window.shownFolders': () => this.windows.map((window) => window.folder),
       'window.close': (_params, window) => this.requestClose(window),
       'window.openFolderAsAdministrator': ({ folder }) => this.startAdministratorInstance(folder),

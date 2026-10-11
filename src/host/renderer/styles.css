@@ -43,6 +43,11 @@
   --icon-chevron-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.14598 5.85423L7.64598 10.3542C7.84098 10.5492 8.15798 10.5492 8.35298 10.3542L12.853 5.85423C13.048 5.65923 13.048 5.34223 12.853 5.14723C12.658 4.95223 12.341 4.95223 12.146 5.14723L7.99998 9.29323L3.85398 5.14723C3.65898 4.95223 3.34198 4.95223 3.14698 5.14723C2.95198 5.34223 2.95098 5.65923 3.14598 5.85423Z'/%3E%3C/svg%3E");
   --icon-chevron-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M6.14601 3.14579C5.95101 3.34079 5.95101 3.65779 6.14601 3.85279L10.292 7.99879L6.14601 12.1448C5.95101 12.3398 5.95101 12.6568 6.14601 12.8518C6.34101 13.0468 6.65801 13.0468 6.85301 12.8518L11.353 8.35179C11.548 8.15679 11.548 7.83979 11.353 7.64478L6.85301 3.14479C6.65801 2.94979 6.34101 2.95079 6.14601 3.14579Z'/%3E%3C/svg%3E");
   --icon-case: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M7.495 9.052L8.386 11.402H9.477L6.237 3H5.217L2 11.402H3.095L3.933 9.052H7.495ZM5.811 4.453L5.855 4.588L7.173 8.162H4.255L5.562 4.588L5.606 4.453L5.644 4.297L5.676 4.145L5.697 4.019H5.72L5.744 4.145L5.773 4.297L5.811 4.453ZM13.795 10.464V11.4H14.755V7.498C14.755 6.779 14.575 6.226 14.216 5.837C13.857 5.448 13.327 5.254 12.628 5.254C12.429 5.254 12.227 5.273 12.022 5.31C11.817 5.347 11.622 5.395 11.437 5.455C11.252 5.515 11.083 5.579 10.93 5.648C10.777 5.717 10.656 5.784 10.567 5.85V6.86C10.788 6.668 11.042 6.517 11.329 6.405C11.616 6.293 11.913 6.237 12.22 6.237C12.374 6.237 12.517 6.262 12.649 6.313C12.781 6.364 12.894 6.443 12.988 6.551C13.082 6.659 13.155 6.8 13.207 6.973C13.259 7.146 13.285 7.355 13.285 7.6L11.637 7.825C11.36 7.862 11.106 7.932 10.875 8.034C10.644 8.136 10.444 8.267 10.275 8.427C10.106 8.587 9.976 8.776 9.884 8.995C9.792 9.214 9.746 9.459 9.746 9.73C9.746 9.956 9.783 10.167 9.857 10.363C9.931 10.559 10.04 10.729 10.183 10.873C10.326 11.017 10.502 11.13 10.711 11.212C10.92 11.294 11.159 11.335 11.428 11.335C11.794 11.335 12.131 11.245 12.439 11.065C12.747 10.885 13.017 10.651 13.249 10.364H13.271L13.795 10.464ZM13.285 8.528V8.903C13.285 9.13 13.247 9.339 13.171 9.531C13.095 9.723 12.99 9.889 12.857 10.03C12.724 10.171 12.567 10.281 12.386 10.36C12.205 10.439 12.009 10.479 11.798 10.479C11.651 10.479 11.519 10.459 11.402 10.418C11.285 10.377 11.187 10.32 11.106 10.246C11.025 10.172 10.963 10.083 10.92 9.98C10.877 9.877 10.856 9.763 10.856 9.638C10.856 9.484 10.881 9.349 10.932 9.233C10.983 9.117 11.058 9.019 11.157 8.939C11.256 8.859 11.38 8.795 11.528 8.745C11.676 8.695 11.849 8.656 12.047 8.629L13.285 8.528Z'/%3E%3C/svg%3E");
+  --icon-search: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M10.0195 10.7266C9.06578 11.5217 7.83875 12 6.5 12C3.46243 12 1 9.53757 1 6.5C1 3.46243 3.46243 1 6.5 1C9.53757 1 12 3.46243 12 6.5C12 7.83875 11.5217 9.06578 10.7266 10.0195L13.8535 13.1464C14.0488 13.3417 14.0488 13.6583 13.8535 13.8536C13.6583 14.0488 13.3417 14.0488 13.1464 13.8536L10.0195 10.7266ZM11 6.5C11 4.01472 8.98528 2 6.5 2C4.01472 2 2 4.01472 2 6.5C2 8.98528 4.01472 11 6.5 11C8.98528 11 11 8.98528 11 6.5Z'/%3E%3C/svg%3E");
+  --icon-file: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5 1C3.89543 1 3 1.89543 3 3V13C3 14.1046 3.89543 15 5 15H11C12.1046 15 13 14.1046 13 13V5.41421C13 5.01639 12.842 4.63486 12.5607 4.35355L9.64645 1.43934C9.36514 1.15804 8.98361 1 8.58579 1H5ZM4 3C4 2.44772 4.44772 2 5 2H8V4.5C8 5.32843 8.67157 6 9.5 6H12V13C12 13.5523 11.5523 14 11 14H5C4.44772 14 4 13.5523 4 13V3ZM11.7929 5H9.5C9.22386 5 9 4.77614 9 4.5V2.20711L11.7929 5Z'/%3E%3C/svg%3E");
+  --icon-folder: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 4.5V6H5.58579C5.71839 6 5.84557 5.94732 5.93934 5.85355L7.29289 4.5L5.93934 3.14645C5.84557 3.05268 5.71839 3 5.58579 3H3.5C2.67157 3 2 3.67157 2 4.5ZM1 4.5C1 3.11929 2.11929 2 3.5 2H5.58579C5.98361 2 6.36514 2.15804 6.64645 2.43934L8.20711 4H12.5C13.8807 4 15 5.11929 15 6.5V11.5C15 12.8807 13.8807 14 12.5 14H3.5C2.11929 14 1 12.8807 1 11.5V4.5ZM2 7V11.5C2 12.3284 2.67157 13 3.5 13H12.5C13.3284 13 14 12.3284 14 11.5V6.5C14 5.67157 13.3284 5 12.5 5H8.20711L6.64645 6.56066C6.36514 6.84197 5.98361 7 5.58579 7H2Z'/%3E%3C/svg%3E");
+  --icon-add: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1.5C8 1.22386 7.77614 1 7.5 1C7.22386 1 7 1.22386 7 1.5V7H1.5C1.22386 7 1 7.22386 1 7.5C1 7.77614 1.22386 8 1.5 8H7V13.5C7 13.7761 7.22386 14 7.5 14C7.77614 14 8 13.7761 8 13.5V8H13.5C13.7761 8 14 7.77614 14 7.5C14 7.22386 13.7761 7 13.5 7H8V1.5Z'/%3E%3C/svg%3E");
+  --icon-conversation: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M14.56 7.44049C14.28 7.16049 13.9 7.00049 13.5 7.00049H13V4.00049C13 2.90049 12.1 2.00049 11 2.00049H3C1.9 2.00049 1 2.90049 1 4.00049V9.00049C1 10.1005 1.9 11.0005 3 11.0005V12.0005C3 12.8205 3.93 13.2905 4.59 12.8105L7 11.0505V11.5005C7 11.9005 7.16 12.2805 7.44 12.5605C7.72 12.8405 8.1 13.0005 8.5 13.0005H10.29L12.15 14.8505C12.19 14.9005 12.25 14.9405 12.31 14.9605C12.37 14.9905 12.43 15.0005 12.5 15.0005C12.57 15.0005 12.63 14.9905 12.69 14.9605C12.78 14.9205 12.86 14.8605 12.92 14.7805C12.97 14.7005 13 14.6005 13 14.5005V13.0005H13.5C13.9 13.0005 14.28 12.8405 14.56 12.5605C14.84 12.2805 15 11.9005 15 11.5005V8.50049C15 8.10049 14.84 7.72049 14.56 7.44049ZM6.75 10.0005L4 12.0005V10.0005H3C2.45 10.0005 2 9.55049 2 9.00049V4.00049C2 3.45049 2.45 3.00049 3 3.00049H11C11.55 3.00049 12 3.45049 12 4.00049V7.00049H8.5C8.1 7.00049 7.72 7.16049 7.44 7.44049C7.16 7.72049 7 8.10049 7 8.50049V10.0005H6.75ZM14 11.5005C14 11.6305 13.95 11.7605 13.85 11.8505C13.76 11.9505 13.63 12.0005 13.5 12.0005H12.5C12.37 12.0005 12.24 12.0505 12.15 12.1505C12.05 12.2405 12 12.3705 12 12.5005V13.2905L10.85 12.1505C10.81 12.1005 10.75 12.0605 10.69 12.0405C10.63 12.0105 10.57 12.0005 10.5 12.0005H8.5C8.37 12.0005 8.24 11.9505 8.15 11.8505C8.05 11.7605 8 11.6305 8 11.5005V8.50049C8 8.37049 8.05 8.24049 8.15 8.15049C8.24 8.05049 8.37 8.00049 8.5 8.00049H13.5C13.63 8.00049 13.76 8.05049 13.85 8.15049C13.95 8.24049 14 8.37049 14 8.50049V11.5005Z'/%3E%3C/svg%3E");
 }
 
 *,
@@ -162,12 +167,23 @@ kbd {
 }
 
 .titlebar-left,
-.titlebar-right {
+.titlebar-actions {
   display: flex;
   align-items: center;
   gap: 4px;
   flex: none;
   padding: 0 6px;
+}
+
+/* The main window's sides take equal shares, so the search box sits mid-window. */
+.titlebar-main > .titlebar-left,
+.titlebar-main > .titlebar-right {
+  flex: 1 1 0;
+}
+
+.titlebar-right {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .titlebar-button {
@@ -197,7 +213,6 @@ kbd {
   line-height: 16px;
 }
 
-.titlebar-folder,
 .titlebar-provider {
   display: inline-flex;
   align-items: center;
@@ -212,20 +227,18 @@ kbd {
   cursor: pointer;
 }
 
-.titlebar-folder:hover,
 .titlebar-provider:hover {
   background: var(--vscode-toolbar-hoverBackground);
   color: var(--vscode-titleBar-activeForeground);
 }
 
-.titlebar-folder-label,
 .titlebar-provider-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.titlebar-folder-chevron {
+.titlebar-chevron {
   flex: none;
   width: 16px;
   height: 16px;
@@ -250,13 +263,85 @@ body.provider-accent .titlebar {
   flex: 0 0 var(--window-controls-width);
 }
 
-/* The middle of the title bar: room to drag the window by. */
+/* The middle of the title bar: the search box (features/quickOpen), after VS Code's command center. */
 .titlebar-center {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.search-box {
+  display: flex;
+  align-items: stretch;
+  width: 38vw;
+  max-width: 600px;
+  min-width: 160px;
+  height: 22px;
+  margin: 0 6px;
+  overflow: hidden;
+  color: var(--vscode-commandCenter-foreground, var(--vscode-titleBar-activeForeground));
+  background: var(--vscode-commandCenter-background, transparent);
+  border: 1px solid var(--vscode-commandCenter-border, transparent);
+  border-radius: var(--vscode-cornerRadius-medium);
+  -webkit-app-region: no-drag;
+}
+
+.search-box:hover {
+  color: var(--vscode-commandCenter-activeForeground, var(--vscode-titleBar-activeForeground));
+  background: var(--vscode-commandCenter-activeBackground, transparent);
+  border-color: var(--vscode-commandCenter-activeBorder, var(--vscode-commandCenter-border, transparent));
+}
+
+.search-box-open {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
+  padding: 0 6px;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.search-box-open::before {
+  content: '';
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background-color: currentColor;
+  mask: var(--icon-search) center / 14px no-repeat;
+}
+
+.search-box-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The command palette, at the box's end. */
+.search-box-commands {
+  --icon: var(--icon-chevron-right);
+  height: auto;
+  border: none;
+  border-left: 1px solid var(--vscode-commandCenter-border, transparent);
+  border-radius: 0;
+  color: inherit;
+}
+
+.search-box-commands:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.search-box-open:focus-visible,
+.search-box-commands:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
 }
 
 /* ---- tabs: conversations (above the conversation) and the content pane's ---- */
@@ -1814,19 +1899,61 @@ body.resizing {
   color: var(--vscode-quickInputList-focusForeground);
 }
 
+/* Label, then its description (dimmed); a keybinding at the far end; a detail line below. */
 .quick-input-label {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .quick-input-description {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--vscode-descriptionForeground);
   font-size: 0.92em;
+}
+
+.quick-input-keybinding {
+  flex: none;
+  margin-left: auto;
+  line-height: 14px;
+}
+
+.quick-input-icon {
+  flex: none;
+  align-self: center;
+  width: 16px;
+  height: 16px;
+  background-color: currentColor;
+  mask: var(--icon) center / 16px no-repeat;
 }
 
 .quick-input-detail {
   flex-basis: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--vscode-descriptionForeground);
   font-size: 0.92em;
+}
+
+.quick-input-item.has-icon .quick-input-detail {
+  padding-left: 22px;
+}
+
+.quick-input-highlight {
+  color: var(--vscode-list-highlightForeground);
+  font-weight: 600;
+}
+
+.quick-input-item.focused .quick-input-highlight {
+  color: var(--vscode-quickInputList-focusHighlightForeground, var(--vscode-list-focusHighlightForeground, var(--vscode-list-highlightForeground)));
 }
 
 .quick-input-separator {

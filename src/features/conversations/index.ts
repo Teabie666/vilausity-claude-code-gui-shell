@@ -14,6 +14,7 @@ import {
   IKeybindings,
   ILayout,
   IPanels,
+  IQuickAccess,
   ISettings,
   IThemes,
   IWebviewFrames,
@@ -136,6 +137,26 @@ export const conversationsModule: ShellModule = {
       ),
     ];
     register.forEach((disposable) => subscriptions.add(disposable));
+    // In the search with nothing typed, after the recent conversations (features/sessionSearch).
+    subscriptions.add(
+      services.get(IQuickAccess).registerSearchContributor({
+        id: 'newConversation',
+        order: 11,
+        provide: (query) =>
+          query
+            ? undefined
+            : {
+                items: [
+                  {
+                    label: t('newConversation'),
+                    icon: 'add',
+                    keybinding: keybindings.labelFor('conversations.new'),
+                    accept: () => commands.execute('conversations.new'),
+                  },
+                ],
+              },
+      }),
+    );
     updateContext();
   },
 };

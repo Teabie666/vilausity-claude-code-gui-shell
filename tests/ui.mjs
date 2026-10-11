@@ -32,6 +32,31 @@ for (const name of Object.keys(env)) {
 // The normal instance even when the run starts from an elevated shell (an administrator
 // instance keeps its state apart and marks its windows).
 env.VILAUS_ELEVATED = '0';
+// A conversation for the search to find, instead of the real ones in ~/.claude/projects.
+const sessionsDir = path.join(runDir, 'sessions');
+mkdirSync(path.join(sessionsDir, 'project'), { recursive: true });
+writeFileSync(
+  path.join(sessionsDir, 'project', '00000000-0000-4000-8000-000000000001.jsonl'),
+  [
+    { type: 'user', cwd: workspace, message: { role: 'user', content: 'Sort the receipts in Downloads by month' } },
+    {
+      type: 'assistant',
+      cwd: workspace,
+      message: {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Moved 12 receipts.' },
+          { type: 'tool_use', name: 'Edit', input: { file_path: path.join(workspace, 'ledger.csv') } },
+        ],
+      },
+    },
+    { type: 'ai-title', aiTitle: 'Receipts by month' },
+  ]
+    .map((line) => JSON.stringify(line))
+    .join('\n'),
+  'utf8',
+);
+env.VILAUS_SESSIONS_DIR = sessionsDir;
 
 const results = [];
 async function step(name, fn) {
@@ -138,7 +163,7 @@ await step('command palette switches the color theme for shell and webviews', as
   await press('Control+Shift+P');
   const filter = page.locator('.quick-input-filter');
   await filter.waitFor({ timeout: 5000 });
-  await filter.fill('Color Theme');
+  await filter.fill('>Color Theme');
   await filter.press('Enter');
   await waitFor(async () => (await page.locator('.quick-input-item').count()) > 1, 5000, 'the theme list');
   await page.locator('.quick-input-filter').fill('Light Modern');
@@ -148,11 +173,41 @@ await step('command palette switches the color theme for shell and webviews', as
   await waitFor(() => chat.evaluate(() => document.body.classList.contains('vscode-light')), 5000, 'the webview to turn light');
   // Back to the default.
   await press('Control+Shift+P');
-  await page.locator('.quick-input-filter').fill('Color Theme');
+  await page.locator('.quick-input-filter').fill('>Color Theme');
   await page.locator('.quick-input-filter').press('Enter');
   await page.locator('.quick-input-filter').fill('Dark Modern');
   await page.locator('.quick-input-filter').press('Enter');
   await waitFor(() => page.evaluate(() => document.body.classList.contains('vscode-dark')), 5000, 'the shell to turn dark');
+});
+
+await step('the search box finds conversations by title, words and files; > lists commands', async () => {
+  await page.locator('.search-box-open').click();
+  const filter = page.locator('.quick-input-filter');
+  await filter.waitFor({ timeout: 5000 });
+  const row = page.locator('.quick-input-item', { hasText: 'Receipts by month' });
+  await row.waitFor({ timeout: 10_000 });
+  for (const [query, detail] of [
+    ['receipts', undefined],
+    ['downloads', 'You: Sort the receipts in Downloads by month'],
+    ['ledger.csv', 'Changed: ledger.csv'],
+  ]) {
+    await filter.fill(query);
+    await waitFor(
+      async () =>
+        (await row.count()) === 1 &&
+        (detail === undefined || (await row.locator('.quick-input-detail').innerText()) === detail),
+      5000,
+      `the conversation found by "${query}"`,
+    );
+  }
+  await filter.fill('>Toggle Developer');
+  await waitFor(
+    async () => (await page.locator('.quick-input-item', { hasText: 'Toggle Developer Tools' }).count()) === 1,
+    5000,
+    'the command',
+  );
+  await filter.press('Escape');
+  await waitFor(async () => (await page.locator('.quick-input-filter').count()) === 0, 3000, 'the picker to close');
 });
 
 await step('Ctrl+F finds text in the active conversation', async () => {
@@ -357,7 +412,7 @@ await step('Compare Active File with Saved opens a diff tab (vscode.diff)', asyn
   await page.keyboard.press('Control+Home');
   await page.keyboard.type('// unsaved\n');
   await press('Control+Shift+P');
-  await page.locator('.quick-input-filter').fill('Compare Active File with Saved');
+  await page.locator('.quick-input-filter').fill('>Compare Active File with Saved');
   await waitFor(async () => (await page.locator('.quick-input-item').count()) === 1, 5000, 'the command');
   await page.locator('.quick-input-filter').press('Enter');
   await waitFor(async () => (await contentTabs().count()) === 2, 10_000, 'a diff tab');
@@ -535,7 +590,7 @@ await step('Ctrl+W in the editor closes its tab and the pane hides; the conversa
 
 await step('Claude: Show Logs opens the extension log in the content pane', async () => {
   await press('Control+Shift+P');
-  await page.locator('.quick-input-filter').fill('Claude: Show Logs');
+  await page.locator('.quick-input-filter').fill('>Claude: Show Logs');
   await waitFor(async () => (await page.locator('.quick-input-item').count()) === 1, 5000, 'the command');
   await page.locator('.quick-input-filter').press('Enter');
   await waitFor(async () => (await contentTabs().count()) === 1, 10_000, 'the log tab');
@@ -704,7 +759,7 @@ await step('Diff Editor: Font Size applies to diffs only', async () => {
   await page.keyboard.press('Control+Home');
   await page.keyboard.type('// diff font\n');
   await press('Control+Shift+P');
-  await page.locator('.quick-input-filter').fill('Compare Active File with Saved');
+  await page.locator('.quick-input-filter').fill('>Compare Active File with Saved');
   await waitFor(async () => (await page.locator('.quick-input-item').count()) === 1, 5000, 'the command');
   await page.locator('.quick-input-filter').press('Enter');
   const diffSize = await waitFor(async () => {
@@ -794,8 +849,8 @@ await step('a folder opens in a window of its own; opening it again brings that 
   await openFolder(page, second, true);
   await page.waitForTimeout(1000);
   if (shellPages().length !== 2) throw new Error(`${shellPages().length} windows`);
-  const button = await secondPage.locator('.titlebar-folder-label').innerText();
-  if (button !== 'second') throw new Error(`the folder button says ${button}`);
+  const button = await secondPage.locator('.search-box-label').innerText();
+  if (button !== 'second') throw new Error(`the search box says ${button}`);
   return `${shellPages().length} windows`;
 });
 
@@ -1044,7 +1099,7 @@ await step('an API provider: the title bar switches to it, and new Claude proces
 
 await step('the providers editor adds a provider from a preset, saves edits and a key, and removes it', async () => {
   await press('Control+Shift+P');
-  await page.locator('.quick-input-filter').fill('Manage API Providers');
+  await page.locator('.quick-input-filter').fill('>Manage API Providers');
   await page.locator('.quick-input-filter').press('Enter');
   const editor = page.locator('#content-pane .providers-editor');
   await editor.waitFor({ timeout: 5000 });
@@ -1113,7 +1168,7 @@ await step('Configure Display Language switches the shell to Chinese after a res
   await press('Control+Shift+P');
   const filter = page.locator('.quick-input-filter');
   await filter.waitFor({ timeout: 5000 });
-  await filter.fill('Configure Display Language');
+  await filter.fill('>Configure Display Language');
   await filter.press('Enter');
   await waitFor(async () => (await page.locator('.quick-input-item').count()) === 3, 5000, 'the three choices');
   await page.locator('.quick-input-filter').fill('中文');
@@ -1133,7 +1188,7 @@ await step('Configure Display Language switches the shell to Chinese after a res
 
   await press('Control+Shift+P');
   await page.locator('.quick-input-filter').waitFor({ timeout: 5000 });
-  await page.locator('.quick-input-filter').fill('新建对话');
+  await page.locator('.quick-input-filter').fill('>新建对话');
   const command = await waitFor(async () => {
     const rows = page.locator('.quick-input-item');
     return (await rows.count()) ? rows.first().innerText() : undefined;

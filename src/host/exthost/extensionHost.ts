@@ -149,9 +149,20 @@ export class ExtensionHost {
   async openConversation(request: ConversationRequest): Promise<void> {
     // It came after the init data: the window need not open a new conversation of its own.
     this.openAtStart ??= {};
-    if (await this.ready()) {
-      await this.services?.commands.executeCommand(OPEN_CONVERSATION_COMMAND, request.sessionId, request.prompt);
+    if (!(await this.ready())) {
+      return;
     }
+    // A session a tab shows already (the search, --session): that tab comes forward rather
+    // than a second conversation on the same session.
+    const shown =
+      request.sessionId && !request.prompt
+        ? this.services?.webviews.allPanels.find((panel) => conversationSessionId(panel.webview.state) === request.sessionId)
+        : undefined;
+    if (shown) {
+      shown.reveal();
+      return;
+    }
+    await this.services?.commands.executeCommand(OPEN_CONVERSATION_COMMAND, request.sessionId, request.prompt);
   }
 
   async showDocument(params: { uri: string; selection?: RangeDto }): Promise<boolean> {

@@ -40,7 +40,7 @@ export const providersModule: ShellModule = {
     const label = document.createElement('span');
     label.className = 'titlebar-provider-label';
     const chevron = document.createElement('span');
-    chevron.className = 'titlebar-folder-chevron';
+    chevron.className = 'titlebar-chevron';
     button.append(swatch, label, chevron);
     button.addEventListener('click', () => void commands.execute('providers.switch'));
     subscriptions.add(services.get(ILayout).addTitleBarItem('left', button, 12));

@@ -42,6 +42,8 @@ export type TitleBarSide = 'left' | 'right';
 export class Layout {
   readonly titleBarLeft = element('titlebar-left');
   readonly titleBarRight = element('titlebar-right');
+  /** The middle of the title bar (the search box). */
+  readonly titleBarCenter = element('titlebar-center');
   readonly tabs = element('tabs');
   readonly sidebar = element('sidebar');
   readonly main = element('main');
