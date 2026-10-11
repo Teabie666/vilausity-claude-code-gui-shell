@@ -34,6 +34,7 @@ export const settingTitleName = defineNames('settingTitles', {
   'vilaus.translateExtensionUi': 'Vilaus: Translate Extension Ui',
   'vilaus.conversations.alwaysShowTabs': 'Vilaus › Conversations: Always Show Tabs',
   'vilaus.provider.default': 'Vilaus › Provider: Default',
+  'vilaus.provider.accent': 'Vilaus › Provider: Accent',
   'vilaus.extension.autoUpdate': 'Vilaus › Extension: Auto Update',
   'vilaus.extension.version': 'Vilaus › Extension: Version',
   'vilaus.extension.openVsxUrl': 'Vilaus › Extension: Open Vsx Url',

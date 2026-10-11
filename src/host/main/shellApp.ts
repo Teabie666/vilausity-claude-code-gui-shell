@@ -41,8 +41,11 @@ import {
   type StartupNotices,
   type ThemeData,
 } from '../../platform/protocol';
+import { ACCENT_MODES, withAccent, type AccentMode } from '../../platform/accent';
 import {
+  ACCENT_SETTING,
   DEFAULT_PROVIDER_SETTING,
+  providerAccentColor,
   providerSettingsOverlay,
   SUBSCRIPTION_ID,
   SUBSCRIPTION_PROVIDER,
@@ -82,7 +85,7 @@ export const VSCODE_COMPAT_VERSION = '1.121.0';
 
 const THEME_SETTING = 'vilaus.theme';
 /** Settings that change the theme data (colors or font variables). */
-const THEME_SETTING_KEYS = new Set<string>([THEME_SETTING, ...FONT_SETTING_KEYS]);
+const THEME_SETTING_KEYS = new Set<string>([THEME_SETTING, ACCENT_SETTING, ...FONT_SETTING_KEYS]);
 /** Automatic updates of the extension: this long after the start, then at this interval. */
 const FIRST_UPDATE_CHECK_MS = 15_000;
 const UPDATE_CHECK_INTERVAL_MS = 12 * 60 * 60_000;
@@ -184,7 +187,8 @@ export class ShellApp extends Disposable implements WindowHost {
     this.extensionTable = extensionTranslations(this.language);
     this.documents = new WebviewDocumentStore(
       bootstrap,
-      () => this.theme,
+      // A window's webviews start in its accent.
+      (owner) => this.windows.find((window) => window.ownsDocuments(owner))?.theme ?? this.theme,
       () => this.extensionTranslations(),
       readFontFaces(path.join(env.appDir, 'renderer', 'fonts', 'fonts.css'), this.logger),
     );
@@ -389,6 +393,14 @@ export class ShellApp extends Disposable implements WindowHost {
 
   providersState(current: string): ProvidersState {
     return { providers: this.providers.list(), current };
+  }
+
+  /** The theme of a window whose provider is `providerId`: the shared one in that provider's accent. */
+  windowTheme(providerId: string): ThemeData {
+    const provider = this.providers.get(providerId) ?? SUBSCRIPTION_PROVIDER;
+    const setting = this.settings.all[ACCENT_SETTING];
+    const mode: AccentMode = ACCENT_MODES.find((candidate) => candidate === setting) ?? 'all';
+    return withAccent(this.theme, providerAccentColor(provider), mode);
   }
 
   /** The folder's provider from last time, else the default setting's, else the subscription. */
@@ -657,7 +669,7 @@ export class ShellApp extends Disposable implements WindowHost {
   private applyTheme(theme: ThemeData): void {
     this.currentTheme = theme;
     for (const window of this.windows) {
-      window.setTheme(theme);
+      window.refreshTheme();
     }
   }
 

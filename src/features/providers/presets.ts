@@ -1,7 +1,11 @@
 /**
  * Starting points for new providers, from each provider's own Claude Code setup page
- * (checked 2026-10-10). Model names change often, so a preset is only where a provider
- * starts: everything can be edited, and `docs` links to the current instructions.
+ * (checked 2026-10-10; Volcano Engine Ark, MiniMax and OpenRouter 2026-10-12). Model names
+ * change often, so a preset is only where a provider starts: everything can be edited, and
+ * `docs` links to the current instructions. Only APIs that speak Anthropic's Messages API are
+ * here (Claude Code speaks nothing else): OpenAI's and Google's do not, xAI's Anthropic
+ * compatibility is deprecated; OpenRouter reaches their models. Each preset's accent color
+ * is in platform/providers.ts (PRESET_ACCENTS).
  */
 
 import type { ProviderConfig } from '../../platform/providers';
@@ -34,6 +38,11 @@ const kimiModels = {
 };
 const kimiEnv = { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '1000000', CLAUDE_CODE_EFFORT_LEVEL: 'max' };
 const qwenCodingModels = { main: 'qwen3.7-plus', opus: 'qwen3.7-plus', sonnet: 'qwen3.7-plus', haiku: 'qwen3.7-plus' };
+/** Ark's Coding Plan: the model chosen in the Ark console. */
+const arkModels = { main: 'ark-code-latest', opus: 'ark-code-latest', sonnet: 'ark-code-latest', haiku: 'ark-code-latest' };
+const minimaxModel = 'MiniMax-M3.1-Flash-Preview';
+const minimaxModels = { main: minimaxModel, opus: minimaxModel, sonnet: minimaxModel, haiku: minimaxModel };
+const minimaxEnv = { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '524288' };
 const qwenModels = {
   main: 'qwen3.7-max',
   opus: 'qwen3.7-max',
@@ -47,7 +56,7 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'anthropic',
     name: () => 'Anthropic API',
     docs: 'https://code.claude.com/docs/en/settings#environment-variables',
-    config: { type: 'anthropic-api', auth: 'apiKey', color: '#d97757' },
+    config: { type: 'anthropic-api', auth: 'apiKey' },
   },
   {
     id: 'deepseek',
@@ -65,7 +74,6 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
         subagent: 'deepseek-flash',
       },
       env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '786432', CLAUDE_CODE_EFFORT_LEVEL: 'max' },
-      color: '#4d6bfe',
     },
   },
   {
@@ -78,7 +86,6 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
       auth: 'bearer',
       models: kimiModels,
       env: kimiEnv,
-      color: '#0ea5a4',
     },
   },
   {
@@ -91,7 +98,6 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
       auth: 'bearer',
       models: kimiModels,
       env: kimiEnv,
-      color: '#0ea5a4',
     },
   },
   {
@@ -106,7 +112,6 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
       timeoutMs: 3000000,
       disableNonessentialTraffic: true,
       env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '1000000' },
-      color: '#e8833a',
     },
   },
   {
@@ -119,7 +124,6 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
       auth: 'bearer',
       models: { opus: 'GLM-4.7', sonnet: 'GLM-4.7', haiku: 'GLM-4.5-Air' },
       timeoutMs: 3000000,
-      color: '#e8833a',
     },
   },
   {
@@ -131,7 +135,6 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
       baseUrl: 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
       auth: 'bearer',
       models: qwenCodingModels,
-      color: '#7c5cff',
     },
   },
   {
@@ -143,7 +146,6 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
       baseUrl: 'https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/apps/anthropic',
       auth: 'bearer',
       models: qwenModels,
-      color: '#7c5cff',
     },
   },
   {
@@ -155,7 +157,6 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
       baseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
       auth: 'bearer',
       models: qwenCodingModels,
-      color: '#7c5cff',
     },
   },
   {
@@ -167,13 +168,67 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
       baseUrl: 'https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com/apps/anthropic',
       auth: 'bearer',
       models: qwenModels,
-      color: '#7c5cff',
+    },
+  },
+  {
+    id: 'seed',
+    name: () => t('presetSeed'),
+    docs: 'https://www.volcengine.com/docs/82379/1956278',
+    config: {
+      type: 'compatible',
+      baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
+      auth: 'bearer',
+      models: arkModels,
+    },
+  },
+  {
+    id: 'minimax',
+    name: () => 'MiniMax',
+    docs: 'https://platform.minimax.cn/docs/coding-plan/claude-code',
+    config: {
+      type: 'compatible',
+      baseUrl: 'https://api.minimax.cn/anthropic',
+      auth: 'bearer',
+      models: minimaxModels,
+      env: minimaxEnv,
+    },
+  },
+  {
+    id: 'minimax-intl',
+    name: () => 'MiniMax (minimax.io)',
+    docs: 'https://platform.minimax.io/docs/token-plan/claude-code',
+    config: {
+      type: 'compatible',
+      baseUrl: 'https://api.minimax.io/anthropic',
+      auth: 'bearer',
+      models: minimaxModels,
+      env: minimaxEnv,
+    },
+  },
+  {
+    // Many vendors' models behind one key, OpenAI's, Google's and xAI's among them (the model
+    // picker lists them); Claude Code is built for Anthropic's, so the tiers start there.
+    id: 'openrouter',
+    name: () => 'OpenRouter',
+    docs: 'https://openrouter.ai/docs/guides/coding-agents/claude-code-integration',
+    config: {
+      type: 'compatible',
+      baseUrl: 'https://openrouter.ai/api',
+      auth: 'bearer',
+      models: {
+        opus: '~anthropic/claude-opus-latest[1m]',
+        sonnet: '~anthropic/claude-sonnet-latest[1m]',
+        haiku: '~anthropic/claude-haiku-latest',
+        fable: '~anthropic/claude-fable-latest[1m]',
+        subagent: '~anthropic/claude-opus-latest[1m]',
+      },
+      env: { CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: '1' },
     },
   },
   {
     id: 'custom',
     name: () => t('presetCustom'),
-    config: { type: 'compatible', auth: 'bearer', color: '#8a8a8a' },
+    config: { type: 'compatible', auth: 'bearer' },
   },
 ];
 

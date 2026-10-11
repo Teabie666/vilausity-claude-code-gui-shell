@@ -18,6 +18,7 @@ import {
   type WebContents,
   type WebFrameMain,
 } from 'electron';
+import { formatColor, parseColor } from '../../platform/accent';
 import { chordFromInput } from '../../platform/keybindings';
 import { Disposable } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
@@ -70,10 +71,16 @@ export function isExternalUrl(url: string): boolean {
   return /^(https?|mailto):/i.test(url);
 }
 
+/**
+ * The caption buttons' overlay is transparent: the page's title bar shows under it, and so
+ * does the accent line along its top edge (styles.css). Its color is still the title bar's,
+ * at alpha 0: Windows' hover shade is worked out from it (light on dark, dark on light).
+ */
 function overlayColors(theme: ThemeData): { color: string; symbolColor: string; height: number } {
   const colors = theme.variables;
+  const titleBar = parseColor(colors['vscode-titleBar-activeBackground'] ?? colors['vscode-editor-background']);
   return {
-    color: colors['vscode-titleBar-activeBackground'] ?? colors['vscode-editor-background'] ?? '#1f1f1f',
+    color: `${formatColor({ ...(titleBar ?? { r: 31, g: 31, b: 31 }), a: 1 })}00`,
     symbolColor: colors['vscode-titleBar-activeForeground'] ?? '#cccccc',
     height: TITLE_BAR_HEIGHT,
   };

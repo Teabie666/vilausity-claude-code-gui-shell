@@ -15,7 +15,8 @@ export class WebviewDocumentStore {
 
   constructor(
     private readonly bootstrapSource: string,
-    private readonly getTheme: () => ThemeData,
+    /** The theme of a document's owner (`set`), or the shared one. */
+    private readonly getTheme: (owner: string | undefined) => ThemeData,
     /** The table that translates the extension's UI, when that is on. */
     private readonly getTranslations: () => ExtensionTranslations | undefined = () => undefined,
     /** The shell's @font-face rules (dist/renderer/fonts/fonts.css, absolute ccw://app URLs). */
@@ -52,14 +53,15 @@ export class WebviewDocumentStore {
   }
 
   render(webviewId: string): string | undefined {
-    const document = this.documents.get(webviewId)?.document;
-    if (!document) {
+    const entry = this.documents.get(webviewId);
+    if (!entry) {
       return undefined;
     }
+    const document = entry.document;
     const data: WebviewBootstrapData = {
       webviewId,
       state: document.state,
-      theme: this.getTheme(),
+      theme: this.getTheme(entry.owner),
       hints: document.hints,
       // Only pages whose content the bridge knows are translated.
       translations: document.hints?.untranslated !== undefined ? this.getTranslations() : undefined,

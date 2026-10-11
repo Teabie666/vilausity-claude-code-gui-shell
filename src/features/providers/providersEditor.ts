@@ -13,6 +13,7 @@ import { DisposableStore } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
 import type { ProvidersState } from '../../platform/protocol';
 import {
+  providerAccentColor,
   providerIdFor,
   SUBSCRIPTION_ID,
   type ProviderConfig,
@@ -101,6 +102,7 @@ interface Draft {
   maxOutputTokens: string;
   disableNonessentialTraffic: boolean;
   env: string;
+  /** Empty: the vendor's accent (`providerAccentColor`). */
   color: string;
 }
 
@@ -139,7 +141,7 @@ function draftOf(provider: ProviderConfig): Draft {
     env: Object.entries(provider.env ?? {})
       .map(([name, value]) => `${name}=${value}`)
       .join('\n'),
-    color: provider.color ?? '#8a8a8a',
+    color: provider.color ?? '',
   };
 }
 
@@ -284,8 +286,9 @@ export class ProvidersEditorPane implements EditorPane {
       item.dataset.provider = provider.id;
       const swatch = doc.createElement('span');
       swatch.className = 'provider-swatch';
-      if (provider.color) {
-        swatch.style.backgroundColor = provider.color;
+      const color = providerAccentColor(provider);
+      if (color) {
+        swatch.style.backgroundColor = color;
       }
       const label = doc.createElement('span');
       label.className = 'providers-list-label';
@@ -417,7 +420,7 @@ export class ProvidersEditorPane implements EditorPane {
         draft.env = value;
         changed();
       }),
-      this.row(t('color'), this.colorInput(draft.color, (value) => ((draft.color = value), changed()))),
+      this.colorRow(provider, draft, changed),
       this.actions(provider, true),
     );
   }
@@ -536,7 +539,8 @@ export class ProvidersEditorPane implements EditorPane {
       maxOutputTokens: positiveInteger(draft.maxOutputTokens),
       disableNonessentialTraffic: draft.disableNonessentialTraffic || undefined,
       env: env.values,
-      color: draft.color,
+      // The vendor's own color is no pick: the provider keeps following its vendor.
+      color: draft.color && draft.color !== providerAccentColor({ ...provider, type: draft.type, color: undefined }) ? draft.color : undefined,
       preset: provider.preset,
     };
     const saved = await this.call(() => this.context.native.call('providers.save', { provider: config }));
@@ -662,13 +666,35 @@ export class ProvidersEditorPane implements EditorPane {
     return row;
   }
 
-  private colorInput(value: string, onInput: (value: string) => void): HTMLElement {
-    const input = this.root.ownerDocument.createElement('input');
+  /** The accent: picked, or the vendor's (or none: the theme's own) until one is. */
+  private colorRow(provider: ProviderSummary, draft: Draft, changed: () => void): HTMLElement {
+    const doc = this.root.ownerDocument;
+    const vendor = providerAccentColor({ ...provider, type: draft.type, color: undefined });
+    const control = doc.createElement('div');
+    control.className = 'providers-color-row';
+    const input = doc.createElement('input');
     input.type = 'color';
     input.className = 'providers-color';
-    input.value = value;
-    input.addEventListener('input', () => onInput(input.value));
-    return input;
+    const note = doc.createElement('span');
+    note.className = 'setting-description';
+    const reset = this.button(t('colorReset'), 'secondary', () => {
+      draft.color = '';
+      render();
+      changed();
+    });
+    const render = (): void => {
+      input.value = draft.color || vendor || '#808080';
+      note.textContent = draft.color ? '' : vendor ? t('colorVendor') : t('colorTheme');
+      reset.hidden = draft.color === '' || draft.color === vendor;
+    };
+    input.addEventListener('input', () => {
+      draft.color = input.value;
+      render();
+      changed();
+    });
+    render();
+    control.append(input, note, reset);
+    return this.row(t('color'), control);
   }
 
   private button(label: string, kind: 'primary' | 'secondary', run: () => unknown): HTMLButtonElement {

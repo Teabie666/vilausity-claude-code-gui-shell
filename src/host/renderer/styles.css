@@ -156,6 +156,7 @@ kbd {
 /* ---- title bar ------------------------------------------------------------- */
 
 .titlebar {
+  position: relative;
   display: flex;
   align-items: stretch;
   flex: 0 0 var(--titlebar-height);
@@ -164,6 +165,21 @@ kbd {
   color: var(--vscode-titleBar-activeForeground);
   border-bottom: 1px solid var(--vscode-titleBar-border, var(--vscode-panel-border, transparent));
   -webkit-app-region: drag;
+}
+
+/*
+ * The window's accent (its API provider's, platform/accent.ts) as a line along the top edge,
+ * the whole width: the native caption buttons' overlay is transparent, so it runs under them.
+ */
+.titlebar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--vilaus-accent, transparent);
+  pointer-events: none;
 }
 
 .titlebar-left,
@@ -246,17 +262,13 @@ kbd {
   mask: var(--icon-chevron-down) center / 14px no-repeat;
 }
 
-/* An API provider's color: a square by its name, and a line under the title bar. */
+/* An API provider's color: a square by its name, outlined so that a dark one shows on a dark bar. */
 .provider-swatch {
   flex: none;
   width: 10px;
   height: 10px;
   margin-right: 4px;
-  border: 1px solid var(--vscode-contrastBorder, transparent);
-}
-
-body.provider-accent .titlebar {
-  box-shadow: inset 0 -2px 0 var(--vilaus-provider-color);
+  border: 1px solid var(--vscode-contrastBorder, var(--vscode-widget-border, transparent));
 }
 
 .titlebar-controls-space {

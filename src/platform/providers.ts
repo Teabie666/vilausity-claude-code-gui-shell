@@ -46,7 +46,7 @@ export interface ProviderConfig {
   readonly disableNonessentialTraffic?: boolean;
   /** Any other variables, set last (they win over the fields above). */
   readonly env?: Readonly<Record<string, string>>;
-  /** The accent color (#rrggbb) of windows that use it; the subscription has none. */
+  /** The accent color (#rrggbb) of windows that use it, when not its vendor's (`providerAccentColor`). */
   readonly color?: string;
   /** The preset it started from: its documentation link. */
   readonly preset?: string;
@@ -72,6 +72,74 @@ const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export function isProviderId(id: string): boolean {
   return PROVIDER_ID.test(id);
+}
+
+/** The setting with how much of the window takes its provider's accent (platform/accent.ts). */
+export const ACCENT_SETTING = 'vilaus.provider.accent';
+
+/** Claude's own accent: the subscription, the Anthropic API and the platforms that serve Claude. */
+export const CLAUDE_ACCENT = '#d97757';
+
+/**
+ * Each preset's accent, its vendor's color, for providers that do not pick one. A provider
+ * without a preset (or from "custom") that talks to another API has none: its windows keep the
+ * theme's own accent unless it picks one.
+ */
+export const PRESET_ACCENTS: Readonly<Record<string, string>> = {
+  anthropic: CLAUDE_ACCENT,
+  deepseek: '#4d6bfe',
+  kimi: '#3b2a5c',
+  'kimi-intl': '#3b2a5c',
+  glm: '#2b2b2b',
+  zai: '#2b2b2b',
+  'qwen-coding': '#8ab4f8',
+  qwen: '#8ab4f8',
+  'qwen-coding-intl': '#8ab4f8',
+  'qwen-intl': '#8ab4f8',
+  seed: '#1664ff',
+  minimax: '#f23f5d',
+  'minimax-intl': '#f23f5d',
+  openrouter: '#6467f2',
+};
+
+/** The accent of windows that use a provider: its own pick, else its vendor's, else Claude's for Claude's APIs. */
+export function providerAccentColor(provider: ProviderConfig): string | undefined {
+  if (provider.color) {
+    return provider.color;
+  }
+  const preset = provider.preset !== undefined ? PRESET_ACCENTS[provider.preset] : undefined;
+  if (preset) {
+    return preset;
+  }
+  return provider.type === 'compatible' ? undefined : CLAUDE_ACCENT;
+}
+
+/**
+ * Colors that earlier versions stored with every provider (its preset's color then, or grey
+ * when there was none) although nobody picked them; such a provider follows its vendor's
+ * accent now. Applied to providers.json as it is read.
+ */
+const LEGACY_PRESET_COLORS: Readonly<Record<string, string>> = {
+  anthropic: '#d97757',
+  deepseek: '#4d6bfe',
+  kimi: '#0ea5a4',
+  'kimi-intl': '#0ea5a4',
+  glm: '#e8833a',
+  zai: '#e8833a',
+  'qwen-coding': '#7c5cff',
+  qwen: '#7c5cff',
+  'qwen-coding-intl': '#7c5cff',
+  'qwen-intl': '#7c5cff',
+};
+const LEGACY_DEFAULT_COLOR = '#8a8a8a';
+
+export function withoutLegacyColor(provider: ProviderConfig): ProviderConfig {
+  const color = provider.color;
+  if (color === undefined) {
+    return provider;
+  }
+  const legacy = color === LEGACY_DEFAULT_COLOR || (provider.preset !== undefined && LEGACY_PRESET_COLORS[provider.preset] === color);
+  return legacy ? { ...provider, color: undefined } : provider;
 }
 
 /** A free id from a name: `Kimi (moonshot.ai)` -> `kimi-moonshot-ai`, then `-2`, `-3`... */

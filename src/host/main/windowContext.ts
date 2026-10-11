@@ -41,7 +41,9 @@ export interface WindowHost {
   readonly globalState: StateStore;
   readonly documents: WebviewDocumentStore;
   readonly language: UiLanguage;
+  /** The theme every window shares; a window shows it in its provider's accent (`windowTheme`). */
   readonly theme: ThemeData;
+  windowTheme(providerId: string): ThemeData;
   /** The extension UI's translations in this run's language, if there are any. */
   readonly extensionTable: ExtensionTranslations | undefined;
   /** Undefined until the extension is installed: the window then has no extension host. */
@@ -109,7 +111,7 @@ export class WindowContext extends Disposable {
     this.currentProvider = options.provider;
     this.window = this.register(
       new ShellWindow({
-        theme: host.theme,
+        theme: host.windowTheme(options.provider),
         preloadPath: path.join(env.appDir, 'preload.js'),
         logger: this.logger,
         openDevTools: env.args.devtools,
@@ -243,7 +245,7 @@ export class WindowContext extends Disposable {
 
   rendererInitData(): RendererInitData {
     return {
-      theme: this.host.theme,
+      theme: this.theme,
       workspaceFolders: this.folders,
       appVersion: app.getVersion(),
       language: this.host.language,
@@ -266,12 +268,13 @@ export class WindowContext extends Disposable {
     this.providersChanged();
   }
 
-  /** The providers or this window's provider changed: the page and the extension host follow. */
+  /** The providers or this window's provider changed: the page and the extension host follow, and the accent. */
   providersChanged(): void {
     if (this.extHost && this.initialized) {
       this.extHost.rpc.notify('settings.overlay', { values: this.host.providerOverlay(this.currentProvider) });
     }
     this.window.emit('providersChanged', this.host.providersState(this.currentProvider));
+    this.refreshTheme();
   }
 
   /** settings.json changed: both the page and the extension host read settings. */
@@ -298,7 +301,19 @@ export class WindowContext extends Disposable {
     this.extHost?.rpc.notify('storage.didChange', { scope: 'global', key, value });
   }
 
-  setTheme(theme: ThemeData): void {
+  /** This window's theme: the shared one in its provider's accent. */
+  get theme(): ThemeData {
+    return this.host.windowTheme(this.currentProvider);
+  }
+
+  /** Whether the webview documents of `owner` (WebviewDocumentStore) are this window's. */
+  ownsDocuments(owner: string | undefined): boolean {
+    return owner === this.documentOwner;
+  }
+
+  /** The shared theme or this window's accent changed: the window and its page follow. */
+  refreshTheme(): void {
+    const theme = this.theme;
     this.window.setTheme(theme);
     this.window.emit('themeChanged', theme);
   }

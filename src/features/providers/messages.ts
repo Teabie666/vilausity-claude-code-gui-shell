@@ -60,6 +60,14 @@ export const t = defineMessages('providers', {
   envHint: 'One per line: NAME=value. These win over the fields above.',
   badLines: 'Not understood: {0}',
   color: 'Accent color',
+  colorVendor: "The vendor's color (default)",
+  colorTheme: "None: the theme's own accent (default)",
+  colorReset: 'Reset to Default',
+  accentSetting:
+    "How much of a window takes the accent color of its API provider. Each vendor has its own color; a provider can pick another in Manage API Providers.",
+  accentAll: 'The line along the top and the highlights',
+  accentLine: 'Only the line along the top',
+  accentOff: 'Off',
   save: 'Save',
   revert: 'Revert',
   saved: 'Saved.',
@@ -75,5 +83,6 @@ export const t = defineMessages('providers', {
   presetQwen: 'Qwen (Model Studio, pay as you go)',
   presetQwenCodingIntl: 'Qwen (Model Studio Coding Plan, international)',
   presetQwenIntl: 'Qwen (Model Studio, pay as you go, Singapore)',
+  presetSeed: 'Volcano Engine Ark (Coding Plan)',
   presetCustom: 'Anthropic-compatible API',
 });

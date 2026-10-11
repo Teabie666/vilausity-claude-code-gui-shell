@@ -1,14 +1,24 @@
 /**
  * API providers (M4): which service a window's new conversations use. The title bar shows
- * the window's provider in its accent color and switches it; the providers editor (a
+ * the window's provider with its accent color and switches it; the providers editor (a
  * content pane tab) adds and edits providers. A key never comes back to the page once it
- * is typed: main keeps it encrypted and gives it only to the extension host.
+ * is typed: main keeps it encrypted and gives it only to the extension host. Main also lays
+ * the provider's accent over the window's theme (platform/accent.ts): the line along the top
+ * of the window, and the theme's highlights.
  */
 
 import type { ShellModule } from '../../core/module';
 import { ICommands, IDialogs, IEditors, ILayout, INative, ISettings } from '../../core/serviceIds';
 import { DisposableStore } from '../../platform/lifecycle';
-import { DEFAULT_PROVIDER_SETTING, SUBSCRIPTION_ID, type ProviderSummary } from '../../platform/providers';
+import { ACCENT_MODES } from '../../platform/accent';
+import {
+  ACCENT_SETTING,
+  DEFAULT_PROVIDER_SETTING,
+  providerAccentColor,
+  SUBSCRIPTION_ID,
+  SUBSCRIPTION_PROVIDER,
+  type ProviderSummary,
+} from '../../platform/providers';
 import type { QuickPickItemDto } from '../../platform/protocol';
 import { IContentPane } from '../contentPane';
 import { IConversations } from '../conversations';
@@ -31,7 +41,7 @@ export const providersModule: ShellModule = {
     const model = new ProvidersModel(init.providers);
     subscriptions.add(native.on('providersChanged', (state) => model.update(state)));
 
-    // The title bar: [■ DeepSeek ▾]. A provider's color also draws a line under the title bar.
+    // The title bar: [■ DeepSeek ▾], in the provider's accent.
     const button = document.createElement('button');
     button.className = 'titlebar-button titlebar-provider';
     const swatch = document.createElement('span');
@@ -48,10 +58,9 @@ export const providersModule: ShellModule = {
       const name = active ? providerLabel(active) : t('subscription');
       label.textContent = name;
       button.title = t('buttonTitle', name);
-      swatch.hidden = !active?.color;
-      swatch.style.backgroundColor = active?.color ?? '';
-      document.body.classList.toggle('provider-accent', Boolean(active?.color));
-      document.documentElement.style.setProperty('--vilaus-provider-color', active?.color ?? 'transparent');
+      const color = providerAccentColor(active ?? SUBSCRIPTION_PROVIDER);
+      swatch.hidden = !color;
+      swatch.style.backgroundColor = color ?? '';
     };
     show();
     subscriptions.add(model.onDidChange(show));
@@ -217,5 +226,22 @@ export const providersModule: ShellModule = {
     };
     registerSetting();
     subscriptions.add(model.onDidChange(registerSetting));
+    subscriptions.add(
+      settings.register([
+        {
+          key: ACCENT_SETTING,
+          section: settingsSection,
+          order: 2,
+          showDescription: true,
+          schema: {
+            type: 'string',
+            default: 'all',
+            enum: [...ACCENT_MODES],
+            enumItemLabels: [t('accentAll'), t('accentLine'), t('accentOff')],
+            description: t('accentSetting'),
+          },
+        },
+      ]),
+    );
   },
 };

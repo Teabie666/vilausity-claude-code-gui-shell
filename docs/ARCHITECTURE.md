@@ -104,11 +104,15 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 
 ## API 接口（M4）
 
-- **数据**：`platform/providers.ts` 定义接口（类型、Base URL、鉴权方式、各档模型、请求头、超时、最大输出、关闭非必要流量、其他环境变量、强调色、来自哪个预设），以及接口 → 环境变量的纯函数（`providerEnvironment`），主进程、渲染进程和单元测试共用。内置的"Claude 订阅"不设任何变量。预设在 `features/providers/presets.ts`，按各家官方文档（2026-10-10），只是起点，每个带官方说明的链接。
+- **数据**：`platform/providers.ts` 定义接口（类型、Base URL、鉴权方式、各档模型、请求头、超时、最大输出、关闭非必要流量、其他环境变量、强调色、来自哪个预设），以及接口 → 环境变量的纯函数（`providerEnvironment`），主进程、渲染进程和单元测试共用。内置的"Claude 订阅"不设任何变量。预设在 `features/providers/presets.ts`，按各家官方文档（2026-10-10；火山方舟、MiniMax、OpenRouter 2026-10-12），只是起点，每个带官方说明的链接。只收说 Anthropic Messages API 的接口（Claude Code 只会说这一种）：OpenAI 和 Google 的接口不是，xAI 的 Anthropic 兼容已经弃用；它们的模型可以经 OpenRouter 用。
 - **存储**：`providers.json` 只有主进程写（`host/main/providerStore.ts`）。密钥用 Electron 的 safeStorage 加密后存（Windows 上是 DPAPI，只有这个 Windows 用户能解开），系统不提供加密时拒绝保存，绝不存明文。渲染进程只知道有没有密钥（`ProviderSummary.hasKey`）：密钥在编辑页里输入后经 `providers.setKey` 交给主进程，再也不回到页面。
 - **怎么交给插件**：插件每次起 claude 进程时读 `claudeCode.environmentVariables`。主进程给每个窗口算一份"设置叠加层"（`providerSettingsOverlay`）：用户自己写在这个设置里的变量，同名的换成接口的（名字不分大小写），再加 `claudeCode.disableLoginPrompt: true`；随初始化数据和 `settings.overlay` 交给这个窗口的插件进程，compat 的配置层读设置时把它盖在用户设置上面。settings.json 和设置界面里看不到叠加层，插件写设置也只写用户那一层（插件只写 `focusView` 等三个键，不写这个）。用 bearer 时清空 `ANTHROPIC_API_KEY`、用 API key 时清空 `ANTHROPIC_AUTH_TOKEN`，免得用户环境里残留的那个盖过我们的。
-- **每个窗口一个接口**：标题栏「API 接口 ▾」（`features/providers`）切换，新对话立即用新接口；已经打开的对话还是原来的 claude 进程，提示里"重新加载窗口"会重启插件进程、恢复对话，新进程就用新接口了。每个文件夹记住自己上次用的接口（`state/shell.json`），第一次打开的文件夹用设置 `vilaus.provider.default`（默认订阅）。`--provider <id>` 给参数交到的那个窗口指定接口。接口有颜色时，标题栏底边一条 2px 色线、按钮前一个色块；订阅不加。
-- **编辑页**是内容面板的标签页（"管理 API 接口"）：左边列表和"添加 API 接口…"（从预设选），右边表单，显式保存。"为此接口创建桌面快捷方式"写一个 `.lnk`：`Vilausity.exe --provider <id>`（开发时是 electron.exe 加 app 目录）。
+- **每个窗口一个接口**：标题栏「API 接口 ▾」（`features/providers`）切换，新对话立即用新接口；已经打开的对话还是原来的 claude 进程，提示里"重新加载窗口"会重启插件进程、恢复对话，新进程就用新接口了。每个文件夹记住自己上次用的接口（`state/shell.json`），第一次打开的文件夹用设置 `vilaus.provider.default`（默认订阅）。`--provider <id>` 给参数交到的那个窗口指定接口。
+- **强调色**（2026-10-12）：每个窗口按自己的接口上色。颜色是接口自己选的，否则是供应商的（`PRESET_ACCENTS`，按预设），Claude 订阅和 Claude 的几种 API 用 Claude 的橙色，自定义的兼容接口没有（用主题自己的蓝色）；`providerAccentColor` 算，主进程和渲染进程共用。以前每个接口都存了一份当时预设的颜色或灰色，读 providers.json 时去掉（`withoutLegacyColor`），这些接口就跟着供应商走。
+  - **主题**：主进程给每个窗口算一份主题（`ShellApp.windowTheme`）：共用的主题加上这个窗口的强调色（`platform/accent.ts` 的 `withAccent`，纯函数）。VS Code 的主题用一种强调色画焦点框、当前标签页的线、主按钮、选中项、匹配的字（Dark Modern 的 #0078d4）；列出的那些颜色键里，主题原来的值属于这个色相的才换：线和边框对背景至少 3:1（WCAG 对界面元件的要求），填充的控件（按钮、菜单的选中项、徽标）对背景 3:1、必要时加深到白字有 4.5:1，选中项和半透明的底色按主题原来离背景多远来调，高亮的字 4.5:1。不是这个色相的（Light Modern 的灰色选中项、徽标、链接）不动；高对比度主题全部不动。窗口的页面、它的 webview（文档一开始就用这个窗口的主题）、系统按钮层都用这一份；接口、接口的设置、主题、字体变了就重算。
+  - **顶部色条**：`--vilaus-accent`，标题栏顶边 2px，横贯整个窗口。系统按钮层（titleBarOverlay）的颜色是标题栏的颜色、透明度 0：页面画的标题栏和色条从按钮底下透出来，Windows 照这个颜色算按钮悬停的深浅。
+  - **设置** `vilaus.provider.accent`：`all`（色条和高亮，默认）、`line`（只有色条）、`off`。
+- **编辑页**是内容面板的标签页（"管理 API 接口"）：左边列表和"添加 API 接口…"（从预设选），右边表单，显式保存。强调色一栏没选时写着"供应商的颜色（默认）"，选了别的可以"恢复默认"；选的跟供应商的一样就不存。"为此接口创建桌面快捷方式"写一个 `.lnk`：`Vilausity.exe --provider <id>`（开发时是 electron.exe 加 app 目录）。
 - **测试**：界面测试在 127.0.0.1 起一个假的 Anthropic 接口，切到指向它的接口、重新加载窗口、新对话发一句话，检查假接口收到的 `Authorization: Bearer <key>` 和模型名；不花钱也不联网。
 
 ## 插件管理（M4）

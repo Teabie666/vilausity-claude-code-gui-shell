@@ -1094,8 +1094,16 @@ const reloaded = async (start) => {
 };
 const reloadWindow = () => reloaded(() => page.evaluate(() => window.vilausNative.invoke('window.reload')));
 
-await step('an API provider: the title bar switches to it, and new Claude processes send its key and model', async () => {
+await step('an API provider: the title bar switches to it, the window takes its accent, and new Claude processes send its key and model', async () => {
   const mock = await startMockApi();
+  const accent = (target) =>
+    target.evaluate(() => {
+      const style = getComputedStyle(document.documentElement);
+      return { line: style.getPropertyValue('--vilaus-accent').trim(), focus: style.getPropertyValue('--vscode-focusBorder').trim() };
+    });
+  // The subscription: Claude's orange.
+  const claude = await accent(page);
+  if (claude.line !== '#d97757' || claude.focus !== '#d97757') throw new Error(`subscription accent: ${JSON.stringify(claude)}`);
   try {
     await page.evaluate(async (port) => {
       await window.vilausNative.invoke('providers.save', {
@@ -1121,7 +1129,15 @@ await step('an API provider: the title bar switches to it, and new Claude proces
     await filter.fill('Mock API');
     await filter.press('Enter');
     await waitFor(async () => (await page.locator('.titlebar-provider-label').innerText()) === 'Mock API', 5000, 'the provider in the title bar');
-    if (!(await page.evaluate(() => document.body.classList.contains('provider-accent')))) throw new Error('no accent line');
+    await waitFor(async () => (await accent(page)).line === '#ff0000', 5000, "the provider's accent line");
+    if ((await accent(page)).focus !== '#ff0000') throw new Error(`focus border: ${(await accent(page)).focus}`);
+    // The window's webviews take it too.
+    await waitFor(async () => {
+      for (const frame of webviewFrames()) {
+        if ((await accent(frame).catch(() => undefined))?.focus === '#ff0000') return true;
+      }
+      return false;
+    }, 5000, "the provider's accent in a webview");
     // The open conversation keeps its Claude process until the window reloads, as the notice offers.
     const reload = page.locator('.toast .button', { hasText: 'Reload Window' });
     await reload.waitFor({ timeout: 5000 });

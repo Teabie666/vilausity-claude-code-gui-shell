@@ -13,6 +13,7 @@ import {
   parseProviderConfig,
   SUBSCRIPTION_ID,
   SUBSCRIPTION_PROVIDER,
+  withoutLegacyColor,
   type ProviderConfig,
   type ProviderSummary,
 } from '../../platform/providers';
@@ -48,12 +49,14 @@ export class ProviderStore extends Disposable {
     super();
     const file = readJsonFile<Partial<ProvidersFile> | undefined>(filePath, undefined);
     const parsed = Array.isArray(file?.providers) ? file.providers.map(parseProviderConfig) : [];
-    this.providers = parsed.filter(
-      (provider, index): provider is ProviderConfig =>
-        provider !== undefined &&
-        provider.type !== 'subscription' &&
-        parsed.findIndex((other) => other?.id === provider.id) === index,
-    );
+    this.providers = parsed
+      .filter(
+        (provider, index): provider is ProviderConfig =>
+          provider !== undefined &&
+          provider.type !== 'subscription' &&
+          parsed.findIndex((other) => other?.id === provider.id) === index,
+      )
+      .map(withoutLegacyColor);
     const keys = file?.keys;
     this.keys =
       typeof keys === 'object' && keys !== null
