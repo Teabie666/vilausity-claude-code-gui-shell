@@ -42,12 +42,12 @@ Electron main ── 窗口、命令行参数、设置和状态存储（唯一�
 
 插件升级最容易坏的地方，全部集中在这两处，每处都注明对照的插件版本：
 
-- `src/host/exthost/bridge.ts`：在消息层拦截插件 webview 与后端之间的私有请求（比如 `open_diff`、`open_url`）；插件页面的知识也只写在这里（页面提示 `WebviewPageHints`：评论块的锚点、页面里哪些区域是内容；页面存的状态里的会话 id）。
+- `src/host/exthost/bridge.ts`：在消息层拦截插件 webview 与后端之间的私有请求（比如 `open_diff`、`open_url`）；插件页面的知识也只写在这里（页面提示 `WebviewPageHints`：评论块的锚点、页面里哪些区域是内容、盖在页面自己样式上的样式；页面存的状态里的会话 id）。
 - `src/compat/vscode/`：插件依赖的 VS Code 行为细节（比如 diff 标签页的 `TabInputWebview` viewType 前缀）。
 
 这两处和其他文档只描述跟插件交互时看得到的行为（消息格式、命令 id、设置项）；逆向得来的内部细节不写进仓库。
 
-插件升级后的检查顺序：先跑 `npm run smoke`，再看最新一次 `logs\...\shim-unimplemented.log`，有新出现的 API 就补上。然后是汉化：重跑 `node tools/extension-strings/extract.mjs`，`npm run nls` 看新出现和过时的界面文字（`--todo-extension` 导出补译），并核对 bridge 页面提示里的类名在新版本里还在。
+插件升级后的检查顺序：先跑 `npm run smoke`，再看最新一次 `logs\...\shim-unimplemented.log`，有新出现的 API 就补上。然后是汉化：重跑 `node tools/extension-strings/extract.mjs`，`npm run nls` 看新出现和过时的界面文字（`--todo-extension` 导出补译），并核对 bridge 页面提示里的类名在新版本里还在（侧栏会话列表的样式 `SESSION_LIST_STYLES` 也是按类名写的，类名变了就退回插件原样）。
 
 ## 内容面板（M2）
 

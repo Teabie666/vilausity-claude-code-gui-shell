@@ -72,6 +72,79 @@ const PAGE_CONTENT = [
 const PLAN_PREVIEW_CONTENT = '#content, #selected-text-preview';
 
 /**
+ * The session list (the sidebar) in the shell's look (anthropic.claude-code 2.1.282 class
+ * names; once a newer extension renames them, it just shows its own look again):
+ * - only the sessions scroll, the account and usage above them stay in place;
+ * - "Account" and the address on one line, without the "Email" label;
+ * - "New session" as a button;
+ * - no Local / Web switch (remote sessions are not used from here);
+ * - the "Active" toggle and the status filter's caret as one control;
+ * - the search button as a search box taking the rest of its row (clicking it opens the
+ *   page's own search field, as before); "New group" as just its icon, to leave it room.
+ */
+const SESSION_LIST_STYLES = `
+.root_djirOA { overflow-y: hidden; }
+.root_djirOA > :not(.sessionsBody_djirOA) { flex-shrink: 0; }
+.accountUsageBody_djirOA { max-height: 50vh; overflow-y: auto; }
+.sessionsBody_djirOA { flex: 1 1 auto; min-height: 0; }
+.sessionsBody_djirOA > .root_OOQiHg { min-height: 0; }
+.content_OOQiHg.sessionListOnly_OOQiHg { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+.accountUsageBody_djirOA .section_JuUW3A:has(.accountRows_djirOA) { flex-direction: row; align-items: baseline; gap: 8px; }
+.accountRows_djirOA { flex: 1 1 auto; min-width: 0; }
+.accountRows_djirOA .accountRow_JuUW3A { justify-content: flex-start; padding: 0; }
+.accountRows_djirOA .accountLabel_JuUW3A { display: none; }
+.accountRows_djirOA .accountValue_JuUW3A { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.headerRow_djirOA { gap: 6px; padding: 8px 12px 4px; border-bottom: none; }
+.newSessionButton_djirOA {
+  justify-content: center;
+  padding: 4px 8px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+.newSessionButton_djirOA:hover { background: var(--vscode-button-secondaryHoverBackground); }
+
+.sessionsBody_djirOA .segmented_OOQiHg { display: none; }
+
+.searchRowActions_OOQiHg { flex: 1 1 auto; flex-wrap: nowrap; }
+.activeFilterToggle_OOQiHg,
+.statusFilterMenuButton_OOQiHg {
+  height: 24px;
+  margin-left: 0;
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
+}
+.activeFilterToggle_OOQiHg { order: -1; border-radius: 4px 0 0 4px; }
+.statusFilterMenuButton_OOQiHg { padding: 4px; border-left: none; border-radius: 0 4px 4px 0; }
+.statusFilterMenuButton_OOQiHg > .newGroupIcon_OOQiHg { display: none; }
+
+.searchRowTail_OOQiHg { flex: 1 1 auto; min-width: 0; margin-left: 6px; }
+.searchRowTail_OOQiHg > .newGroupButton_OOQiHg:not(.searchToggleButton_OOQiHg) { gap: 0; padding: 4px; font-size: 0; }
+.searchToggleButton_OOQiHg,
+.searchToggleButton_OOQiHg:hover,
+.searchToggleButton_OOQiHg:focus {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-start;
+  gap: 6px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, transparent));
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-placeholderForeground);
+}
+.searchToggleButton_OOQiHg:hover { border-color: var(--vscode-focusBorder); }
+.searchToggleButton_OOQiHg::after {
+  content: attr(aria-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+`;
+
+/**
  * The session a conversation panel's page shows, from the state it saves
  * (anthropic.claude-code 2.1.282: `{ sessionID, sessionWithNoTranscript, ... }`, saved again
  * whenever the page's session changes). A new conversation gets a session id at once, but
@@ -192,7 +265,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
       case CHAT_PANEL_VIEW_TYPE:
         return { commentsAnchor: CHAT_INPUT_FORM, untranslated: PAGE_CONTENT };
       case SESSION_LIST_VIEW_TYPE:
-        return { untranslated: PAGE_CONTENT };
+        return { untranslated: PAGE_CONTENT, styles: SESSION_LIST_STYLES };
       case PLAN_PREVIEW_VIEW_TYPE:
         return { untranslated: PLAN_PREVIEW_CONTENT };
       default:

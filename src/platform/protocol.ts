@@ -168,6 +168,11 @@ export interface WebviewPageHints {
    * UI text leaves alone. Pages without it are not translated.
    */
   readonly untranslated?: string;
+  /**
+   * CSS laid over the page's own stylesheets: parts of the extension's UI in the shell's
+   * look and layout (the session list in the sidebar).
+   */
+  readonly styles?: string;
 }
 
 export interface WebviewDocument {

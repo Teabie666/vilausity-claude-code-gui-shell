@@ -55,6 +55,10 @@ const THEME_CLASSES = [
   };
 
   installDefaultStyles();
+  const pageStyles = data.hints?.styles;
+  if (pageStyles) {
+    onDomReady(() => installPageStyles(pageStyles));
+  }
 
   let theme = data.theme;
   applyThemeVariables(theme);
@@ -141,6 +145,14 @@ function installDefaultStyles(): void {
   style.id = '_defaultStyles';
   style.textContent = DEFAULT_WEBVIEW_STYLES;
   // We run while <head> is being parsed, so this lands before the page's own stylesheets.
+  (document.head ?? document.documentElement).appendChild(style);
+}
+
+/** The bridge's styles for this page; added once the page's own are in, so they win ties. */
+function installPageStyles(css: string): void {
+  const style = document.createElement('style');
+  style.id = '_shellPageStyles';
+  style.textContent = css;
   (document.head ?? document.documentElement).appendChild(style);
 }
 
