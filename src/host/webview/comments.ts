@@ -44,7 +44,10 @@ function iconUrl(path: string): string {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
-/** Shell look (square, 1px lines, theme colors) in the page's theme variables. */
+/**
+ * Shell look (1px lines, theme colors, VS Code's radii) in the page's theme variables. The
+ * radii are literal: the page has no --vscode-cornerRadius-* variables.
+ */
 const STYLES = `
 .vilaus-comments {
   margin: 0 0 6px;
@@ -54,6 +57,7 @@ const STYLES = `
   color: var(--vscode-foreground);
   text-align: left;
 }
+/* None of the page's own corners: the classes below set ours. */
 .vilaus-comments * { box-sizing: border-box; border-radius: 0; }
 /* Zero specificity: the classes below decide the look. */
 :where(.vilaus-comments) button {
@@ -76,6 +80,7 @@ const STYLES = `
   height: 22px;
   padding: 0 4px 0 0;
   border: 1px solid transparent;
+  border-radius: 6px;
   background: none;
   color: var(--vscode-foreground);
 }
@@ -90,10 +95,12 @@ const STYLES = `
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* Right above the conversation's input: the same 8px corners as its box (extension 2.1.282). */
 .vilaus-comments-list {
   max-height: 40vh;
   overflow-y: auto;
   border: 1px solid var(--vscode-editorWidget-border, var(--vscode-widget-border, var(--vscode-panel-border, transparent)));
+  border-radius: 8px;
   background: var(--vscode-editorWidget-background);
 }
 .vilaus-comment {
@@ -154,6 +161,7 @@ const STYLES = `
   height: 20px;
   padding: 0;
   border: 1px solid transparent;
+  border-radius: 6px;
   background: none;
 }
 .vilaus-icon::before,

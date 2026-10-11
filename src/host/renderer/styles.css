@@ -1,5 +1,6 @@
 /*
- * Shell styles. Visual rules (docs/design.md): square corners, 1px separators, dense,
+ * Shell styles. Visual rules (docs/design.md): a square skeleton, VS Code's corner radii on
+ * controls and floating widgets, shadows only on floating widgets, 1px separators, dense,
  * every color from a VS Code theme variable. Never hard-code colors here.
  */
 
@@ -7,6 +8,23 @@
   --titlebar-height: 35px; /* keep in sync with TITLE_BAR_HEIGHT in shellWindow.ts */
   /* Space Windows reserves for the native caption buttons (titleBarOverlay). */
   --window-controls-width: calc(100vw - env(titlebar-area-width, calc(100vw - 138px)));
+
+  /*
+   * VS Code's corner radii and shadows, same names and values (VSCodium 1.121: the radii are
+   * size tokens the workbench sets from JS, the shadows sit on .monaco-workbench). Monaco's
+   * widgets read them too. The shadows are the one place with literal colors, as in VS Code.
+   */
+  --vscode-cornerRadius-xSmall: 2px;
+  --vscode-cornerRadius-small: 4px;
+  --vscode-cornerRadius-medium: 6px;
+  --vscode-cornerRadius-large: 8px;
+  --vscode-cornerRadius-xLarge: 12px;
+  --vscode-cornerRadius-circle: 9999px;
+  --vscode-shadow-sm: 0 0 4px rgba(0, 0, 0, 0.08);
+  --vscode-shadow-md: 0 0 6px rgba(0, 0, 0, 0.08);
+  --vscode-shadow-lg: 0 0 12px rgba(0, 0, 0, 0.14);
+  --vscode-shadow-xl: 0 0 20px rgba(0, 0, 0, 0.15);
+  --vscode-shadow-hover: 0 0 8px rgba(0, 0, 0, 0.12);
 
   /* Icons are masks filled with currentColor, so they follow the theme. */
   --icon-close: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.707.708L7.293 8l-3.646 3.646.707.708L8 8.707z'/%3E%3C/svg%3E");
@@ -31,7 +49,6 @@
 *::before,
 *::after {
   box-sizing: border-box;
-  border-radius: 0;
 }
 
 html,
@@ -65,6 +82,7 @@ kbd {
   font-family: var(--vscode-font-family);
   font-size: 11px;
   padding: 1px 4px;
+  border-radius: 3px;
   color: var(--vscode-keybindingLabel-foreground);
   background: var(--vscode-keybindingLabel-background);
   border: 1px solid var(--vscode-keybindingLabel-border, transparent);
@@ -82,6 +100,7 @@ kbd {
   height: 22px;
   padding: 0;
   border: 1px solid transparent;
+  border-radius: var(--vscode-cornerRadius-medium);
   background: transparent;
   cursor: pointer;
 }
@@ -170,7 +189,7 @@ kbd {
 .titlebar-admin {
   align-self: center;
   padding: 0 6px;
-  border-radius: 2px;
+  border-radius: var(--vscode-cornerRadius-small);
   background: var(--vscode-activityErrorBadge-background);
   color: var(--vscode-activityErrorBadge-foreground);
   font-size: 11px;
@@ -186,6 +205,7 @@ kbd {
   max-width: 280px;
   padding: 0 2px 0 6px;
   border: 1px solid transparent;
+  border-radius: var(--vscode-cornerRadius-medium);
   background: transparent;
   color: var(--vscode-descriptionForeground);
   cursor: pointer;
@@ -577,6 +597,7 @@ body.resizing {
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
   border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: var(--vscode-cornerRadius-small);
   outline: none;
 }
 
@@ -758,7 +779,7 @@ body.resizing {
   gap: 2px;
   padding: 8px 12px;
   border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
-  border-radius: 2px;
+  border-radius: var(--vscode-cornerRadius-medium);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -788,6 +809,7 @@ body.resizing {
   margin: 4px 12px 8px 16px;
   padding: 8px 10px;
   border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  border-radius: var(--vscode-cornerRadius-medium);
 }
 
 .extension-version {
@@ -877,6 +899,7 @@ body.resizing {
   max-width: 420px;
   height: 26px;
   padding: 0 6px;
+  border-radius: var(--vscode-cornerRadius-small);
   font: inherit;
   outline: none;
 }
@@ -921,6 +944,7 @@ body.resizing {
   height: 18px;
   margin: 0;
   border: 1px solid var(--vscode-settings-checkboxBorder, var(--vscode-checkbox-border));
+  border-radius: 3px;
   background: var(--vscode-settings-checkboxBackground, var(--vscode-checkbox-background));
   cursor: pointer;
 }
@@ -1070,7 +1094,12 @@ body.resizing {
   height: 24px;
   padding: 0;
   border: 1px solid var(--vscode-settings-textInputBorder, transparent);
+  border-radius: var(--vscode-cornerRadius-small);
   background: none;
+}
+
+.providers-color::-webkit-color-swatch {
+  border-radius: var(--vscode-cornerRadius-xSmall);
 }
 
 .providers-actions {
@@ -1163,6 +1192,7 @@ body.resizing {
   color: var(--vscode-textPreformat-foreground);
   background: var(--vscode-textPreformat-background);
   padding: 1px 3px;
+  border-radius: 4px;
 }
 
 .markdown-preview pre {
@@ -1170,6 +1200,7 @@ body.resizing {
   overflow: auto;
   background: var(--vscode-textCodeBlock-background) !important;
   border: 1px solid var(--vscode-panel-border, transparent);
+  border-radius: 3px;
 }
 
 .markdown-preview pre code {
@@ -1177,12 +1208,14 @@ body.resizing {
   color: inherit;
   background: none;
   font-size: 1em;
+  border-radius: 0;
 }
 
 .markdown-preview blockquote {
   margin-left: 0;
   padding: 0 16px;
   border-left: 5px solid var(--vscode-textBlockQuote-border);
+  border-radius: 2px;
   background: var(--vscode-textBlockQuote-background);
 }
 
@@ -1204,12 +1237,6 @@ body.resizing {
 
 .markdown-preview img {
   max-width: 100%;
-}
-
-/* Monaco's widgets (find, suggest, hover) follow the shell's square corners. */
-.monaco-editor *,
-.monaco-diff-editor * {
-  border-radius: 0 !important;
 }
 
 .empty-state {
@@ -1286,7 +1313,10 @@ body.resizing {
   color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
   border: 1px solid var(--vscode-editorWidget-border, var(--vscode-widget-border, transparent));
   border-top: none;
-  box-shadow: 0 0 8px 2px var(--vscode-widget-shadow);
+  /* Hangs from the top edge like VS Code's webview find widget: rounded below, no shadow above. */
+  border-radius: 0 0 var(--vscode-cornerRadius-small) var(--vscode-cornerRadius-small);
+  box-shadow: var(--vscode-shadow-lg);
+  clip-path: inset(0 -16px -16px);
 }
 
 .find-input {
@@ -1296,6 +1326,7 @@ body.resizing {
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
   border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: var(--vscode-cornerRadius-small);
   outline: none;
 }
 
@@ -1326,10 +1357,13 @@ body.resizing {
   position: absolute;
 }
 
+/* One rounded group: the outer buttons take the corners. */
 .selection-toolbar {
   display: flex;
   gap: 1px;
-  box-shadow: 0 0 8px 2px var(--vscode-widget-shadow);
+  overflow: hidden;
+  border-radius: var(--vscode-cornerRadius-small);
+  box-shadow: var(--vscode-shadow-lg);
   user-select: none;
 }
 
@@ -1378,7 +1412,8 @@ body.resizing {
   background: var(--vscode-editorWidget-background);
   color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
   border: 1px solid var(--vscode-editorWidget-border, var(--vscode-widget-border, transparent));
-  box-shadow: 0 0 8px 2px var(--vscode-widget-shadow);
+  border-radius: var(--vscode-cornerRadius-large);
+  box-shadow: var(--vscode-shadow-lg);
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size, 13px);
   user-select: text;
@@ -1429,6 +1464,7 @@ body.resizing {
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
   border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: var(--vscode-cornerRadius-small);
   outline: none;
   resize: vertical;
 }
@@ -1478,6 +1514,7 @@ body.resizing {
   height: 22px;
   padding: 0 4px 0 0;
   border: 1px solid transparent;
+  border-radius: var(--vscode-cornerRadius-medium);
   background: none;
   color: var(--vscode-foreground);
   cursor: pointer;
@@ -1514,6 +1551,7 @@ body.resizing {
 
 .comments-bar-list {
   border: 1px solid var(--vscode-editorWidget-border, var(--vscode-widget-border, transparent));
+  border-radius: var(--vscode-cornerRadius-medium);
   background: var(--vscode-editorWidget-background);
 }
 
@@ -1580,6 +1618,7 @@ body.resizing {
 .button {
   padding: 4px 11px;
   border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: var(--vscode-cornerRadius-small);
   background: var(--vscode-button-background);
   color: var(--vscode-button-foreground);
   cursor: pointer;
@@ -1639,7 +1678,8 @@ body.resizing {
   color: var(--vscode-notifications-foreground);
   border: 1px solid var(--vscode-notifications-border, var(--vscode-widget-border, transparent));
   border-left-width: 3px;
-  box-shadow: 0 0 8px 2px var(--vscode-widget-shadow);
+  border-radius: var(--vscode-cornerRadius-small);
+  box-shadow: var(--vscode-shadow-lg);
   pointer-events: auto;
   user-select: text;
 }
@@ -1690,7 +1730,8 @@ body.resizing {
   background: var(--vscode-quickInput-background, var(--vscode-editorWidget-background));
   color: var(--vscode-quickInput-foreground, var(--vscode-foreground));
   border: 1px solid var(--vscode-widget-border, transparent);
-  box-shadow: 0 0 8px 2px var(--vscode-widget-shadow);
+  border-radius: var(--vscode-cornerRadius-xLarge);
+  box-shadow: var(--vscode-shadow-xl);
 }
 
 .quick-input-title,
@@ -1706,11 +1747,15 @@ body.resizing {
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
   border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: var(--vscode-cornerRadius-medium);
   outline: none;
 }
 
+/* The validation message hangs below the input: they share the corners. */
 .quick-input-filter.invalid {
   border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 /* The extension's validateInput rejected the value (VS Code's input validation colors). */
@@ -1720,6 +1765,7 @@ body.resizing {
   background: var(--vscode-inputValidation-errorBackground);
   border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
   border-top: none;
+  border-radius: 0 0 var(--vscode-cornerRadius-medium) var(--vscode-cornerRadius-medium);
 }
 
 .quick-input-filter:focus {
@@ -1738,6 +1784,7 @@ body.resizing {
   align-items: baseline;
   gap: 6px;
   padding: 3px 8px;
+  border-radius: 3px;
   line-height: 22px;
   cursor: pointer;
 }
