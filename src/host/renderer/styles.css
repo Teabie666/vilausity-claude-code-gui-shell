@@ -100,7 +100,8 @@ kbd {
   height: 22px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--vscode-cornerRadius-medium);
+  /* VS Code's toolbar buttons use medium; one level less suits the shell's dense bars. */
+  border-radius: var(--vscode-cornerRadius-small);
   background: transparent;
   cursor: pointer;
 }
@@ -205,7 +206,7 @@ kbd {
   max-width: 280px;
   padding: 0 2px 0 6px;
   border: 1px solid transparent;
-  border-radius: var(--vscode-cornerRadius-medium);
+  border-radius: var(--vscode-cornerRadius-small);
   background: transparent;
   color: var(--vscode-descriptionForeground);
   cursor: pointer;
@@ -1239,6 +1240,15 @@ body.resizing {
   max-width: 100%;
 }
 
+/*
+ * Monaco's popups (hover, suggestions, parameter hints, find) take VS Code's large corners;
+ * in the shell's editors they are one level smaller. They sit inside .monaco-editor
+ * (fixedOverflowWidgets without a separate overflow node).
+ */
+.monaco-editor {
+  --vscode-cornerRadius-large: var(--vscode-cornerRadius-medium);
+}
+
 .empty-state {
   position: absolute;
   inset: 0;
@@ -1514,7 +1524,7 @@ body.resizing {
   height: 22px;
   padding: 0 4px 0 0;
   border: 1px solid transparent;
-  border-radius: var(--vscode-cornerRadius-medium);
+  border-radius: var(--vscode-cornerRadius-small);
   background: none;
   color: var(--vscode-foreground);
   cursor: pointer;

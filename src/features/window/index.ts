@@ -5,7 +5,7 @@
 
 import type { ShellModule } from '../../core/module';
 import { CommandCategory } from '../../core/messages';
-import { ICommands, IKeybindings, ILayout, INative, IWorkspace } from '../../core/serviceIds';
+import { ICommands, IDialogs, IKeybindings, ILayout, INative, IWorkspace } from '../../core/serviceIds';
 import { t } from './messages';
 
 export const windowModule: ShellModule = {
@@ -35,6 +35,19 @@ export const windowModule: ShellModule = {
     document.title = `${workspace.name} - Vilausity`;
 
     const zoom = (delta: number) => () => native.call('window.zoom', { delta });
+    // One notification of each severity, to check their look. The ones with buttons stay
+    // until answered, so they can be inspected in the developer tools.
+    const showSampleNotifications = (): void => {
+      const dialogs = services.get(IDialogs);
+      const samples = [
+        { severity: 'info', message: t('sampleInfo'), items: [t('sampleAction'), t('sampleLater')] },
+        { severity: 'warning', message: t('sampleWarning'), items: [] },
+        { severity: 'error', message: t('sampleError'), items: [t('sampleAction')] },
+      ] as const;
+      for (const sample of samples) {
+        void dialogs.showMessage({ ...sample, modal: false });
+      }
+    };
     [
       commands.register('window.close', () => native.call('window.close', undefined), {
         title: t('closeWindow'),
@@ -49,6 +62,10 @@ export const windowModule: ShellModule = {
       commands.register('window.zoomReset', zoom(0), { title: t('resetZoom'), category: CommandCategory.view }),
       commands.register('window.toggleDevTools', () => native.call('window.toggleDevTools', undefined), {
         title: t('toggleDevTools'),
+        category: CommandCategory.developer,
+      }),
+      commands.register('window.showSampleNotifications', showSampleNotifications, {
+        title: t('showSampleNotifications'),
         category: CommandCategory.developer,
       }),
       keybindings.register({ key: 'ctrl+shift+w', command: 'window.close' }),

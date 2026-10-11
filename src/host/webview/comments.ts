@@ -80,7 +80,7 @@ const STYLES = `
   height: 22px;
   padding: 0 4px 0 0;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 4px;
   background: none;
   color: var(--vscode-foreground);
 }
@@ -161,7 +161,7 @@ const STYLES = `
   height: 20px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 4px;
   background: none;
 }
 .vilaus-icon::before,
