@@ -78,4 +78,7 @@ export const settingTitleName = defineNames('settingTitles', {
   'claudeCode.scrollToBottomOnSend': 'Claude Code: Scroll To Bottom On Send',
   'claudeCode.useCtrlEnterToSend': 'Claude Code: Use Ctrl Enter To Send',
   'claudeCode.usePythonEnvironment': 'Claude Code: Use Python Environment',
+  // Added in 2.1.296.
+  'claudeCode.showMessageTimestamps': 'Claude Code: Show Message Timestamps',
+  'claudeCode.spinnerVerbs': 'Claude Code: Spinner Verbs',
 });

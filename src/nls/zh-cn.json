@@ -302,6 +302,8 @@
   "settingTitles.claudeCode.initialPermissionMode": "初始权限模式",
   "settingTitles.claudeCode.respectGitIgnore": "遵循 .gitignore",
   "settingTitles.claudeCode.scrollToBottomOnSend": "发送时滚动到底部",
+  "settingTitles.claudeCode.showMessageTimestamps": "显示消息时间",
+  "settingTitles.claudeCode.spinnerVerbs": "工作时显示的动词",
   "settingTitles.claudeCode.useCtrlEnterToSend": "用 Ctrl+Enter 发送",
   "settingTitles.claudeCode.usePythonEnvironment": "使用 Python 环境",
   "settingTitles.diffEditor.fontFamily": "字体",
