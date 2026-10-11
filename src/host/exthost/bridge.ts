@@ -87,7 +87,7 @@ const SESSION_LIST_STYLES = `
 .root_djirOA > :not(.sessionsBody_djirOA) { flex-shrink: 0; }
 .accountUsageBody_djirOA { max-height: 50vh; overflow-y: auto; }
 .sessionsBody_djirOA { flex: 1 1 auto; min-height: 0; }
-.sessionsBody_djirOA > .root_OOQiHg { min-height: 0; }
+.sessionsBody_djirOA > .root_OOQiHg { flex: 1 1 auto; min-height: 0; }
 .content_OOQiHg.sessionListOnly_OOQiHg { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
 .accountUsageBody_djirOA .section_JuUW3A:has(.accountRows_djirOA) { flex-direction: row; align-items: baseline; gap: 8px; }

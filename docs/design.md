@@ -10,7 +10,8 @@
 4. **信息密度高**：行高 22px 左右，内边距小；不要大面积留白。
 5. **图标用 codicon**，跟 VS Code 一致；不用 emoji 当图标。
 6. **不要**：大圆角卡片、渐变、彩色大块背景、玻璃拟态、弹跳动画。阴影只给浮层，而且要淡：用 VS Code 的阴影变量 `--vscode-shadow-*`（数值照搬 VS Code，深色主题下几乎看不出来），一般浮层用 lg，命令面板和对话框用 xl。骨架（标题栏、标签页）不加阴影，靠 1px 线分隔。阴影是样式表里唯一写了字面颜色的地方，跟 VS Code 一样。
-7. 字体：界面用 `--vscode-font-family`，代码用 `--vscode-editor-font-family`，都来自设置（`workbench.fontFamily`、`editor.fontFamily`）。中文界面靠页面的 `lang="zh-CN"` 让 Chromium 选系统的中文字体，不在样式表里写死字体名。
+7. **滚动条**：全软件一个样子：跟插件页面一样用 Chromium 自己的滚动条（细的圆角滑块），颜色用 `scrollbarSlider.*`；Monaco 自己画的滑块画成同样 8px 宽的圆角（`styles.css` 的"scrollbars"一节）。
+8. 字体：界面用 `--vscode-font-family`，代码用 `--vscode-editor-font-family`，都来自设置（`workbench.fontFamily`、`editor.fontFamily`）。中文界面靠页面的 `lang="zh-CN"` 让 Chromium 选系统的中文字体，不在样式表里写死字体名。
 
 ## 文案（English / 简体中文）
 

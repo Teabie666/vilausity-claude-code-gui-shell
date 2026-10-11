@@ -1749,6 +1749,40 @@ body.resizing {
   outline-offset: -1px;
 }
 
+/* ---- scrollbars: one look everywhere ----------------------------------------- */
+
+/* As in the extension's pages: Chromium's own scrollbar (a thin rounded thumb) in the theme's colors. */
+:root {
+  scrollbar-color: var(--vscode-scrollbarSlider-background) transparent;
+}
+
+/* Monaco draws its own scrollbars: the same 8px rounded thumb, centred in its track. */
+:is(.monaco-editor, .monaco-diff-editor) .monaco-scrollable-element > .scrollbar > .slider,
+:is(.monaco-editor, .monaco-diff-editor) .monaco-scrollable-element > .scrollbar > .slider:hover,
+:is(.monaco-editor, .monaco-diff-editor) .monaco-scrollable-element > .scrollbar > .slider.active {
+  background: transparent;
+}
+
+.monaco-scrollable-element > .scrollbar > .slider::after {
+  content: '';
+  position: absolute;
+  inset: 0 calc(50% - 4px);
+  border-radius: 4px;
+  background: var(--vscode-scrollbarSlider-background);
+}
+
+.monaco-scrollable-element > .scrollbar.horizontal > .slider::after {
+  inset: calc(50% - 4px) 0;
+}
+
+.monaco-scrollable-element > .scrollbar > .slider:hover::after {
+  background: var(--vscode-scrollbarSlider-hoverBackground);
+}
+
+.monaco-scrollable-element > .scrollbar > .slider.active::after {
+  background: var(--vscode-scrollbarSlider-activeBackground);
+}
+
 /* ---- overlays: toasts, quick input, modal ---------------------------------- */
 
 .overlays {
