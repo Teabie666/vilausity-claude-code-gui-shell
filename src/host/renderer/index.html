@@ -9,14 +9,17 @@
   <body>
     <header class="titlebar">
       <div class="titlebar-left" id="titlebar-left"></div>
-      <div class="tabs" id="tabs" role="tablist" aria-label="Open conversations"></div>
+      <div class="titlebar-center" id="titlebar-center"></div>
       <div class="titlebar-right" id="titlebar-right"></div>
       <div class="titlebar-controls-space"></div>
     </header>
     <div class="workbench">
       <aside class="sidebar" id="sidebar" aria-label="Sessions"></aside>
       <div class="sash" id="sidebar-sash" role="separator" aria-orientation="vertical"></div>
-      <main class="main" id="main"></main>
+      <div class="main-column">
+        <div class="tabs" id="tabs" role="tablist" aria-label="Open conversations" hidden></div>
+        <main class="main" id="main"></main>
+      </div>
       <div class="sash" id="content-sash" role="separator" aria-orientation="vertical"></div>
       <section class="content-pane" id="content-pane"></section>
     </div>

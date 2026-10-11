@@ -1,9 +1,11 @@
 /**
- * Conversations: the extension's chat panels as title-bar tabs, with commands and
- * keybindings to create, switch and close them. Offers IConversations to other modules.
+ * Conversations: the extension's chat panels as tabs above the conversation (shown once
+ * there are several), with commands and keybindings to create, switch and close them.
+ * Offers IConversations to other modules.
  */
 
 import type { ShellModule } from '../../core/module';
+import { SettingsSection } from '../../core/messages';
 import {
   ICommands,
   IContextKeys,
@@ -12,6 +14,7 @@ import {
   IKeybindings,
   ILayout,
   IPanels,
+  ISettings,
   IThemes,
   IWebviewFrames,
 } from '../../core/serviceIds';
@@ -28,6 +31,9 @@ const EXT_REOPEN_CLOSED = 'claude-vscode.reopenClosedSession';
 const EXT_FOCUS_INPUT = 'claude-vscode.focus';
 const EXT_SHOW_LOGS = 'claude-vscode.showLogs';
 const EXT_LOGOUT = 'claude-vscode.logout';
+
+/** Off: the tab row shows only with two or more conversations. */
+const ALWAYS_SHOW_TABS = 'vilaus.conversations.alwaysShowTabs';
 
 export const conversationsModule: ShellModule = {
   id: 'conversations',
@@ -48,14 +54,28 @@ export const conversationsModule: ShellModule = {
     const find = subscriptions.add(new FindWidget(layout.main, frames, () => tabs.active?.webviewId));
     subscriptions.add(tabs.onDidChangeActive(() => find.retarget()));
 
+    const settings = services.get(ISettings);
+    subscriptions.add(
+      settings.register([
+        {
+          key: ALWAYS_SHOW_TABS,
+          section: SettingsSection.workbench,
+          order: 10,
+          schema: { type: 'boolean', default: false, description: t('alwaysShowTabsSetting') },
+        },
+      ]),
+    );
+
     const updateContext = (): void => {
       contextKeys.set('conversations.count', tabs.count);
       contextKeys.set('conversations.hasActive', tabs.active !== undefined);
       contextKeys.set('conversations.multiple', tabs.count > 1);
       emptyState.hidden = tabs.count > 0 || !connection.isConnected;
+      layout.tabs.hidden = tabs.count < (settings.get(ALWAYS_SHOW_TABS, false) ? 1 : 2);
     };
     subscriptions.add(tabs.onDidChangeCount(updateContext));
     subscriptions.add(tabs.onDidChangeActive(updateContext));
+    subscriptions.add(settings.onDidChange((keys) => keys.includes(ALWAYS_SHOW_TABS) && updateContext()));
     const workspaceName = services.get(IWorkspace).name;
     subscriptions.add(
       tabs.onDidChangeActive((panel) => {

@@ -31,6 +31,7 @@
   "contentPane.previousEditor": "打开上一个编辑器",
   "contentPane.toggleContentPane": "切换内容面板",
   "contentPane.toggleTooltip": "切换内容面板 (Ctrl+\\)",
+  "conversations.alwaysShowTabsSetting": "只有一个对话时也显示对话标签页。关闭时，打开第二个对话才会出现标签页这一行。",
   "conversations.closeConversation": "关闭对话",
   "conversations.closeFind": "关闭 (Esc)",
   "conversations.closeTab": "关闭 (Ctrl+W)",

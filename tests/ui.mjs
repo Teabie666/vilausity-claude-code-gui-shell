@@ -117,9 +117,11 @@ await step('Ctrl+B toggles the session list', async () => {
   await waitFor(() => page.locator('#sidebar').isVisible(), 5000, 'the sidebar to show');
 });
 
-await step('Ctrl+N opens a conversation, Ctrl+Tab cycles, Ctrl+W closes', async () => {
+await step('Ctrl+N opens a conversation, Ctrl+Tab cycles, Ctrl+W closes; the tab row shows only with several', async () => {
+  if (await page.locator('#tabs').isVisible()) throw new Error('the tab row shows with one conversation');
   await press('Control+N');
   await waitFor(async () => (await tabCount()) === 2, 20_000, 'a second tab');
+  await waitFor(() => page.locator('#tabs').isVisible(), 5000, 'the tab row to show');
   const activeBefore = await page.locator('#tabs .tab.active').getAttribute('data-panel-id');
   await press('Control+Tab');
   await waitFor(
@@ -129,6 +131,7 @@ await step('Ctrl+N opens a conversation, Ctrl+Tab cycles, Ctrl+W closes', async 
   );
   await press('Control+W');
   await waitFor(async () => (await tabCount()) === 1, 10_000, 'the tab to close');
+  await waitFor(() => page.locator('#tabs').isHidden(), 5000, 'the tab row to hide');
 });
 
 await step('command palette switches the color theme for shell and webviews', async () => {

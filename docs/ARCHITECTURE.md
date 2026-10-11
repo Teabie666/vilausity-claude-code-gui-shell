@@ -51,7 +51,7 @@ Electron main ── 窗口、命令行参数、设置和状态存储（唯一�
 
 ## 内容面板（M2）
 
-窗口分三栏：会话侧边栏 | 对话 | 内容面板。内容面板（`features/contentPane`）只管标签页：打开（含 VS Code 的预览标签页）、切换、脏标记、关闭；有标签页时自动显示，最后一个关掉就隐藏。
+窗口分三栏：会话侧边栏 | 对话 | 内容面板。对话标签页（`features/conversations`）在对话那一栏的顶上，跟内容面板的标签页同一高度；只有一个对话时不显示这一行（设置 `vilaus.conversations.alwaysShowTabs` 打开后总是显示），因为多数时候只用一个对话。内容面板（`features/contentPane`）只管标签页：打开（含 VS Code 的预览标签页）、切换、脏标记、关闭；有标签页时自动显示，最后一个关掉就隐藏。
 
 - **编辑器贡献点** `core/editors.ts`：一个标签页 = 一个输入（`EditorInput`：类型、URI、语言、给编辑器的数据）+ 一个编辑器（`EditorPane`）。模块按输入类型 / 语言注册 `EditorProvider`，同一输入有多个提供者时取优先级高的（Markdown 预览就是这样盖过普通文本编辑器的）。
 - **插件的 webview 面板**由 `core/panels.ts` 按区域分发：exthost 按面板请求的列决定区域（聊天面板永远在对话区；`ViewColumn.Beside` 或第二列以后进内容面板，插件的计划预览就是这样进来的），对话区由 conversations 模块显示，内容面板由 contentPane 模块显示。

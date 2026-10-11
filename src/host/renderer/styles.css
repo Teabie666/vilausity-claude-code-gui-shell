@@ -250,15 +250,27 @@ body.provider-accent .titlebar {
   flex: 0 0 var(--window-controls-width);
 }
 
-/* ---- conversation tabs ----------------------------------------------------- */
+/* The middle of the title bar: room to drag the window by. */
+.titlebar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
 
+/* ---- tabs: conversations (above the conversation) and the content pane's ---- */
+
+/* A row above the conversation, like an editor group's tabs; only with several conversations. */
 .tabs {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 0 35px;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, transparent);
 }
 
 .tab {
@@ -273,11 +285,6 @@ body.provider-accent .titlebar {
   border-right: 1px solid var(--vscode-tab-border, transparent);
   border-top: 1px solid transparent;
   cursor: pointer;
-  -webkit-app-region: no-drag;
-}
-
-.tab:first-child {
-  border-left: 1px solid var(--vscode-tab-border, transparent);
 }
 
 .tab.active {
@@ -315,7 +322,7 @@ body.provider-accent .titlebar {
   visibility: visible;
 }
 
-/* ---- workbench: sidebar | sash | main -------------------------------------- */
+/* ---- workbench: sidebar | sash | main column (tabs, main) | sash | content --- */
 
 .workbench {
   display: flex;
@@ -364,10 +371,17 @@ body.resizing {
   cursor: ew-resize;
 }
 
+.main-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .main {
   position: relative;
   flex: 1 1 auto;
-  min-width: 0;
+  min-height: 0;
   background: var(--vscode-editor-background);
 }
 
@@ -481,10 +495,6 @@ body.resizing {
   flex: 1 1 auto;
   min-height: 0;
   background: var(--vscode-editor-background);
-}
-
-.content-tab:first-child {
-  border-left: none;
 }
 
 .content-tab.preview .tab-label {

@@ -1,5 +1,5 @@
 /**
- * Conversation panels (the extension's `createWebviewPanel`) as tabs in the title bar.
+ * Conversation panels (the extension's `createWebviewPanel`) as tabs above the conversation.
  * One panel is visible at a time; hidden ones keep their iframe (and Claude process)
  * alive, as the extension asks with retainContextWhenHidden.
  */

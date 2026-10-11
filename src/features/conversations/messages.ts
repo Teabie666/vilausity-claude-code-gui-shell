@@ -13,6 +13,8 @@ export const t = defineMessages('conversations', {
   noConversation: 'No conversation open',
   closeTab: 'Close (Ctrl+W)',
   closeTabLabel: 'Close conversation',
+  alwaysShowTabsSetting:
+    'Show the conversation tabs even with one conversation open. Off: the row of tabs appears once a second conversation opens.',
   find: 'Find',
   matchCase: 'Match Case (Alt+C)',
   previousMatch: 'Previous Match (Shift+Enter)',
