@@ -1,6 +1,6 @@
 /**
- * A window's accent color (its API provider's, see `providerAccentColor` in providers.ts)
- * laid over the theme. VS Code's themes draw focus outlines, the active tab's line, primary
+ * A window's accent color laid over the theme: its API provider's (`providerAccentColor` in
+ * providers.ts), one the user picked, or none (VS Code's own); the `vilaus.accent` setting. VS Code's themes draw focus outlines, the active tab's line, primary
  * buttons, selections and match highlights in one accent (Dark Modern's #0078d4). Of the keys
  * listed below, those whose theme value is in the theme's own accent hue take the window's
  * accent instead, the way the theme used its own:
@@ -11,16 +11,29 @@
  * - highlighted text (matches in lists) at 4.5:1.
  * A theme value outside the accent's hue (Light Modern's grey selections) stays as it is;
  * high contrast themes keep all their colors. Every theme gets `--vilaus-accent`: the line
- * at the top of the window (transparent without an accent).
+ * at the top of the window (transparent without an accent), and the `--vilaus-accent-line /
+ * -fill / -fill-foreground` the extension's pages take for their own orange (bridge.ts;
+ * `initial`, so that the page keeps its own, when the theme keeps its colors).
  * Pure functions: main computes each window's theme with them; the tests use them directly.
  */
 
 import type { ThemeData } from './protocol';
 
-/** `all`: the line and the highlights; `line`: only the line at the top; `off`: neither. */
-export type AccentMode = 'all' | 'line' | 'off';
+/** Where a window's accent comes from: its API provider, the user's color, or nowhere (VS Code's). */
+export type AccentSource = 'provider' | 'custom' | 'vscode';
 
-export const ACCENT_MODES: readonly AccentMode[] = ['all', 'line', 'off'];
+export const ACCENT_SOURCES: readonly AccentSource[] = ['provider', 'custom', 'vscode'];
+export const ACCENT_SETTING = 'vilaus.accent';
+/** The color of `custom`. */
+export const ACCENT_COLOR_SETTING = 'vilaus.accent.custom';
+export const DEFAULT_CUSTOM_ACCENT = '#d97757';
+
+/** The variables the extension's pages read: unset (`initial`) leaves them their own colors. */
+const PAGE_ACCENT_UNSET = {
+  'vilaus-accent-line': 'initial',
+  'vilaus-accent-fill': 'initial',
+  'vilaus-accent-fill-foreground': 'initial',
+};
 
 export interface Rgba {
   readonly r: number;
@@ -198,20 +211,20 @@ const HUE_TOLERANCE = 30;
  * The theme with the window's accent: `accent` is `#rrggbb` or undefined (the theme's own
  * colors, no line). See the file's comment for what changes.
  */
-export function withAccent(theme: ThemeData, accent: string | undefined, mode: AccentMode = 'all'): ThemeData {
+export function withAccent(theme: ThemeData, accent: string | undefined): ThemeData {
   const vars = theme.variables;
   const get = (key: string): Rgba | undefined => parseColor(vars[`vscode-${key}`]);
   const editor = get('editor-background') ?? { r: 31, g: 31, b: 31, a: 1 };
-  const color = mode === 'off' ? undefined : parseColor(accent);
+  const color = parseColor(accent);
   if (!color) {
-    return { ...theme, variables: { ...vars, 'vilaus-accent': 'transparent' } };
+    return { ...theme, variables: { ...vars, ...PAGE_ACCENT_UNSET, 'vilaus-accent': 'transparent' } };
   }
   const titleBar = over(get('titleBar-activeBackground') ?? editor, editor);
-  const overrides: Record<string, string> = { 'vilaus-accent': formatColor(ensureContrast(color, titleBar, 3)) };
+  const overrides: Record<string, string> = { ...PAGE_ACCENT_UNSET, 'vilaus-accent': formatColor(ensureContrast(color, titleBar, 3)) };
   const highContrast = theme.kind === 'vscode-high-contrast' || theme.kind === 'vscode-high-contrast-light';
   const own = get('focusBorder');
   const ownHue = own ? hueAndSaturation(own) : undefined;
-  if (mode === 'line' || highContrast || !own || !ownHue || ownHue.saturation < 0.3) {
+  if (highContrast || !own || !ownHue || ownHue.saturation < 0.3) {
     return { ...theme, variables: { ...vars, ...overrides } };
   }
   const isAccentLike = (key: string): boolean => {
@@ -238,6 +251,9 @@ export function withAccent(theme: ThemeData, accent: string | undefined, mode: A
   const forWhite = ensureContrast(line, WHITE, 4.5);
   const [fill, fillText] = contrast(forWhite, editor) >= 3 ? [forWhite, WHITE] : [line, contrast(BLACK, line) >= contrast(WHITE, line) ? BLACK : WHITE];
   const hover = luminance(fill) < 0.03 ? mix(WHITE, fill, 0.1) : mix(BLACK, fill, 0.1);
+  overrides['vilaus-accent-line'] = formatColor(line);
+  overrides['vilaus-accent-fill'] = formatColor(fill);
+  overrides['vilaus-accent-fill-foreground'] = formatColor(fillText);
   for (const [background, foreground, hoverKey] of FILL_KEYS) {
     if (isAccentLike(background)) {
       set(background, fill);

@@ -173,6 +173,12 @@ export interface WebviewPageHints {
    * look and layout (the session list in the sidebar).
    */
   readonly styles?: string;
+  /**
+   * CSS selector of bars whose length the page sets as an inline `width: N%` (usage meters):
+   * the page script mirrors it into `--vilaus-meter` (0 to 1) on the bar, for `styles` to
+   * color it by.
+   */
+  readonly meters?: string;
 }
 
 export interface WebviewDocument {

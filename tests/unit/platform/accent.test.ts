@@ -101,13 +101,15 @@ describe('withAccent', () => {
     assert.equal(v(themed, 'focusBorder'), v(hcDark as ThemeData, 'focusBorder'));
   });
 
-  test('the setting: only the line, or nothing', () => {
-    const line = withAccent(dark, '#4d6bfe', 'line');
-    assert.equal(line.variables['vilaus-accent'], '#4d6bfe');
-    assert.equal(v(line, 'focusBorder'), v(dark, 'focusBorder'));
-    const off = withAccent(dark, '#4d6bfe', 'off');
-    assert.equal(off.variables['vilaus-accent'], 'transparent');
-    assert.equal(v(off, 'button-background'), v(dark, 'button-background'));
+  test("the extension's pages get the accent for their own orange, or nothing and keep theirs", () => {
+    const themed = withAccent(dark, '#4d6bfe');
+    assert.equal(themed.variables['vilaus-accent-line'], v(themed, 'focusBorder'));
+    assert.equal(themed.variables['vilaus-accent-fill'], v(themed, 'button-background'));
+    assert.equal(themed.variables['vilaus-accent-fill-foreground'], v(themed, 'button-foreground'));
+    // Unset (`initial`): a theme switch must not leave the last accent's values behind.
+    const none = withAccent(dark, undefined);
+    assert.equal(none.variables['vilaus-accent-fill'], 'initial');
+    assert.equal(withAccent(hcDark as ThemeData, '#4d6bfe').variables['vilaus-accent-line'], 'initial');
   });
 });
 

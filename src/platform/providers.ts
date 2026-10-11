@@ -74,9 +74,6 @@ export function isProviderId(id: string): boolean {
   return PROVIDER_ID.test(id);
 }
 
-/** The setting with how much of the window takes its provider's accent (platform/accent.ts). */
-export const ACCENT_SETTING = 'vilaus.provider.accent';
-
 /** Claude's own accent: the subscription, the Anthropic API and the platforms that serve Claude. */
 export const CLAUDE_ACCENT = '#d97757';
 

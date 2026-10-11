@@ -90,6 +90,38 @@ const FONT_STYLES = `
 `;
 
 /**
+ * The extension's own orange in the window's accent (anthropic.claude-code 2.1.296): it draws
+ * the send button, the message input's focus ring, links, pills and badges in
+ * `--app-claude-orange` and `--app-claude-clay-button-orange` (declared on html), with ivory
+ * text on the send button. The accent variables come with the theme (platform/accent.ts);
+ * without an accent they are unset and the fallbacks are the extension's own values.
+ */
+const ACCENT_STYLES = `
+html {
+  --app-claude-orange: var(--vilaus-accent-line, #d97757) !important;
+  --app-claude-clay-button-orange: var(--vilaus-accent-fill, #c6613f) !important;
+}
+.sendButton_gGYT1w,
+.sendButton_UCAeZQ { color: var(--vilaus-accent-fill-foreground, var(--app-claude-ivory)); }
+`;
+
+/**
+ * The account's usage bars (5 hours, week; anthropic.claude-code 2.1.296) by how much is left
+ * rather than in the accent: green with most of it left, yellow at half, red near the end.
+ * The bar's width is the share used; the page script copies it into `--vilaus-meter`.
+ */
+const USAGE_METERS = '.usageFill_8s5nuw';
+const USAGE_STYLES = `
+.usageTrack_8s5nuw .usageFill_8s5nuw {
+  background: color-mix(
+    in oklab,
+    var(--vscode-charts-red) calc(clamp(0, var(--vilaus-meter, 0) * 2 - 1, 1) * 100%),
+    color-mix(in oklab, var(--vscode-charts-yellow) calc(clamp(0, var(--vilaus-meter, 0) * 2, 1) * 100%), var(--vscode-charts-green))
+  );
+}
+`;
+
+/**
  * The conversation's text in the conversation font (`chat.fontFamily`, `chat.fontSize`): a
  * user message, Claude's Markdown, thinking, and the message input with the mirror the page
  * draws its text in (both must agree, or the caret drifts from the text). Code in Markdown is
@@ -307,9 +339,18 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   pageHints(webview: WebviewImpl): WebviewPageHints | undefined {
     switch (webview.viewType) {
       case CHAT_PANEL_VIEW_TYPE:
-        return { commentsAnchor: CHAT_INPUT_FORM, untranslated: PAGE_CONTENT, styles: FONT_STYLES + CONVERSATION_STYLES };
+        return {
+          commentsAnchor: CHAT_INPUT_FORM,
+          untranslated: PAGE_CONTENT,
+          styles: FONT_STYLES + ACCENT_STYLES + USAGE_STYLES + CONVERSATION_STYLES,
+          meters: USAGE_METERS,
+        };
       case SESSION_LIST_VIEW_TYPE:
-        return { untranslated: PAGE_CONTENT, styles: FONT_STYLES + SESSION_LIST_STYLES };
+        return {
+          untranslated: PAGE_CONTENT,
+          styles: FONT_STYLES + ACCENT_STYLES + USAGE_STYLES + SESSION_LIST_STYLES,
+          meters: USAGE_METERS,
+        };
       case PLAN_PREVIEW_VIEW_TYPE:
         return { untranslated: PLAN_PREVIEW_CONTENT };
       default:

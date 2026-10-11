@@ -7,6 +7,12 @@ export const t = defineMessages('themes', {
   selectColorTheme: 'Select Color Theme',
   current: 'current',
   themeSetting: 'The color theme of Vilausity, its editors and the Claude Code views.',
+  accentSetting:
+    "The accent color of the window: the line along its top, the active tab's line, buttons, focus outlines, selections and highlights.",
+  accentProvider: "The API provider's (each vendor has its own; pick another in Manage API Providers)",
+  accentCustom: 'A color of your own (Accent: Custom)',
+  accentVscode: "VS Code's own (the color theme's, no line)",
+  accentColorSetting: 'The accent color when Accent is set to a color of your own.',
 });
 
 /**

@@ -59,6 +59,10 @@ const THEME_CLASSES = [
   if (pageStyles) {
     onDomReady(() => installPageStyles(pageStyles));
   }
+  const meters = data.hints?.meters;
+  if (meters) {
+    onDomReady(() => watchMeters(meters));
+  }
 
   let theme = data.theme;
   applyThemeVariables(theme);
@@ -161,6 +165,25 @@ function installPageStyles(css: string): void {
   style.id = '_shellPageStyles';
   style.textContent = css;
   (document.head ?? document.documentElement).appendChild(style);
+}
+
+/** Mirrors the inline `width: N%` of the bars `selector` matches into `--vilaus-meter` (0 to 1). */
+function watchMeters(selector: string): void {
+  const update = (): void => {
+    for (const bar of document.querySelectorAll<HTMLElement>(selector)) {
+      const width = Number.parseFloat(bar.style.width);
+      if (!Number.isFinite(width)) {
+        continue;
+      }
+      const value = String(Math.min(1, Math.max(0, width / 100)));
+      // Only on change: setting it is a style mutation itself.
+      if (bar.style.getPropertyValue('--vilaus-meter') !== value) {
+        bar.style.setProperty('--vilaus-meter', value);
+      }
+    }
+  };
+  new MutationObserver(update).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['style'] });
+  update();
 }
 
 function applyThemeVariables(theme: ThemeData): void {

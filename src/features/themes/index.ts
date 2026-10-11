@@ -3,6 +3,7 @@
 import type { ShellModule } from '../../core/module';
 import { CommandCategory, SettingsSection } from '../../core/messages';
 import { ICommands, IDialogs, ISettings, IThemes } from '../../core/serviceIds';
+import { ACCENT_COLOR_SETTING, ACCENT_SETTING, ACCENT_SOURCES, DEFAULT_CUSTOM_ACCENT } from '../../platform/accent';
 import { DEFAULT_THEME_ID } from '../../platform/defaults';
 import { t, themeLabel } from './messages';
 
@@ -37,8 +38,31 @@ export const themesModule: ShellModule = {
       ),
     );
 
-    // Main applies it (the fonts are in features/fonts).
+    // Main applies these (the fonts are in features/fonts).
     const settings = services.get(ISettings);
+    subscriptions.add(
+      settings.register([
+        {
+          key: ACCENT_SETTING,
+          section: SettingsSection.workbench,
+          order: 1,
+          showDescription: true,
+          schema: {
+            type: 'string',
+            default: 'provider',
+            enum: [...ACCENT_SOURCES],
+            enumItemLabels: [t('accentProvider'), t('accentCustom'), t('accentVscode')],
+            description: t('accentSetting'),
+          },
+        },
+        {
+          key: ACCENT_COLOR_SETTING,
+          section: SettingsSection.workbench,
+          order: 2,
+          schema: { type: 'string', format: 'color-hex', default: DEFAULT_CUSTOM_ACCENT, description: t('accentColorSetting') },
+        },
+      ]),
+    );
     void themes.list().then((available) => {
       subscriptions.add(
         settings.register([

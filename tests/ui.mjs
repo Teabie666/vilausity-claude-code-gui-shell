@@ -1104,6 +1104,15 @@ await step('an API provider: the title bar switches to it, the window takes its 
   // The subscription: Claude's orange.
   const claude = await accent(page);
   if (claude.line !== '#d97757' || claude.focus !== '#d97757') throw new Error(`subscription accent: ${JSON.stringify(claude)}`);
+  // The setting: a color of one's own, VS Code's own (no line), back to the provider's.
+  writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.accent': 'custom', 'vilaus.accent.custom': '#00aa00' }, null, 2), 'utf8');
+  await waitFor(async () => (await accent(page)).focus === '#00aa00', 5000, 'the custom accent');
+  writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.accent': 'vscode' }, null, 2), 'utf8');
+  await waitFor(async () => (await accent(page)).line === 'transparent', 5000, "VS Code's own colors");
+  if ((await accent(page)).focus !== '#0078d4') throw new Error(`VS Code's focus border: ${(await accent(page)).focus}`);
+  const { 'vilaus.accent': _source, 'vilaus.accent.custom': _custom, ...ownSettings } = readSettings();
+  writeFileSync(settingsFile, JSON.stringify(ownSettings, null, 2), 'utf8');
+  await waitFor(async () => (await accent(page)).line === '#d97757', 5000, "the provider's accent again");
   try {
     await page.evaluate(async (port) => {
       await window.vilausNative.invoke('providers.save', {

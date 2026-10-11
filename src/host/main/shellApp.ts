@@ -41,9 +41,8 @@ import {
   type StartupNotices,
   type ThemeData,
 } from '../../platform/protocol';
-import { ACCENT_MODES, withAccent, type AccentMode } from '../../platform/accent';
+import { ACCENT_COLOR_SETTING, ACCENT_SETTING, ACCENT_SOURCES, parseColor, withAccent } from '../../platform/accent';
 import {
-  ACCENT_SETTING,
   DEFAULT_PROVIDER_SETTING,
   providerAccentColor,
   providerSettingsOverlay,
@@ -85,7 +84,7 @@ export const VSCODE_COMPAT_VERSION = '1.121.0';
 
 const THEME_SETTING = 'vilaus.theme';
 /** Settings that change the theme data (colors or font variables). */
-const THEME_SETTING_KEYS = new Set<string>([THEME_SETTING, ACCENT_SETTING, ...FONT_SETTING_KEYS]);
+const THEME_SETTING_KEYS = new Set<string>([THEME_SETTING, ACCENT_SETTING, ACCENT_COLOR_SETTING, ...FONT_SETTING_KEYS]);
 /** Automatic updates of the extension: this long after the start, then at this interval. */
 const FIRST_UPDATE_CHECK_MS = 15_000;
 const UPDATE_CHECK_INTERVAL_MS = 12 * 60 * 60_000;
@@ -395,12 +394,21 @@ export class ShellApp extends Disposable implements WindowHost {
     return { providers: this.providers.list(), current };
   }
 
-  /** The theme of a window whose provider is `providerId`: the shared one in that provider's accent. */
+  /**
+   * The theme of a window whose provider is `providerId`: the shared one in the accent the
+   * `vilaus.accent` setting asks for (the provider's by default).
+   */
   windowTheme(providerId: string): ThemeData {
-    const provider = this.providers.get(providerId) ?? SUBSCRIPTION_PROVIDER;
-    const setting = this.settings.all[ACCENT_SETTING];
-    const mode: AccentMode = ACCENT_MODES.find((candidate) => candidate === setting) ?? 'all';
-    return withAccent(this.theme, providerAccentColor(provider), mode);
+    const settings = this.settings.all;
+    const source = ACCENT_SOURCES.find((candidate) => candidate === settings[ACCENT_SETTING]) ?? 'provider';
+    const custom = settings[ACCENT_COLOR_SETTING];
+    const accent =
+      source === 'provider'
+        ? providerAccentColor(this.providers.get(providerId) ?? SUBSCRIPTION_PROVIDER)
+        : source === 'custom' && typeof custom === 'string' && parseColor(custom)
+          ? custom
+          : undefined;
+    return withAccent(this.theme, accent);
   }
 
   /** The folder's provider from last time, else the default setting's, else the subscription. */

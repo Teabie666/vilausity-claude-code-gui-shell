@@ -49,7 +49,7 @@ export function deprecationOf(schema: SettingSchema): string | undefined {
   return text ? plainText(text) : undefined;
 }
 
-export type ControlKind = 'boolean' | 'enum' | 'string' | 'number' | 'complex';
+export type ControlKind = 'boolean' | 'enum' | 'string' | 'color' | 'number' | 'complex';
 
 /** The type of a schema, ignoring `null` in a list of types. */
 function mainType(schema: SettingSchema): string | undefined {
@@ -65,7 +65,8 @@ export function controlKind(schema: SettingSchema): ControlKind {
     case 'boolean':
       return 'boolean';
     case 'string':
-      return 'string';
+      // JSON Schema's format for colors, as VS Code's color settings declare it.
+      return schema.format === 'color-hex' ? 'color' : 'string';
     case 'number':
     case 'integer':
       return 'number';

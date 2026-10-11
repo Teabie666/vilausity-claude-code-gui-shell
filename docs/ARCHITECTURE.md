@@ -111,7 +111,8 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **强调色**（2026-10-12）：每个窗口按自己的接口上色。颜色是接口自己选的，否则是供应商的（`PRESET_ACCENTS`，按预设），Claude 订阅和 Claude 的几种 API 用 Claude 的橙色，自定义的兼容接口没有（用主题自己的蓝色）；`providerAccentColor` 算，主进程和渲染进程共用。以前每个接口都存了一份当时预设的颜色或灰色，读 providers.json 时去掉（`withoutLegacyColor`），这些接口就跟着供应商走。
   - **主题**：主进程给每个窗口算一份主题（`ShellApp.windowTheme`）：共用的主题加上这个窗口的强调色（`platform/accent.ts` 的 `withAccent`，纯函数）。VS Code 的主题用一种强调色画焦点框、当前标签页的线、主按钮、选中项、匹配的字（Dark Modern 的 #0078d4）；列出的那些颜色键里，主题原来的值属于这个色相的才换：线和边框对背景至少 3:1（WCAG 对界面元件的要求），填充的控件（按钮、菜单的选中项、徽标）对背景 3:1、必要时加深到白字有 4.5:1，选中项和半透明的底色按主题原来离背景多远来调，高亮的字 4.5:1。不是这个色相的（Light Modern 的灰色选中项、徽标、链接）不动；高对比度主题全部不动。窗口的页面、它的 webview（文档一开始就用这个窗口的主题）、系统按钮层都用这一份；接口、接口的设置、主题、字体变了就重算。
   - **顶部色条**：`--vilaus-accent`，标题栏顶边 2px，横贯整个窗口。系统按钮层（titleBarOverlay）的颜色是标题栏的颜色、透明度 0：页面画的标题栏和色条从按钮底下透出来，Windows 照这个颜色算按钮悬停的深浅。
-  - **设置** `vilaus.provider.accent`：`all`（色条和高亮，默认）、`line`（只有色条）、`off`。
+  - **设置** `vilaus.accent`（工作台，"主题色"）：`provider` 跟随 API 接口（默认）、`custom` 用 `vilaus.accent.custom` 的颜色（设置界面里是颜色选择器：schema 的 `format: "color-hex"`，跟 VS Code 一样）、`vscode` 用颜色主题自己的（没有顶部色条）。
+  - **插件页面**：插件自己的橙色（发送按钮、输入框的焦点圈、链接、小标签）在 `--app-claude-orange` / `--app-claude-clay-button-orange` 里，bridge 的页面样式把它们指向主题带来的 `--vilaus-accent-line / -fill / -fill-foreground`；没有强调色时这几个变量是 `initial`，回落到插件自己的值。账户用量条不跟主题色，按用掉的比例从绿经黄到红：条的长度是插件写的行内 `width`，引导脚本按页面提示的 `meters` 把它抄成 `--vilaus-meter`，样式再用 `color-mix` 算颜色。
 - **编辑页**是内容面板的标签页（"管理 API 接口"）：左边列表和"添加 API 接口…"（从预设选），右边表单，显式保存。强调色一栏没选时写着"供应商的颜色（默认）"，选了别的可以"恢复默认"；选的跟供应商的一样就不存。"为此接口创建桌面快捷方式"写一个 `.lnk`：`Vilausity.exe --provider <id>`（开发时是 electron.exe 加 app 目录）。
 - **测试**：界面测试在 127.0.0.1 起一个假的 Anthropic 接口，切到指向它的接口、重新加载窗口、新对话发一句话，检查假接口收到的 `Authorization: Bearer <key>` 和模型名；不花钱也不联网。
 

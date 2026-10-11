@@ -174,6 +174,33 @@ class SettingRow {
           describeValue();
         };
       }
+      case 'color': {
+        // A color picker and the value it writes (#rrggbb).
+        const wrapper = doc.createElement('div');
+        wrapper.className = 'setting-color';
+        const picker = doc.createElement('input');
+        picker.type = 'color';
+        picker.className = 'setting-color-picker';
+        const code = doc.createElement('span');
+        code.className = 'setting-color-code';
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        picker.addEventListener('input', () => {
+          code.textContent = picker.value;
+          clearTimeout(timer);
+          timer = setTimeout(() => this.write(picker.value), WRITE_DELAY_MS);
+        });
+        picker.addEventListener('change', () => {
+          clearTimeout(timer);
+          this.write(picker.value);
+        });
+        wrapper.append(picker, code);
+        this.element.append(wrapper);
+        return () => {
+          const value = typeof this.value === 'string' && /^#[0-9a-f]{6}$/i.test(this.value) ? this.value.toLowerCase() : '#000000';
+          picker.value = value;
+          code.textContent = value;
+        };
+      }
       case 'string':
       case 'number': {
         const input = doc.createElement('input');

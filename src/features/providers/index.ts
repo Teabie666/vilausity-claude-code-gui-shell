@@ -3,22 +3,14 @@
  * the window's provider with its accent color and switches it; the providers editor (a
  * content pane tab) adds and edits providers. A key never comes back to the page once it
  * is typed: main keeps it encrypted and gives it only to the extension host. Main also lays
- * the provider's accent over the window's theme (platform/accent.ts): the line along the top
- * of the window, and the theme's highlights.
+ * the provider's accent over the window's theme (platform/accent.ts, the `vilaus.accent`
+ * setting in features/themes): the line along the top of the window, and the highlights.
  */
 
 import type { ShellModule } from '../../core/module';
 import { ICommands, IDialogs, IEditors, ILayout, INative, ISettings } from '../../core/serviceIds';
 import { DisposableStore } from '../../platform/lifecycle';
-import { ACCENT_MODES } from '../../platform/accent';
-import {
-  ACCENT_SETTING,
-  DEFAULT_PROVIDER_SETTING,
-  providerAccentColor,
-  SUBSCRIPTION_ID,
-  SUBSCRIPTION_PROVIDER,
-  type ProviderSummary,
-} from '../../platform/providers';
+import { DEFAULT_PROVIDER_SETTING, SUBSCRIPTION_ID, type ProviderSummary } from '../../platform/providers';
 import type { QuickPickItemDto } from '../../platform/protocol';
 import { IContentPane } from '../contentPane';
 import { IConversations } from '../conversations';
@@ -41,16 +33,14 @@ export const providersModule: ShellModule = {
     const model = new ProvidersModel(init.providers);
     subscriptions.add(native.on('providersChanged', (state) => model.update(state)));
 
-    // The title bar: [■ DeepSeek ▾], in the provider's accent.
+    // The title bar: [DeepSeek ▾].
     const button = document.createElement('button');
     button.className = 'titlebar-button titlebar-provider';
-    const swatch = document.createElement('span');
-    swatch.className = 'provider-swatch';
     const label = document.createElement('span');
     label.className = 'titlebar-provider-label';
     const chevron = document.createElement('span');
     chevron.className = 'titlebar-chevron';
-    button.append(swatch, label, chevron);
+    button.append(label, chevron);
     button.addEventListener('click', () => void commands.execute('providers.switch'));
     subscriptions.add(services.get(ILayout).addTitleBarItem('left', button, 12));
     const show = (): void => {
@@ -58,9 +48,6 @@ export const providersModule: ShellModule = {
       const name = active ? providerLabel(active) : t('subscription');
       label.textContent = name;
       button.title = t('buttonTitle', name);
-      const color = providerAccentColor(active ?? SUBSCRIPTION_PROVIDER);
-      swatch.hidden = !color;
-      swatch.style.backgroundColor = color ?? '';
     };
     show();
     subscriptions.add(model.onDidChange(show));
@@ -226,22 +213,5 @@ export const providersModule: ShellModule = {
     };
     registerSetting();
     subscriptions.add(model.onDidChange(registerSetting));
-    subscriptions.add(
-      settings.register([
-        {
-          key: ACCENT_SETTING,
-          section: settingsSection,
-          order: 2,
-          showDescription: true,
-          schema: {
-            type: 'string',
-            default: 'all',
-            enum: [...ACCENT_MODES],
-            enumItemLabels: [t('accentAll'), t('accentLine'), t('accentOff')],
-            description: t('accentSetting'),
-          },
-        },
-      ]),
-    );
   },
 };

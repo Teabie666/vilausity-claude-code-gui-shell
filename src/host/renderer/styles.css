@@ -1269,17 +1269,33 @@ body.resizing {
   resize: vertical;
 }
 
-.providers-color {
+.providers-color,
+.setting-color-picker {
   width: 40px;
   height: 24px;
   padding: 0;
   border: 1px solid var(--vscode-settings-textInputBorder, transparent);
   border-radius: var(--vscode-cornerRadius-small);
   background: none;
+  cursor: pointer;
 }
 
-.providers-color::-webkit-color-swatch {
+.providers-color::-webkit-color-swatch,
+.setting-color-picker::-webkit-color-swatch {
   border-radius: var(--vscode-cornerRadius-xSmall);
+}
+
+/* A color: the picker, then its value (or a note and a reset button in the providers editor). */
+.providers-color-row,
+.setting-color {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setting-color-code {
+  font-family: var(--vscode-editor-font-family);
+  color: var(--vscode-descriptionForeground);
 }
 
 .providers-actions {
