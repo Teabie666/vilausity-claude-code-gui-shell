@@ -26,6 +26,8 @@ export function extensionSettingDefinitions(contributions: ExtensionContribution
       // The manifest's `order`, else the order of declaration.
       order: typeof schema.order === 'number' ? schema.order : 1000 + index,
       hidden: NOT_APPLICABLE.has(setting.key),
+      // Their titles say little without it.
+      showDescription: true,
     };
   });
 }

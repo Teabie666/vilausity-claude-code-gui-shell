@@ -74,14 +74,22 @@ export function controlKind(schema: SettingSchema): ControlKind {
   }
 }
 
-/** Every word of the query appears in the key, the title or the description. */
-export function matchesQuery(definition: SettingDefinition, query: string): boolean {
+/**
+ * Every word of the query appears in the key, the title (`shown`, and the English one derived
+ * from the key) or the description.
+ */
+export function matchesQuery(
+  definition: SettingDefinition,
+  query: string,
+  shown: { category: string; name: string } = settingTitle(definition.key),
+): boolean {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) {
     return true;
   }
   const { category, name } = settingTitle(definition.key);
-  const haystack = `${definition.key} ${category} ${name} ${descriptionOf(definition.schema)} ${definition.section}`.toLowerCase();
+  const haystack =
+    `${definition.key} ${category} ${name} ${shown.category} ${shown.name} ${descriptionOf(definition.schema)} ${definition.section}`.toLowerCase();
   return words.every((word) => haystack.includes(word));
 }
 

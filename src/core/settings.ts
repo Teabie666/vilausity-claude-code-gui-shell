@@ -36,6 +36,11 @@ export interface SettingDefinition {
   readonly order?: number;
   /** In the schema of settings.json, but not listed in the settings editor. */
   readonly hidden?: boolean;
+  /**
+   * The settings editor shows the description under the title: for settings whose title does
+   * not say enough. Otherwise the description is only searched (and shown in settings.json).
+   */
+  readonly showDescription?: boolean;
 }
 
 /**

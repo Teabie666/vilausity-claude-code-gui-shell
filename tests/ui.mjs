@@ -123,6 +123,24 @@ async function press(shortcut, target = 'main') {
   }, { keyCode, modifiers, title });
 }
 
+/**
+ * Listens on a free port Chromium agrees to fetch from: it refuses a list of "unsafe" ports
+ * (net::ERR_UNSAFE_PORT), and the system hands those out now and then (3659 once did).
+ */
+const CHROMIUM_UNSAFE_PORTS = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111,
+  113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548,
+  554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566,
+  6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080,
+]);
+async function listenOnSafePort(server) {
+  for (;;) {
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    if (!CHROMIUM_UNSAFE_PORTS.has(server.address().port)) return server.address().port;
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
 /** The shell windows' pages (not tabs' own windows). */
 const shellPages = () => app.windows().filter((candidate) => candidate.url().startsWith('ccw://app/'));
 /** What the folder button and the Open Folder commands end up calling. */
@@ -690,16 +708,16 @@ await step('the title bar button toggles the empty content pane', async () => {
 // ---- settings ------------------------------------------------------------------------------
 
 const readSettings = () => JSON.parse(readFileSync(settingsFile, 'utf8'));
-const settingRow = (key) => page.locator(`#content-pane .setting-item[data-key="${key}"]`);
+const settingRow = (key) => page.locator(`.settings-dialog .setting-item[data-key="${key}"]`);
 
-await step('Ctrl+, opens the settings editor; Editor: Font Size applies to the editor and resets', async () => {
+await step('Ctrl+, opens the settings panel; Editor: Font Size applies to the editor and resets', async () => {
   await press('Control+,');
-  await page.locator('#content-pane .settings-editor').waitFor({ timeout: 10_000 });
-  await page.locator('#content-pane .settings-search').fill('font size');
+  await page.locator('.settings-dialog .settings-editor').waitFor({ timeout: 10_000 });
+  await page.locator('.settings-dialog .settings-search').fill('font size');
   await waitFor(() => settingRow('editor.fontSize').isVisible(), 5000, 'the Editor: Font Size row');
   if (await settingRow('editor.minimap.enabled').isVisible()) throw new Error('search did not filter');
   // The extension's settings are listed, except those for VS Code integration vilaus lacks.
-  await page.locator('#content-pane .settings-search').fill('');
+  await page.locator('.settings-dialog .settings-search').fill('');
   await waitFor(async () => (await settingRow('claudeCode.useCtrlEnterToSend').count()) === 1, 10_000, "the extension's settings");
   if ((await settingRow('claudeCode.useTerminal').count()) !== 0) throw new Error('claudeCode.useTerminal is listed');
   await page.screenshot({ path: path.join(runDir, 'settings.png') });
@@ -718,7 +736,7 @@ await step('Ctrl+, opens the settings editor; Editor: Font Size applies to the e
     return size === '20px' ? size : undefined;
   }, 10_000, 'the editor at 20px');
 
-  await page.locator('#content-pane .content-tab', { hasText: 'Settings' }).click();
+  // The settings panel stayed open over the editor.
   await settingRow('editor.fontSize').hover();
   await settingRow('editor.fontSize').locator('.setting-reset').click();
   await waitFor(() => readSettings()['editor.fontSize'] === undefined, 5000, 'editor.fontSize removed');
@@ -729,8 +747,9 @@ await step('settings.json opens in the editor, validated against the settings sc
   const original = readFileSync(settingsFile, 'utf8');
   const withError = { ...JSON.parse(original), 'editor.tabSize': 'wide' };
   writeFileSync(settingsFile, JSON.stringify(withError, null, 2), 'utf8');
-  await page.locator('#content-pane .content-tab', { hasText: 'Settings' }).click();
-  await page.locator('#content-pane .settings-open-json').click();
+  await press('Control+,');
+  await page.locator('.settings-dialog .settings-open-json').click();
+  await waitFor(async () => (await page.locator('.settings-dialog').count()) === 0, 5000, 'the settings panel to step aside');
   await waitFor(async () => (await page.locator('#content-pane .content-tab.active .tab-label').innerText()) === 'settings.json', 10_000, 'the settings.json tab');
   // The JSON language service runs in its worker; its warning shows as a squiggle.
   await waitFor(
@@ -741,7 +760,7 @@ await step('settings.json opens in the editor, validated against the settings sc
   await page.screenshot({ path: path.join(runDir, 'settings-json.png') });
   writeFileSync(settingsFile, original, 'utf8');
   await waitFor(async () => !(await editorText()).includes('"wide"'), 10_000, 'the file back as it was');
-  // Close settings.json, sample.ts and the settings editor.
+  // Close settings.json and sample.ts.
   for (let i = 0; i < 3 && (await contentTabs().count()) > 0; i++) {
     await page.locator('#content-pane .content-tab.active .tab-close').click();
     await page.waitForTimeout(200);
@@ -795,7 +814,7 @@ await step('settings.json reaches every Monaco option; Default Settings (JSON) l
   await waitFor(async () => (await page.locator('#content-pane .content-editor:not([hidden]) .view-ruler').count()) === 1, 10_000, 'the ruler');
 
   await press('Control+,');
-  await page.locator('#content-pane .settings-open-defaults').click();
+  await page.locator('.settings-dialog .settings-open-defaults').click();
   await waitFor(async () => (await page.locator('#content-pane .content-tab.active .tab-label').innerText()) === 'Default Settings', 10_000, 'the Default Settings tab');
   await waitFor(async () => (await editorText()).includes('Every setting with its default value'), 10_000, 'the default settings text');
   await page.screenshot({ path: path.join(runDir, 'default-settings.png') });
@@ -1018,7 +1037,7 @@ function startMockApi() {
       response.end(JSON.stringify({ type: 'error', error: { type: 'not_found_error', message: 'not in the mock' } }));
     });
   });
-  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, requests, port: server.address().port })));
+  return listenOnSafePort(server).then((port) => ({ server, requests, port }));
 }
 
 /** Waits for the window to reload and show its conversations again; `start` triggers the reload. */
@@ -1324,9 +1343,9 @@ async function openExtensionVersion() {
     return undefined;
   }, 30_000, 'the workspace window');
   await press('Control+,');
-  await main.locator('#content-pane .settings-editor').waitFor({ timeout: 10_000 });
-  await main.locator('#content-pane .settings-search').fill('extension version');
-  const widget = main.locator('#content-pane .settings-widget[data-widget="extensionUpdates.version"]');
+  await main.locator('.settings-dialog .settings-editor').waitFor({ timeout: 10_000 });
+  await main.locator('.settings-dialog .settings-search').fill('extension version');
+  const widget = main.locator('.settings-dialog .settings-widget[data-widget="extensionUpdates.version"]');
   await widget.waitFor({ timeout: 5000 });
   return { main, widget };
 }
@@ -1359,8 +1378,7 @@ await step('first run: no extension, no Git -> install from Open VSX without a r
       response.writeHead(404).end();
     }
   });
-  await new Promise((resolve) => openVsx.listen(0, '127.0.0.1', resolve));
-  base = `http://127.0.0.1:${openVsx.address().port}`;
+  base = `http://127.0.0.1:${await listenOnSafePort(openVsx)}`;
   writeFileSync(
     path.join(firstData, 'settings.json'),
     JSON.stringify({ 'vilaus.language': 'en', 'vilaus.extension.autoUpdate': false, 'vilaus.extension.openVsxUrl': base }),
@@ -1471,8 +1489,7 @@ await step('Extension Version in settings: Check for Updates installs from Open 
       response.writeHead(404).end();
     }
   });
-  await new Promise((resolve) => openVsx.listen(0, '127.0.0.1', resolve));
-  base = `http://127.0.0.1:${openVsx.address().port}`;
+  base = `http://127.0.0.1:${await listenOnSafePort(openVsx)}`;
   try {
     const { main, widget } = await openExtensionVersion();
     await main.evaluate((url) => window.vilausNative.invoke('settings.update', { key: 'vilaus.extension.openVsxUrl', value: url }), base);

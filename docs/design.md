@@ -9,7 +9,7 @@
 3. **1px 分隔线**，用 `--vscode-panel-border`、`--vscode-tab-border` 这类变量。
 4. **信息密度高**：行高 22px 左右，内边距小；不要大面积留白。
 5. **图标用 codicon**，跟 VS Code 一致；不用 emoji 当图标。
-6. **不要**：大圆角卡片、渐变、彩色大块背景、玻璃拟态、弹跳动画。阴影只给浮层，而且要淡：用 VS Code 的阴影变量 `--vscode-shadow-*`（数值照搬 VS Code，深色主题下几乎看不出来），一般浮层用 lg，命令面板和对话框用 xl。骨架（标题栏、标签页）不加阴影，靠 1px 线分隔。阴影是样式表里唯一写了字面颜色的地方，跟 VS Code 一样。
+6. **不要**：大圆角卡片、渐变、彩色大块背景、玻璃拟态、弹跳动画。阴影只给浮层，而且要淡：用 VS Code 的阴影变量 `--vscode-shadow-*`（数值照搬 VS Code，深色主题下几乎看不出来），一般浮层用 lg，命令面板和对话框用 xl。骨架（标题栏、标签页）不加阴影，靠 1px 线分隔。阴影和弹出面板后面的遮罩（VS Code 的 modal 用 30% 的黑）是样式表里仅有的字面颜色，跟 VS Code 一样。
 7. **滚动条**：全软件一个样子：跟插件页面一样用 Chromium 自己的滚动条（细的圆角滑块），颜色用 `scrollbarSlider.*`；Monaco 自己画的滑块画成同样 8px 宽的圆角（`styles.css` 的"scrollbars"一节）。
 8. 字体：界面用 `--vscode-font-family`，代码用 `--vscode-editor-font-family`，都来自设置（`workbench.fontFamily`、`editor.fontFamily`）。中文界面靠页面的 `lang="zh-CN"` 让 Chromium 选系统的中文字体，不在样式表里写死字体名。
 
@@ -53,7 +53,7 @@ VS Code 定义了一组圆角档位（尺寸 token，CSS 变量 `--vscode-corner
 | `xSmall` 2px | Markdown 预览的引用块、颜色选择框里的色块 |
 | `small` 4px | 文字按钮、输入框、下拉框、通知、选中文字旁的按钮组；查找框（贴着顶边，只有下面两个角圆）；Markdown 预览的行内代码；图标按钮、标题栏的文件夹 / 接口按钮、评论栏的折叠按钮（VS Code 的图标按钮是 medium，壳里小一档，2026-10-11 试用后改） |
 | `medium` 6px | 标题栏的搜索框（跟 VS Code 的命令中心一样）、命令面板的输入框、设置页里的方块（插件版本）、首次启动页的选项、评论栏的列表；代码编辑器（Monaco）里的浮层：悬停提示、补全列表、参数提示、查找框（VS Code 是 large，壳里小一档：`.monaco-editor` 上把 large 改成 medium，2026-10-11 试用后改） |
-| `large` 8px | 评论编辑小窗；注入插件页面的评论列表（跟对话输入框一样） |
+| `large` 8px | 评论编辑小窗；注入插件页面的评论列表（跟对话输入框一样）；设置面板（跟 VS Code 的 modal editor 一样） |
 | `xLarge` 12px | 命令面板（快速输入）、对话框 |
 
 阴影（`--vscode-shadow-*`，VS Code 定义在 `.monaco-workbench` 上的数值）：

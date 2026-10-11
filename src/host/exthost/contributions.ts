@@ -62,3 +62,31 @@ export function readContributions(packageJson: Readonly<Record<string, unknown>>
 
   return { commands, menus, configuration };
 }
+
+/** Texts of a setting's schema the settings editor shows. */
+const SCHEMA_TEXTS = ['description', 'markdownDescription', 'deprecationMessage', 'markdownDeprecationMessage'];
+const SCHEMA_TEXT_LISTS = ['enumDescriptions', 'markdownEnumDescriptions', 'enumItemLabels'];
+
+/** The contributions with their settings' texts (descriptions, value labels) passed through `translate`. */
+export function translateContributions(
+  contributions: ExtensionContributions,
+  translate: (text: string) => string,
+): ExtensionContributions {
+  const configuration = contributions.configuration.map((setting) => {
+    const schema: Record<string, unknown> = { ...setting.schema };
+    for (const field of SCHEMA_TEXTS) {
+      const text = schema[field];
+      if (typeof text === 'string') {
+        schema[field] = translate(text);
+      }
+    }
+    for (const field of SCHEMA_TEXT_LISTS) {
+      const texts = schema[field];
+      if (Array.isArray(texts)) {
+        schema[field] = texts.map((text: unknown) => (typeof text === 'string' ? translate(text) : text));
+      }
+    }
+    return { ...setting, schema };
+  });
+  return { ...contributions, configuration };
+}

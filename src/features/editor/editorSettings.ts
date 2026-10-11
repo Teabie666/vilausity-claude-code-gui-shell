@@ -22,6 +22,8 @@ export function editorSettingDefinitions(): SettingDefinition[] {
   // The rest of Monaco's diff options under VS Code's names: settings.json only, like the
   // editor options from `monacoOptionDefinitions` (Monaco keeps no schemas for these).
   const diffOption = (key: string, schema: SettingDefinition['schema']): SettingDefinition => ({ ...diffEditor(key, schema), hidden: true });
+  // Shown with their description: the title alone does not say how the value is read.
+  const described = (definition: SettingDefinition): SettingDefinition => ({ ...definition, showDescription: true });
   return [
     editor('editor.fontFamily', { type: 'string', default: DEFAULT_FONTS.editorFamily, description: t('fontFamily') }),
     editor('editor.fontSize', { type: 'number', default: DEFAULT_FONTS.editorSize, minimum: 6, maximum: 100, description: t('fontSize') }),
@@ -31,7 +33,7 @@ export function editorSettingDefinitions(): SettingDefinition[] {
       enum: ['normal', 'bold', '100', '200', '300', '400', '500', '600', '700', '800', '900'],
       description: t('fontWeight'),
     }),
-    editor('editor.lineHeight', { type: 'number', default: 0, minimum: 0, maximum: 150, description: t('lineHeight') }),
+    described(editor('editor.lineHeight', { type: 'number', default: 0, minimum: 0, maximum: 150, description: t('lineHeight') })),
     editor('editor.fontLigatures', { type: 'boolean', default: false, description: t('fontLigatures') }),
     editor('editor.tabSize', { type: 'number', default: 4, minimum: 1, maximum: 100, description: t('tabSize') }),
     editor('editor.insertSpaces', { type: 'boolean', default: true, description: t('insertSpaces') }),
@@ -43,7 +45,7 @@ export function editorSettingDefinitions(): SettingDefinition[] {
       enumDescriptions: [t('wordWrapOff'), t('wordWrapOn'), t('wordWrapColumn'), t('wordWrapBounded')],
       description: t('wordWrap'),
     }),
-    editor('editor.wordWrapColumn', { type: 'number', default: 80, minimum: 1, description: t('wordWrapColumnSetting') }),
+    described(editor('editor.wordWrapColumn', { type: 'number', default: 80, minimum: 1, description: t('wordWrapColumnSetting') })),
     editor('editor.lineNumbers', { type: 'string', default: 'on', enum: ['off', 'on', 'relative', 'interval'], description: t('lineNumbers') }),
     editor('editor.minimap.enabled', { type: 'boolean', default: true, description: t('minimap') }),
     editor('editor.renderWhitespace', {
@@ -61,10 +63,10 @@ export function editorSettingDefinitions(): SettingDefinition[] {
     }),
     editor('editor.smoothScrolling', { type: 'boolean', default: false, description: t('smoothScrolling') }),
     editor('editor.scrollBeyondLastLine', { type: 'boolean', default: true, description: t('scrollBeyondLastLine') }),
-    diffEditor('diffEditor.fontFamily', { type: 'string', default: '', description: t('diffFontFamily') }),
-    diffEditor('diffEditor.fontSize', { type: 'number', default: 0, minimum: 0, maximum: 100, description: t('diffFontSize') }),
+    described(diffEditor('diffEditor.fontFamily', { type: 'string', default: '', description: t('diffFontFamily') })),
+    described(diffEditor('diffEditor.fontSize', { type: 'number', default: 0, minimum: 0, maximum: 100, description: t('diffFontSize') })),
     diffEditor('diffEditor.renderSideBySide', { type: 'boolean', default: true, description: t('renderSideBySide') }),
-    diffEditor('diffEditor.useInlineViewWhenSpaceIsLimited', { type: 'boolean', default: true, description: t('inlineWhenNarrow') }),
+    described(diffEditor('diffEditor.useInlineViewWhenSpaceIsLimited', { type: 'boolean', default: true, description: t('inlineWhenNarrow') })),
     diffEditor('diffEditor.ignoreTrimWhitespace', { type: 'boolean', default: true, description: t('ignoreTrimWhitespace') }),
     diffEditor('diffEditor.wordWrap', {
       type: 'string',

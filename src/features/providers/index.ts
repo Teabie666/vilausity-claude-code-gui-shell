@@ -5,7 +5,6 @@
  * is typed: main keeps it encrypted and gives it only to the extension host.
  */
 
-import { SettingsSection } from '../../core/messages';
 import type { ShellModule } from '../../core/module';
 import { ICommands, IDialogs, IEditors, ILayout, INative, ISettings } from '../../core/serviceIds';
 import { DisposableStore } from '../../platform/lifecycle';
@@ -164,6 +163,35 @@ export const providersModule: ShellModule = {
       ),
     );
 
+    // In the settings panel: a way to the providers' editor, and the default provider below it.
+    const settingsSection = t('settingsSection');
+    subscriptions.add(
+      settings.registerWidget({
+        id: 'providers.entry',
+        section: settingsSection,
+        keywords: t('settingsKeywords'),
+        create: (container) => {
+          container.classList.add('providers-entry');
+          const current = document.createElement('span');
+          current.className = 'providers-entry-current';
+          const manage = document.createElement('button');
+          manage.className = 'button secondary';
+          manage.textContent = t('manageEllipsis');
+          manage.addEventListener('click', () => {
+            void commands.execute('settings.close');
+            openEditor();
+          });
+          container.append(current, manage);
+          const render = (): void => {
+            const active = model.active;
+            current.textContent = t('settingsCurrent', active ? providerLabel(active) : t('subscription'));
+          };
+          render();
+          return model.onDidChange(render);
+        },
+      }),
+    );
+
     // The default provider: a dropdown of the providers there are, kept current.
     const setting = subscriptions.add(new DisposableStore());
     const registerSetting = (): void => {
@@ -173,8 +201,9 @@ export const providersModule: ShellModule = {
         settings.register([
           {
             key: DEFAULT_PROVIDER_SETTING,
-            section: SettingsSection.workbench,
-            order: 5,
+            section: settingsSection,
+            order: 1,
+            showDescription: true,
             schema: {
               type: 'string',
               default: SUBSCRIPTION_ID,

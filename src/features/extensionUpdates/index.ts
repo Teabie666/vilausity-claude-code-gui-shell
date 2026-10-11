@@ -36,7 +36,7 @@ const ERROR_TEXT: Record<ExtensionErrorCode, () => string> = {
 export function resultText(result: ExtensionInstallResult): string | undefined {
   switch (result.outcome) {
     case 'upToDate':
-      return t('upToDate', result.version);
+      return t('upToDate');
     case 'installed':
       return t('installed', result.version);
     case 'failed':
@@ -114,6 +114,7 @@ export const extensionUpdatesModule: ShellModule = {
           key: PINNED_VERSION_SETTING,
           section,
           order: 2,
+          showDescription: true,
           schema: { type: 'string', default: '', pattern: '^(\\d+(\\.\\d+)*(-[0-9A-Za-z.]+)?)?$', description: t('versionSetting') },
         },
         {
@@ -274,6 +275,7 @@ class VersionView {
     this.checkButton = button(t('check'), actions.check);
     this.checkButton.classList.add('extension-version-check');
     this.installButton = button(t('installFile'), actions.installFile);
+    this.installButton.title = t('installFileTooltip');
     this.installButton.classList.add('extension-version-install');
     this.statusText = element('span', 'extension-version-status');
     this.statusText.setAttribute('role', 'status');
@@ -289,13 +291,7 @@ class VersionView {
   render(status: ExtensionStatus, note: string | undefined): void {
     const { running, managed, activity } = status;
     this.current.textContent = running ? t('inUse', running.version) : t('notFound');
-    this.source.textContent = !running
-      ? ''
-      : running.kind === 'managed'
-        ? t('sourceManaged', running.path)
-        : running.kind === 'cli'
-          ? t('sourceCli', running.path)
-          : t('sourceExternal', running.path);
+    this.source.textContent = running?.path ?? '';
     this.source.hidden = !running;
 
     const pending = managed.pending;
@@ -307,13 +303,10 @@ class VersionView {
     // With a switch pending, what the next start keeps as the version before (see switchToPending).
     const keptForLater = pending !== undefined ? (managed.current ?? managed.previous) : undefined;
     this.previousRow.hidden = !running || running.kind === 'cli';
-    this.previousText.textContent = target
-      ? target.from === 'managed'
-        ? t('previousManaged', target.version)
-        : t('previousExternal', target.version, target.path)
-      : keptForLater !== undefined && keptForLater !== pending
-        ? t('previousAfterRestart', keptForLater)
-        : t('noPrevious');
+    const previous = target?.version ?? (keptForLater !== undefined && keptForLater !== pending ? keptForLater : undefined);
+    this.previousText.textContent = previous !== undefined ? t('previous', previous) : t('noPrevious');
+    // Another editor's copy (backed up into Vilausity when going back to it): where it is.
+    this.previousText.title = target?.from === 'external' ? target.path : '';
     this.rollBackButton.textContent = target ? t('rollBackAndRestart', target.version) : t('rollBackUnavailable');
 
     const idle = activity.kind === 'idle';

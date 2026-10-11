@@ -19,7 +19,7 @@ import { ClaudeWebviewBridge, conversationSessionId } from './bridge';
 import { ConversationComments, registerCommentRequests } from './comments';
 import { PanelRestore } from './panelRestore';
 import { createCompatHost, type CompatHostHandle, type MainRpc, type RendererRpc } from './compatHost';
-import { readContributions } from './contributions';
+import { readContributions, translateContributions } from './contributions';
 import { registerEditorRequests, showDocument } from './editorRequests';
 import { installVSCodeModule } from './requireHook';
 import { registerWorkbenchCommands } from './workbenchCommands';
@@ -99,7 +99,8 @@ export class ExtensionHost {
     this.extensionId = extensionId;
     this.extensionName = typeof packageJson.displayName === 'string' ? packageJson.displayName : extensionId;
     this.openAtStart = init.openConversation;
-    renderer.handle('extension.contributions', () => readContributions(packageJson));
+    // Its settings' descriptions in the display language (the settings editor shows them).
+    renderer.handle('extension.contributions', () => translateContributions(readContributions(packageJson), (text) => this.compat?.uiText(text) ?? text));
 
     const compat = createCompatHost({
       init,

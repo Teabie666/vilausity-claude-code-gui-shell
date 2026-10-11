@@ -51,6 +51,7 @@ export const languageModule: ShellModule = {
           key: LANGUAGE_SETTING,
           section: SettingsSection.workbench,
           order: 3,
+          showDescription: true,
           schema: {
             type: 'string',
             default: 'auto',
@@ -63,6 +64,7 @@ export const languageModule: ShellModule = {
           key: TRANSLATE_EXTENSION_UI_SETTING,
           section: SettingsSection.workbench,
           order: 4,
+          showDescription: true,
           schema: { type: 'boolean', default: true, description: t('translateExtensionUiSetting') },
         },
       ]),

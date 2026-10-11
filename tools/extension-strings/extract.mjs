@@ -266,9 +266,35 @@ function collectExtension(file) {
   });
 }
 
+/**
+ * The descriptions of the extension's settings (`contributes.configuration`), which the
+ * settings editor shows: translated by the extension host before they reach it.
+ */
+function collectSettings(packageJson) {
+  const configuration = packageJson.contributes?.configuration;
+  for (const group of Array.isArray(configuration) ? configuration : [configuration]) {
+    for (const schema of Object.values(group?.properties ?? {})) {
+      const texts = [
+        schema.description,
+        schema.markdownDescription,
+        schema.deprecationMessage,
+        schema.markdownDeprecationMessage,
+        ...(schema.enumDescriptions ?? []),
+        ...(schema.markdownEnumDescriptions ?? []),
+        ...(schema.enumItemLabels ?? []),
+      ];
+      for (const value of texts) {
+        const text = typeof value === 'string' ? normalizeText(value) : '';
+        if (text) addString(text, 'setting', 'manifest');
+      }
+    }
+  }
+}
+
 const packageJson = JSON.parse(readFileSync(path.join(extension.path, 'package.json'), 'utf8'));
 collectWebview(path.join(extension.path, 'webview', 'index.js'));
 collectExtension(path.join(extension.path, String(packageJson.main ?? 'extension.js')));
+collectSettings(packageJson);
 
 const sorted = (map) =>
   Object.fromEntries(

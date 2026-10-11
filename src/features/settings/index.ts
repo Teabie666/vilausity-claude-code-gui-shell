@@ -1,5 +1,6 @@
 /**
- * Settings: the settings editor (a content pane tab, Ctrl+, or the gear in the title bar),
+ * Settings: the settings editor (a panel over the middle of the window: Ctrl+, or the gear
+ * in the title bar),
  * settings.json in the text editor with a schema made of every declared setting
  * (completion, hovers, validation), and the extension's own settings declared from its
  * manifest.
@@ -23,10 +24,9 @@ import { ITextEditors } from '../editor';
 import { DefaultSettingsPane } from './defaultSettings';
 import { extensionSettingDefinitions } from './extensionSettings';
 import { t } from './messages';
-import { SettingsEditorPane } from './settingsEditor';
+import { SettingsDialog } from './settingsDialog';
 import { settingsJsonSchema } from './settingItems';
 
-const SETTINGS_INPUT = 'settings';
 const DEFAULTS_INPUT = 'settings-defaults';
 
 /**
@@ -83,13 +83,20 @@ export const settingsModule: ShellModule = {
     const openDefaults = (): void => {
       contentPane.open({ id: DEFAULTS_INPUT, typeId: DEFAULTS_INPUT, label: t('defaultSettingsTitle') }, { preview: false });
     };
-    subscriptions.add(
-      services.get(IEditors).register({
-        id: 'settings.editor',
-        accepts: (input) => input.typeId === SETTINGS_INPUT,
-        create: (container) => new SettingsEditorPane(container, { settings, openJson: openJsonLogged, openDefaults, logger }),
-      }),
-    );
+    // What the panel opens goes in the content pane: the panel steps aside first.
+    const dialog = new SettingsDialog(dialogs, {
+      settings,
+      openJson: (key) => {
+        dialog.close();
+        openJsonLogged(key);
+      },
+      openDefaults: () => {
+        dialog.close();
+        openDefaults();
+      },
+      logger,
+    });
+    subscriptions.add({ dispose: () => dialog.close() });
     subscriptions.add(
       services.get(IEditors).register({
         id: 'settings.defaults',
@@ -98,12 +105,7 @@ export const settingsModule: ShellModule = {
       }),
     );
     /** `query` fills the search box (the extension's "open configuration" searches for its settings). */
-    const openUi = (query?: unknown): void => {
-      const tab = contentPane.open({ id: SETTINGS_INPUT, typeId: SETTINGS_INPUT, label: t('settingsTitle') }, { preview: false });
-      if (typeof query === 'string' && tab?.pane instanceof SettingsEditorPane) {
-        tab.pane.setQuery(query);
-      }
-    };
+    const openUi = (query?: unknown): void => dialog.show(typeof query === 'string' ? query : undefined);
 
     // settings.json gets the schema of everything declared, kept current as modules declare more.
     const fileMatch = [settingsFileGlob(settings.filePath)];
@@ -134,8 +136,9 @@ export const settingsModule: ShellModule = {
     gear.className = 'icon-button titlebar-button icon-gear';
     gear.title = t('openSettingsTooltip');
     gear.setAttribute('aria-label', t('openSettings'));
-    gear.addEventListener('click', openUi);
-    subscriptions.add(services.get(ILayout).addTitleBarItem('right', gear, 90));
+    gear.addEventListener('click', () => openUi());
+    // Between the app's name and the API provider.
+    subscriptions.add(services.get(ILayout).addTitleBarItem('left', gear, 11));
 
     subscriptions.add(
       commands.register('settings.open', openUi, { title: t('openSettings'), category: CommandCategory.preferences }),
@@ -152,6 +155,8 @@ export const settingsModule: ShellModule = {
         category: CommandCategory.preferences,
       }),
     );
+    // For modules whose block in the panel opens something else (the API providers' editor).
+    subscriptions.add(commands.register('settings.close', () => dialog.close()));
     subscriptions.add(services.get(IKeybindings).register({ key: 'ctrl+,', command: 'settings.open' }));
   },
 };

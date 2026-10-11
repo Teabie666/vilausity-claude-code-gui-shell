@@ -33,6 +33,8 @@ export interface CompatHostHandle {
   overlayChanged(values: Readonly<Record<string, unknown>>): void;
   /** Main reported a stored value another window changed. */
   storageChanged(scope: StorageScope, key: string, value: unknown): void;
+  /** One of the extension's UI texts in the display language (M3.5), or as it is. */
+  uiText<T extends string | undefined>(text: T): T;
 }
 
 class FileAppender implements OutputSink {
@@ -240,6 +242,7 @@ export function createCompatHost(options: {
 
   return {
     host,
+    uiText,
     settingsChanged(settings, keys) {
       userSettings = settings;
       settingsValues = { ...userSettings, ...overlay };

@@ -1,7 +1,8 @@
-import { defineMessages } from '../../platform/nls';
+import { defineMessages, defineNames } from '../../platform/nls';
 
 export const t = defineMessages('settings', {
   settingsTitle: 'Settings',
+  closeSettings: 'Close (Escape)',
   openSettings: 'Open Settings',
   openSettingsJson: 'Open User Settings (JSON)',
   openSettingsTooltip: 'Settings (Ctrl+,)',
@@ -23,4 +24,58 @@ export const t = defineMessages('settings', {
   defaultSettingsButton: 'Default Settings (JSON)',
   defaultSettingsHeader:
     'Every setting with its default value. Read only: to change one, copy it into settings.json (Open Settings (JSON)).\nsettings.json keeps only what you change, so new defaults still reach you after updates.',
+});
+
+/** Settings' titles in the display language, by key (see titles.ts); English is VS Code's derived title. */
+export const settingTitleName = defineNames('settingTitles', {
+  'vilaus.theme': 'Vilaus: Theme',
+  'workbench.fontFamily': 'Workbench: Font Family',
+  'workbench.fontSize': 'Workbench: Font Size',
+  'vilaus.translateExtensionUi': 'Vilaus: Translate Extension Ui',
+  'vilaus.conversations.alwaysShowTabs': 'Vilaus › Conversations: Always Show Tabs',
+  'vilaus.provider.default': 'Vilaus › Provider: Default',
+  'vilaus.extension.autoUpdate': 'Vilaus › Extension: Auto Update',
+  'vilaus.extension.version': 'Vilaus › Extension: Version',
+  'vilaus.extension.openVsxUrl': 'Vilaus › Extension: Open Vsx Url',
+
+  'editor.fontFamily': 'Editor: Font Family',
+  'editor.fontSize': 'Editor: Font Size',
+  'editor.fontWeight': 'Editor: Font Weight',
+  'editor.lineHeight': 'Editor: Line Height',
+  'editor.fontLigatures': 'Editor: Font Ligatures',
+  'editor.tabSize': 'Editor: Tab Size',
+  'editor.insertSpaces': 'Editor: Insert Spaces',
+  'editor.detectIndentation': 'Editor: Detect Indentation',
+  'editor.wordWrap': 'Editor: Word Wrap',
+  'editor.wordWrapColumn': 'Editor: Word Wrap Column',
+  'editor.lineNumbers': 'Editor: Line Numbers',
+  'editor.minimap.enabled': 'Editor › Minimap: Enabled',
+  'editor.renderWhitespace': 'Editor: Render Whitespace',
+  'editor.bracketPairColorization.enabled': 'Editor › Bracket Pair Colorization: Enabled',
+  'editor.cursorBlinking': 'Editor: Cursor Blinking',
+  'editor.smoothScrolling': 'Editor: Smooth Scrolling',
+  'editor.scrollBeyondLastLine': 'Editor: Scroll Beyond Last Line',
+  'diffEditor.fontFamily': 'Diff Editor: Font Family',
+  'diffEditor.fontSize': 'Diff Editor: Font Size',
+  'diffEditor.renderSideBySide': 'Diff Editor: Render Side By Side',
+  'diffEditor.useInlineViewWhenSpaceIsLimited': 'Diff Editor: Use Inline View When Space Is Limited',
+  'diffEditor.ignoreTrimWhitespace': 'Diff Editor: Ignore Trim Whitespace',
+  'diffEditor.wordWrap': 'Diff Editor: Word Wrap',
+
+  // anthropic.claude-code 2.1.282 (the ones not listed in the editor are in settings.json's hovers).
+  'claudeCode.allowDangerouslySkipPermissions': 'Claude Code: Allow Dangerously Skip Permissions',
+  'claudeCode.archiveInactiveSessions': 'Claude Code: Archive Inactive Sessions',
+  'claudeCode.attachOpenFile': 'Claude Code: Attach Open File',
+  'claudeCode.autosave': 'Claude Code: Autosave',
+  'claudeCode.claudeProcessWrapper': 'Claude Code: Claude Process Wrapper',
+  'claudeCode.continueAfterReload': 'Claude Code: Continue After Reload',
+  'claudeCode.disableLoginPrompt': 'Claude Code: Disable Login Prompt',
+  'claudeCode.environmentVariables': 'Claude Code: Environment Variables',
+  'claudeCode.focusView': 'Claude Code: Focus View',
+  'claudeCode.hideOnboarding': 'Claude Code: Hide Onboarding',
+  'claudeCode.initialPermissionMode': 'Claude Code: Initial Permission Mode',
+  'claudeCode.respectGitIgnore': 'Claude Code: Respect Git Ignore',
+  'claudeCode.scrollToBottomOnSend': 'Claude Code: Scroll To Bottom On Send',
+  'claudeCode.useCtrlEnterToSend': 'Claude Code: Use Ctrl Enter To Send',
+  'claudeCode.usePythonEnvironment': 'Claude Code: Use Python Environment',
 });

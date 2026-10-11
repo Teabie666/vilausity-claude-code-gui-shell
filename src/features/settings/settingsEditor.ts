@@ -18,8 +18,8 @@ import {
   matchesQuery,
   parseNumber,
   sameValue,
-  settingTitle,
 } from './settingItems';
+import { displayTitle } from './titles';
 
 /** Typing in a text field writes after this pause. */
 const WRITE_DELAY_MS = 500;
@@ -49,9 +49,14 @@ class SettingRow {
     element.dataset.key = key;
     this.element = element;
 
-    const title = doc.createElement('div');
+    const kind = controlKind(schema);
+    const description = descriptionOf(schema);
+    const describe = definition.showDescription === true && description !== '';
+    // A checkbox with no description to label it goes in front of the title, which labels it.
+    const inlineCheckbox = kind === 'boolean' && !describe;
+    const title = doc.createElement(inlineCheckbox ? 'label' : 'div');
     title.className = 'setting-title';
-    const { category, name } = settingTitle(key);
+    const { category, name } = displayTitle(key);
     if (category) {
       const categoryLabel = doc.createElement('span');
       categoryLabel.className = 'setting-category';
@@ -78,16 +83,27 @@ class SettingRow {
       element.appendChild(warning);
     }
 
-    const description = descriptionOf(schema);
-    const kind = controlKind(schema);
-    if (kind !== 'boolean' && description) {
+    if (kind !== 'boolean' && describe) {
       const text = doc.createElement('div');
       text.className = 'setting-description';
       text.textContent = description;
       element.appendChild(text);
     }
-    this.refreshControl = this.createControl(kind, description);
+    this.refreshControl = inlineCheckbox ? this.createInlineCheckbox(title) : this.createControl(kind, description, describe);
     this.refresh();
+  }
+
+  /** The checkbox in front of the title (a label) of a setting shown without its description. */
+  private createInlineCheckbox(title: HTMLElement): () => void {
+    const box = this.doc.createElement('input');
+    box.type = 'checkbox';
+    box.className = 'setting-checkbox';
+    box.addEventListener('change', () => this.write(box.checked));
+    title.prepend(box);
+    title.classList.add('setting-title-checkbox');
+    return () => {
+      box.checked = this.value === true;
+    };
   }
 
   /** The value or the modified state changed (here or in settings.json). */
@@ -108,7 +124,7 @@ class SettingRow {
     this.context.settings.update(key, stored).catch((error: unknown) => this.context.logger.error(`writing ${key} failed`, error));
   }
 
-  private createControl(kind: ReturnType<typeof controlKind>, description: string): () => void {
+  private createControl(kind: ReturnType<typeof controlKind>, description: string, describe: boolean): () => void {
     const { doc } = this;
     const { key, schema } = this.definition;
     switch (kind) {
@@ -140,21 +156,22 @@ class SettingRow {
         });
         const help = doc.createElement('div');
         help.className = 'setting-enum-description';
-        const describe = (): void => {
+        // What the chosen value does, for settings shown with their description.
+        const describeValue = (): void => {
           const index = Number(select.value);
-          const text = schema.markdownEnumDescriptions?.[index] ?? schema.enumDescriptions?.[index];
+          const text = describe ? (schema.markdownEnumDescriptions?.[index] ?? schema.enumDescriptions?.[index]) : undefined;
           help.textContent = text ?? '';
           help.hidden = !text;
         };
         select.addEventListener('change', () => {
-          describe();
+          describeValue();
           this.write(values[Number(select.value)]);
         });
         this.element.append(select, help);
         return () => {
           const index = values.findIndex((value) => sameValue(value, this.value));
           select.value = index >= 0 ? String(index) : '';
-          describe();
+          describeValue();
         };
       }
       case 'string':
@@ -282,6 +299,7 @@ export class SettingsEditorPane implements EditorPane {
     this.root.append(header, body);
     container.appendChild(this.root);
 
+    this.list.addEventListener('scroll', () => this.markCurrentSection());
     this.render();
     this.disposables.add(context.settings.onDidChangeDefinitions(() => this.scheduleRender()));
     this.disposables.add(context.settings.onDidChange((keys) => keys.forEach((key) => this.rows.get(key)?.refresh())));
@@ -371,6 +389,22 @@ export class SettingsEditorPane implements EditorPane {
     }
     this.applyFilter();
     this.list.scrollTop = scroll;
+    this.markCurrentSection();
+  }
+
+  /** Highlights the section at the top of the list in the table of contents (the last one at the bottom). */
+  private markCurrentSection(): void {
+    const sections = [...this.list.children] as HTMLElement[];
+    const entries = [...this.toc.children] as HTMLElement[];
+    const top = this.list.getBoundingClientRect().top;
+    const atBottom = this.list.scrollTop + this.list.clientHeight >= this.list.scrollHeight - 2;
+    let current = -1;
+    sections.forEach((section, index) => {
+      if (!section.hidden && (current < 0 || atBottom || section.getBoundingClientRect().top - top <= 8)) {
+        current = index;
+      }
+    });
+    entries.forEach((entry, index) => entry.classList.toggle('active', index === current));
   }
 
   private applyFilter(): void {
@@ -388,7 +422,7 @@ export class SettingsEditorPane implements EditorPane {
       }
       for (const element of section.querySelectorAll<HTMLElement>('.setting-item')) {
         const row = this.rows.get(element.dataset.key ?? '');
-        const match = row ? matchesQuery(row.definition, query) : false;
+        const match = row ? matchesQuery(row.definition, query, displayTitle(row.definition.key)) : false;
         element.hidden = !match;
         any ||= match;
         shown += match ? 1 : 0;
@@ -400,5 +434,6 @@ export class SettingsEditorPane implements EditorPane {
       }
     });
     this.count.textContent = query.trim() ? (shown > 0 ? t('settingsFound', shown) : t('noSettingsFound')) : '';
+    this.markCurrentSection();
   }
 }

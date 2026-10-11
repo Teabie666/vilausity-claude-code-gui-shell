@@ -664,6 +664,52 @@ body.resizing {
   color: var(--vscode-descriptionForeground);
 }
 
+/* ---- settings panel: over the middle of the window, after VS Code's modal editor ---- */
+
+.overlay-backdrop.overlay-backdrop-centered {
+  align-items: center;
+  padding: 32px;
+  /* VS Code's modal block; like the shadows, one of the few literal colors. */
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.overlay-box.settings-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(1000px, 100%);
+  max-width: none;
+  height: min(780px, 100%);
+  padding: 0;
+  overflow: hidden;
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent));
+  border-radius: var(--vscode-cornerRadius-large);
+}
+
+.settings-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: none;
+  height: 32px;
+  padding: 0 6px 0 12px;
+  color: var(--vscode-titleBar-activeForeground);
+  background: var(--vscode-titleBar-activeBackground);
+  border-bottom: 1px solid var(--vscode-titleBar-border, var(--vscode-panel-border, transparent));
+}
+
+.settings-dialog-title {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.settings-dialog-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 /* ---- settings editor (after VS Code's) -------------------------------------- */
 
 .settings-editor {
@@ -745,6 +791,13 @@ body.resizing {
 
 .settings-toc-item:hover {
   background: var(--vscode-list-hoverBackground);
+}
+
+/* The section at the top of the list (follows the scrolling). */
+.settings-toc-item.active {
+  font-weight: 600;
+  color: var(--vscode-list-inactiveSelectionForeground, inherit);
+  background: var(--vscode-list-inactiveSelectionBackground);
 }
 
 .settings-list {
@@ -908,6 +961,15 @@ body.resizing {
   border-radius: var(--vscode-cornerRadius-medium);
 }
 
+/* The API providers' block: the window's provider and the way to the providers' editor. */
+.settings-widget.providers-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
 .extension-version {
   display: flex;
   flex-direction: column;
@@ -960,6 +1022,16 @@ body.resizing {
 
 .setting-name {
   font-weight: 600;
+}
+
+/* A checkbox shown without its description: in front of the title, which labels it. */
+.setting-title-checkbox {
+  gap: 8px;
+  cursor: pointer;
+}
+
+.setting-title-checkbox .setting-checkbox {
+  flex: none;
 }
 
 .setting-reset {
