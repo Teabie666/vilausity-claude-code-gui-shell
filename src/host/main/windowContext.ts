@@ -113,6 +113,7 @@ export class WindowContext extends Disposable {
       new ShellWindow({
         theme: host.windowTheme(options.provider),
         preloadPath: path.join(env.appDir, 'preload.js'),
+        iconPath: path.join(env.appDir, 'icon.ico'),
         logger: this.logger,
         openDevTools: env.args.devtools,
         secondaryDisplay: env.args.secondaryDisplay,

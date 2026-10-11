@@ -1,4 +1,4 @@
-# Vilausity：围绕 Claude Code 的轻量工作台（图标待定）
+# Vilausity：围绕 Claude Code 的轻量工作台
 
 ## Context
 

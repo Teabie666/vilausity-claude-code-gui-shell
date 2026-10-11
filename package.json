@@ -14,7 +14,8 @@
     "test": "node scripts/test.mjs && node scripts/nls.mjs",
     "nls": "node scripts/nls.mjs",
     "smoke": "node tests/smoke.mjs",
-    "capture-themes": "node tools/theme-capture/run.mjs"
+    "capture-themes": "node tools/theme-capture/run.mjs",
+    "icons": "node scripts/icons.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

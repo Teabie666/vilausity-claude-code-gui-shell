@@ -16,6 +16,7 @@ npm test             # 单元测试（免费），之后顺带跑 npm run nls
 npm run nls          # 语言包检查：没翻译的条目（显示英文）和过时的条目（算失败）；-- --todo 输出待翻译的 JSON
 node tests/ui.mjs    # 界面测试：快捷键、标签页、主题、查找、重启恢复（不发消息，免费）
 npm run smoke        # 端到端：真实 Claude 会话发 3 条消息。条款只允许脚本走 API key，所以默认拒绝运行，M2 接上 API 模式；-- --subscription 强制用登录的账号
+npm run icons        # 重新生成 resources/icon/ 的图标（SVG + .ico），几何形状和颜色在 scripts/icons.mjs 里改
 run-dev.cmd          # 在资源管理器里双击：构建并启动（手动试用就用它）
 ```
 

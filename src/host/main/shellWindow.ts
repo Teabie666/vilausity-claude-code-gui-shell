@@ -57,6 +57,8 @@ const ALLOWED_PERMISSIONS = new Set([
 export interface ShellWindowOptions {
   readonly theme: ThemeData;
   readonly preloadPath: string;
+  /** The window icon (`<app>/icon.ico`), shown in the taskbar and Alt+Tab. */
+  readonly iconPath: string;
   readonly logger: ILogger;
   readonly openDevTools: boolean;
   /** Place the window on a non-primary display (`--secondary-display`). */
@@ -154,6 +156,7 @@ export class ShellWindow extends Disposable {
       minHeight: 400,
       show: false,
       title: 'Vilausity',
+      icon: options.iconPath,
       backgroundColor: options.theme.variables['vscode-editor-background'] ?? '#1f1f1f',
       titleBarStyle: 'hidden',
       titleBarOverlay: overlayColors(options.theme),
@@ -307,6 +310,7 @@ export class ShellWindow extends Disposable {
     return {
       minWidth: 400,
       minHeight: 300,
+      icon: this.options.iconPath,
       backgroundColor: this.theme.variables['vscode-editor-background'] ?? '#1f1f1f',
       titleBarStyle: 'hidden',
       titleBarOverlay: overlayColors(this.theme),
