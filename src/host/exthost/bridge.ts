@@ -93,8 +93,12 @@ const FONT_STYLES = `
  * The extension's own orange in the window's accent (anthropic.claude-code 2.1.296): it draws
  * the send button, the message input's focus ring, links, pills and badges in
  * `--app-claude-orange` and `--app-claude-clay-button-orange` (declared on html), with ivory
- * text on the send button. The accent variables come with the theme (platform/accent.ts);
- * without an accent they are unset and the fallbacks are the extension's own values.
+ * text on the send button. In the modes that act without asking (auto, bypassPermissions)
+ * it turns the send button and the input's focus ring red instead; those take the accent too,
+ * and the mode's button by the input says so instead, on a tint of its own: red for
+ * bypassPermissions, amber for auto (whose icon is amber too). The accent variables come with the
+ * theme (platform/accent.ts); without an accent they are unset and the fallbacks are the
+ * extension's own values.
  */
 const ACCENT_STYLES = `
 html {
@@ -103,6 +107,32 @@ html {
 }
 .sendButton_gGYT1w,
 .sendButton_UCAeZQ { color: var(--vilaus-accent-fill-foreground, var(--app-claude-ivory)); }
+.sendButton_gGYT1w:is([data-permission-mode=auto], [data-permission-mode=bypassPermissions]) {
+  color: var(--vilaus-accent-fill-foreground, var(--app-button-foreground));
+  background-color: var(--vilaus-accent-fill, var(--app-error-foreground));
+}
+.sendButton_gGYT1w:is([data-permission-mode=auto], [data-permission-mode=bypassPermissions]) :is(.sendIcon_gGYT1w, .stopIcon_gGYT1w) {
+  color: var(--vilaus-accent-fill-foreground, var(--app-button-foreground));
+}
+.inputContainer_cKsPxg:is([data-permission-mode=auto], [data-permission-mode=bypassPermissions]):focus-within {
+  --focus-ring-color: var(--vilaus-accent-line, var(--app-error-foreground));
+}
+.inputFooter_gGYT1w:has(> .sendButton_gGYT1w[data-permission-mode=bypassPermissions]) {
+  --vilaus-mode-color: var(--app-error-foreground);
+}
+.inputFooter_gGYT1w:has(> .sendButton_gGYT1w[data-permission-mode=auto]) {
+  --vilaus-mode-color: var(--vscode-editorWarning-foreground, #cca700);
+}
+.inputFooter_gGYT1w:has(> .sendButton_gGYT1w:is([data-permission-mode=auto], [data-permission-mode=bypassPermissions])) .container_8RAulQ > .footerButtonPrimary_gGYT1w {
+  padding-right: 8px;
+  background-color: color-mix(in srgb, var(--vilaus-mode-color) 20%, transparent);
+}
+.inputFooter_gGYT1w:has(> .sendButton_gGYT1w:is([data-permission-mode=auto], [data-permission-mode=bypassPermissions])) .container_8RAulQ > .footerButtonPrimary_gGYT1w:hover {
+  background-color: color-mix(in srgb, var(--vilaus-mode-color) 30%, transparent);
+}
+.inputFooter_gGYT1w:has(> .sendButton_gGYT1w:is([data-permission-mode=auto], [data-permission-mode=bypassPermissions])) .container_8RAulQ > .footerButtonPrimary_gGYT1w svg {
+  color: var(--vilaus-mode-color);
+}
 `;
 
 /**
