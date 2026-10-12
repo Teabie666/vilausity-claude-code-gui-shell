@@ -17,7 +17,14 @@ import { randomUUID } from 'node:crypto';
 import { CHAT_PANEL_VIEW_TYPE, type WebviewImpl, type WebviewMessageInterceptor } from '../../compat/vscode/webviews';
 import type { OsBackend } from '../../compat/vscode/host';
 import type { ILogger } from '../../platform/log';
-import type { SessionBusy, SessionRowHints, WebviewPageHints } from '../../platform/protocol';
+import type {
+  SessionBusy,
+  SessionRowHints,
+  ShellToWebviewControl,
+  StatusFilterHints,
+  UsageBarHints,
+  WebviewPageHints,
+} from '../../platform/protocol';
 import { formatComments, type PendingComments } from './comments';
 
 interface WebviewRequest {
@@ -150,7 +157,80 @@ const USAGE_STYLES = `
     color-mix(in oklab, var(--vscode-charts-yellow) calc(clamp(0, var(--vilaus-meter, 0) * 2, 1) * 100%), var(--vscode-charts-green))
   );
 }
+.resetText_8s5nuw[data-vilaus-reset] { font-size: 0; }
+.resetText_8s5nuw[data-vilaus-reset]::after {
+  content: attr(data-vilaus-reset);
+  font-size: var(--vilaus-reset-size);
+}
 `;
+
+/**
+ * A usage bar (anthropic.claude-code 2.1.296): its label ("Session (5hr)"...) and "Resets in 3h",
+ * which the page works out when it renders, rounded down to minutes, hours or days. The page
+ * script shows the time itself instead ("Resets 15:42"; styles above), from `usageResetsOf`.
+ */
+const USAGE_BARS: UsageBarHints = {
+  bar: '.usageBarContainer_8s5nuw',
+  label: '.usageLabel_8s5nuw',
+  reset: '.resetText_8s5nuw',
+};
+
+/** The bars' labels for the windows of `panel_usage_update` and of `get_usage_response`'s rate limits. */
+const WINDOW_LABELS: Readonly<Record<string, string>> = {
+  five_hour: 'Session (5hr)',
+  seven_day: 'Weekly (7 day)',
+  seven_day_sonnet: 'Weekly Sonnet',
+  seven_day_overage_included: 'Fable limit',
+};
+
+/**
+ * When each usage bar resets (epoch ms) by its label, from a message the extension posts to a
+ * page (anthropic.claude-code 2.1.296), or undefined when it carries none. Two carry them:
+ * - `panel_usage_update` (pushed after Claude's replies): `unifiedWindows.<window>.resetsAt`,
+ *   in seconds;
+ * - `get_usage_response` (the page asks): `usage.rate_limits.<window>.resets_at`, an ISO date,
+ *   and per model `rate_limits.model_scoped[]` with `display_name` ("Weekly <name>").
+ */
+export function usageResetsOf(message: unknown): Record<string, number> | undefined {
+  const inner = isRecord(message) && message.type === 'from-extension' ? message.message : undefined;
+  if (!isRecord(inner)) {
+    return undefined;
+  }
+  const resets: Record<string, number> = {};
+  const request = inner.type === 'request' && isRecord(inner.request) ? inner.request : undefined;
+  if (request?.type === 'panel_usage_update' && isRecord(request.unifiedWindows)) {
+    for (const [window, value] of Object.entries(request.unifiedWindows)) {
+      const label = WINDOW_LABELS[window];
+      if (label && isRecord(value) && typeof value.resetsAt === 'number' && Number.isFinite(value.resetsAt)) {
+        resets[label] = value.resetsAt * 1000;
+      }
+    }
+  }
+  const response = inner.type === 'response' && isRecord(inner.response) ? inner.response : undefined;
+  const limits = response?.type === 'get_usage_response' && isRecord(response.usage) ? response.usage.rate_limits : undefined;
+  if (isRecord(limits)) {
+    const add = (label: string, value: unknown): void => {
+      const at = isRecord(value) && typeof value.resets_at === 'string' ? Date.parse(value.resets_at) : Number.NaN;
+      if (Number.isFinite(at)) {
+        resets[label] = at;
+      }
+    };
+    for (const [window, value] of Object.entries(limits)) {
+      const label = WINDOW_LABELS[window];
+      if (label) {
+        add(label, value);
+      }
+    }
+    if (Array.isArray(limits.model_scoped)) {
+      for (const scoped of limits.model_scoped) {
+        if (isRecord(scoped) && typeof scoped.display_name === 'string') {
+          add(`Weekly ${scoped.display_name}`, scoped);
+        }
+      }
+    }
+  }
+  return Object.keys(resets).length > 0 ? resets : undefined;
+}
 
 /**
  * The conversation's text in the conversation font (`chat.fontFamily`, `chat.fontSize`): a
@@ -185,7 +265,7 @@ const CONVERSATION_STYLES = `
  * - "Account" and the address on one line, without the "Email" label;
  * - "New session" as a button;
  * - no Local / Web switch (remote sessions are not used from here);
- * - the "Active" toggle and the status filter's caret as one control;
+ * - the status filter as one drop-down that shows the Active count (see STATUS_FILTER);
  * - the search button as a search box taking the rest of its row (clicking it opens the
  *   page's own search field, as before); "New group" as just its icon, to leave it room.
  */
@@ -217,15 +297,27 @@ const SESSION_LIST_STYLES = `
 .sessionsBody_djirOA .segmented_OOQiHg { display: none; }
 
 .searchRowActions_OOQiHg { flex: 1 1 auto; flex-wrap: nowrap; }
-.activeFilterToggle_OOQiHg,
+.activeFilterToggle_OOQiHg { display: none; }
 .statusFilterMenuButton_OOQiHg {
   height: 24px;
+  gap: 4px;
   margin-left: 0;
+  padding: 0 4px 0 6px;
   border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
+  border-radius: 4px;
+  white-space: nowrap;
 }
-.activeFilterToggle_OOQiHg { order: -1; border-radius: 4px 0 0 4px; }
-.statusFilterMenuButton_OOQiHg { padding: 4px; border-left: none; border-radius: 0 4px 4px 0; }
-.statusFilterMenuButton_OOQiHg > .newGroupIcon_OOQiHg { display: none; }
+.statusFilterMenuButton_OOQiHg > .newGroupIcon_OOQiHg { order: 0; }
+.statusFilterMenuButton_OOQiHg[data-vilaus-label]::before { content: attr(data-vilaus-label); order: 1; }
+.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]::after {
+  content: attr(data-vilaus-needs-input);
+  order: 2;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 25%, transparent);
+  line-height: 16px;
+}
+.statusFilterMenuButton_OOQiHg > .statusFilterCaret_OOQiHg { order: 3; }
 
 .searchRowTail_OOQiHg { flex: 1 1 auto; min-width: 0; margin-left: 6px; }
 .searchRowTail_OOQiHg > .newGroupButton_OOQiHg:not(.searchToggleButton_OOQiHg) { gap: 0; padding: 4px; font-size: 0; }
@@ -243,6 +335,7 @@ const SESSION_LIST_STYLES = `
   color: var(--vscode-input-placeholderForeground);
 }
 .searchToggleButton_OOQiHg:hover { border-color: var(--vscode-focusBorder); }
+.searchToggleButton_OOQiHg > svg { flex-shrink: 0; }
 .searchToggleButton_OOQiHg::after {
   content: attr(aria-label);
   overflow: hidden;
@@ -256,6 +349,18 @@ const SESSION_LIST_STYLES = `
  * with its rename and archive buttons in `.sessionActions_OOQiHg`. The shell adds a delete
  * button next to them, in the same classes.
  */
+/**
+ * The session list's filters (anthropic.claude-code 2.1.296): "Active · N", a toggle that shows
+ * only sessions needing input, working or unread; and a button (a funnel and a caret) whose
+ * menu filters by status (needs input, working, completed) and by open tabs. The shell makes
+ * the second one drop-down: it shows the Active count and, while sessions wait for the user,
+ * how many (styles in SESSION_LIST_STYLES; the toggle itself is hidden).
+ */
+const STATUS_FILTER: StatusFilterHints = {
+  menuButton: '.statusFilterMenuButton_OOQiHg',
+  activeToggle: '.activeFilterToggle_OOQiHg',
+};
+
 const SESSION_ROWS: SessionRowHints = {
   row: 'button[id^="sessions-list-row-"]',
   idPrefix: 'sessions-list-row-',
@@ -393,7 +498,14 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
    * another process (another window, VS Code, the CLI), which the extension learns from the
    * records Claude Code keeps of its running sessions.
    */
-  observeToWebview(_webview: WebviewImpl, message: unknown): void {
+  observeToWebview(webview: WebviewImpl, message: unknown): void {
+    const resets = usageResetsOf(message);
+    if (resets) {
+      // To the page's script, which shows the bars' reset times to the minute.
+      const control: ShellToWebviewControl = { ccwControl: 'usageResets', resets };
+      void webview.postMessage(control);
+      return;
+    }
     const inner = isRecord(message) && message.type === 'from-extension' ? message.message : undefined;
     const request = isRecord(inner) && inner.type === 'request' && isRecord(inner.request) ? inner.request : undefined;
     if (request?.type !== 'session_states_update') {
@@ -408,6 +520,12 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     }
     if (Array.isArray(request.liveElsewhereSessions)) {
       this.elsewhereSessions = new Set(request.liveElsewhereSessions.flatMap(sessionIdOf));
+    }
+    // `sessions`: `{sessionId, state, title}`; waiting is the page's "needs input" (asking the user).
+    if (Array.isArray(request.sessions)) {
+      const count = request.sessions.filter((session) => isRecord(session) && session.state === 'waiting').length;
+      const control: ShellToWebviewControl = { ccwControl: 'needsInput', count };
+      void webview.postMessage(control);
     }
   }
 
@@ -438,6 +556,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
           untranslated: PAGE_CONTENT,
           styles: FONT_STYLES + ACCENT_STYLES + USAGE_STYLES + CONVERSATION_STYLES,
           meters: USAGE_METERS,
+          usageBars: USAGE_BARS,
         };
       case SESSION_LIST_VIEW_TYPE:
         return {
@@ -445,6 +564,8 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
           styles: FONT_STYLES + ACCENT_STYLES + USAGE_STYLES + SESSION_LIST_STYLES,
           meters: USAGE_METERS,
           sessionRows: SESSION_ROWS,
+          usageBars: USAGE_BARS,
+          statusFilter: STATUS_FILTER,
         };
       case PLAN_PREVIEW_VIEW_TYPE:
         return { untranslated: PLAN_PREVIEW_CONTENT };

@@ -7,6 +7,7 @@
  */
 
 import type { ExtensionTranslations, ThemeData, WebviewBootstrapData, WebviewDocument } from '../../platform/protocol';
+import { getUiLanguage, htmlLang } from '../../platform/nls';
 import { WEBVIEW_CSP_SOURCE } from '../../platform/webviewUrls';
 import { t } from './messages';
 
@@ -67,7 +68,15 @@ export class WebviewDocumentStore {
       // Only pages whose content the bridge knows are translated.
       translations: document.hints?.untranslated !== undefined ? this.getTranslations() : undefined,
       fontFaces: this.fontFaces || undefined,
-      labels: document.hints?.sessionRows ? { deleteSession: t('deleteSession') } : undefined,
+      labels:
+        document.hints?.sessionRows || document.hints?.usageBars || document.hints?.statusFilter
+          ? {
+              deleteSession: t('deleteSession'),
+              resetsAt: t('resetsAt'),
+              needsInput: t('needsInput'),
+              locale: htmlLang(getUiLanguage()),
+            }
+          : undefined,
     };
     return injectBootstrap(allowShellFonts(document.html), this.bootstrapSource, data);
   }

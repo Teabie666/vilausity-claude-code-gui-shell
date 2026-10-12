@@ -145,7 +145,7 @@ describe('WebviewDocumentStore', () => {
     const sessionRows = { row: 'button', idPrefix: 'row-', name: '.name', actions: '.actions', buttonClass: 'b', iconClass: 'i' };
     store.set({ ...makeDoc('list', '<html><head></head></html>', []), hints: { sessionRows } });
     store.set(makeDoc('other', '<html><head></head></html>', []));
-    assert.ok(store.render('list')!.includes('"labels":{"deleteSession":"Delete session"}'));
+    assert.ok(store.render('list')!.includes('"labels":{"deleteSession":"Delete session","resetsAt":"Resets {0}","needsInput":"Needs input · {0}","locale":"en"}'));
     assert.ok(!store.render('other')!.includes('labels'));
   });
 

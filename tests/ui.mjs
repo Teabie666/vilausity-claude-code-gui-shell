@@ -1510,7 +1510,7 @@ await step('first run: no extension, no Git -> install from Open VSX without a r
   }
 });
 
-await step('the session list deletes a session: its row has a delete button that asks first, then the files are gone', async () => {
+await step('the session list: the filters are one drop-down, usage resets show the time, and a row deletes its session after asking', async () => {
   // An instance of its own, whose Claude Code folder holds one session of its workspace.
   const own = path.join(runDir, 'delete-session');
   const ownData = path.join(own, 'data');
@@ -1556,6 +1556,30 @@ await step('the session list deletes a session: its row has a delete button that
         if (frame.url().startsWith('ccw://wv') && (await frame.locator(rowSelector).count().catch(() => 0)) === 1) return frame;
       }
     }, 30_000, 'the session in the list');
+    // One drop-down: the status filter's button carries the Active count; the toggle is hidden.
+    const filter = list.locator('.statusFilterMenuButton_OOQiHg[data-vilaus-label="Active · 0"]');
+    await filter.waitFor({ timeout: 5000 });
+    if (await list.locator('.activeFilterToggle_OOQiHg').isVisible()) throw new Error('the Active toggle shows');
+    // A usage bar as the extension draws one (no account is signed in here), and its reset time
+    // as the bridge would pass it on: the bar shows the time instead of "in 3h".
+    const resetsAt = Date.now() + 3 * 3600_000 + 25 * 60_000;
+    await list.evaluate(() => {
+      const bar = document.createElement('div');
+      bar.className = 'usageBarContainer_8s5nuw';
+      bar.innerHTML =
+        '<div class="usageBarHeader_8s5nuw"><span class="usageLabel_8s5nuw">Session (5hr)</span></div><span class="resetText_8s5nuw">Resets in 3h</span>';
+      document.body.appendChild(bar);
+    });
+    await otherPage.evaluate((at) => {
+      for (const frame of document.querySelectorAll('iframe')) frame.contentWindow?.postMessage({ ccwControl: 'usageResets', resets: { 'Session (5hr)': at } }, '*');
+    }, resetsAt);
+    const time = new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(resetsAt);
+    await waitFor(
+      async () => (await list.locator('.resetText_8s5nuw').evaluate((element) => getComputedStyle(element, '::after').content)).includes(time),
+      5000,
+      `the reset time ${time}`,
+    );
+
     const row = list.locator(rowSelector);
     await row.hover();
     await row.locator('.vilaus-delete-session[title="Delete session"]').click();

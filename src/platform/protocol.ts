@@ -181,6 +181,23 @@ export interface WebviewPageHints {
   readonly meters?: string;
   /** The rows of a session list, where the shell adds its own row actions (delete). */
   readonly sessionRows?: SessionRowHints;
+  /** The account's usage bars, whose reset time the shell shows to the minute. */
+  readonly usageBars?: UsageBarHints;
+  /** The session list's status filter, which the shell makes one drop-down with the "Active" count. */
+  readonly statusFilter?: StatusFilterHints;
+}
+
+/** CSS selectors of the session list's status filter button and of its "Active · N" toggle. */
+export interface StatusFilterHints {
+  readonly menuButton: string;
+  readonly activeToggle: string;
+}
+
+/** CSS selectors of a usage bar, and within it of its label and its "Resets in 3h" text. */
+export interface UsageBarHints {
+  readonly bar: string;
+  readonly label: string;
+  readonly reset: string;
 }
 
 /** How to find a session list's rows and their action buttons. */
@@ -200,6 +217,12 @@ export interface SessionRowHints {
 /** The shell's text for what it adds to the extension's pages, in the display language. */
 export interface WebviewLabels {
   readonly deleteSession: string;
+  /** A usage bar's reset time; `{0}` is the time, e.g. "tomorrow 09:00". */
+  readonly resetsAt: string;
+  /** How many sessions wait for the user; `{0}` is the count. */
+  readonly needsInput: string;
+  /** The display language as a BCP 47 tag, for formatting times. */
+  readonly locale: string;
 }
 
 /** Why a session cannot be deleted now: open in this window, or held by another process. */
@@ -912,4 +935,8 @@ export type ShellToWebviewControl =
   /** The comment blocks to show above the input (pages with `commentsAnchor` only); null: none. */
   | { readonly ccwControl: 'comments'; readonly view: CommentsViewDto | null }
   /** Translate the extension's UI text with this table from now on; null: show it as it was. */
-  | { readonly ccwControl: 'translations'; readonly translations: ExtensionTranslations | null };
+  | { readonly ccwControl: 'translations'; readonly translations: ExtensionTranslations | null }
+  /** When each usage bar resets (epoch ms), by the bar's label as the extension writes it (from the bridge). */
+  | { readonly ccwControl: 'usageResets'; readonly resets: Readonly<Record<string, number>> }
+  /** How many sessions wait for the user (from the bridge). */
+  | { readonly ccwControl: 'needsInput'; readonly count: number };

@@ -79,6 +79,18 @@ export class PageTranslator {
     }
   }
 
+  /** An element's text as the page wrote it, before any translation. */
+  originalText(element: Element): string {
+    let text = '';
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const replaced = this.texts.get(node as Text);
+      const data = (node as Text).data;
+      text += replaced?.shown === data ? replaced.original : data;
+    }
+    return text;
+  }
+
   private onMutations(records: readonly MutationRecord[]): void {
     for (const record of records) {
       const target = record.target;

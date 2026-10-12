@@ -5,6 +5,10 @@ import { defineMessages } from '../../platform/nls';
 export const t = defineMessages('main', {
   /** The button the shell adds to each row of the session list (sentence case, like the page's own). */
   deleteSession: 'Delete session',
+  /** A usage bar's reset time, to the minute ({0}: "15:42", "tomorrow 09:00", "Fri 09:00"...). */
+  resetsAt: 'Resets {0}',
+  /** On the session list's filter button while sessions wait for the user (like the page's "Active · 3"). */
+  needsInput: 'Needs input · {0}',
   undo: 'Undo',
   redo: 'Redo',
   cut: 'Cut',

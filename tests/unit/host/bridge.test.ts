@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ClaudeWebviewBridge, conversationSessionId, describeShape } from '../../../src/host/exthost/bridge';
+import { ClaudeWebviewBridge, conversationSessionId, describeShape, usageResetsOf } from '../../../src/host/exthost/bridge';
 import { CommentStore } from '../../../src/host/exthost/comments';
 import { NullLogger } from '../../../src/platform/log';
 import type { WebviewImpl } from '../../../src/compat/vscode/webviews';
@@ -125,6 +125,17 @@ describe('ClaudeWebviewBridge and sessions', () => {
     assert.equal(bridge.sessionBusy('b'), undefined);
   });
 
+  test('tells the page how many sessions wait for the user', () => {
+    const { bridge, webview, messages } = makeBridge(true);
+    const sessions = [
+      { sessionId: 'a', state: 'waiting', title: 'A' },
+      { sessionId: 'b', state: 'running', title: 'B' },
+      { sessionId: 'c', state: 'waiting', title: 'C' },
+    ];
+    bridge.observeToWebview(webview, statesUpdate({ sessions }));
+    assert.deepEqual(messages, [{ ccwControl: 'needsInput', count: 2 }]);
+  });
+
   test("asks the extension's session pages to list the sessions again", () => {
     const { bridge } = makeBridge(true);
     const list = pageOf('claudeVSCodeSessionsList');
@@ -146,6 +157,67 @@ describe('ClaudeWebviewBridge and sessions', () => {
     const rows = bridge.pageHints(pageOf('claudeVSCodeSessionsList').webview)?.sessionRows;
     assert.equal(rows?.idPrefix, 'sessions-list-row-');
     assert.equal(bridge.pageHints(pageOf('claudeVSCodePanel').webview)?.sessionRows, undefined);
+  });
+});
+
+describe('usage reset times', () => {
+  const fromExtension = (message: unknown): unknown => ({ type: 'from-extension', message });
+
+  test('come from panel_usage_update, in seconds, by the bar each window shows as', () => {
+    const update = fromExtension({
+      type: 'request',
+      channelId: '',
+      requestId: 'r',
+      request: {
+        type: 'panel_usage_update',
+        unifiedWindows: {
+          five_hour: { utilization: 0.4, resetsAt: 1_791_800_000 },
+          seven_day: { utilization: 0.1, resetsAt: 1_792_300_000 },
+          seven_day_overage_included: null,
+          some_new_window: { utilization: 0.2, resetsAt: 1 },
+        },
+      },
+    });
+    assert.deepEqual(usageResetsOf(update), { 'Session (5hr)': 1_791_800_000_000, 'Weekly (7 day)': 1_792_300_000_000 });
+  });
+
+  test("come from get_usage_response's rate limits, as ISO dates, with the per-model ones", () => {
+    const response = fromExtension({
+      type: 'response',
+      requestId: 'r',
+      response: {
+        type: 'get_usage_response',
+        usage: {
+          rate_limits: {
+            five_hour: { utilization: 40, resets_at: '2026-10-12T15:42:00Z' },
+            seven_day: { utilization: 10, resets_at: null },
+            seven_day_sonnet: { utilization: 5, resets_at: '2026-10-15T09:00:00Z' },
+            model_scoped: [{ display_name: 'Opus', utilization: 30, resets_at: '2026-10-16T09:00:00Z' }],
+          },
+        },
+      },
+    });
+    assert.deepEqual(usageResetsOf(response), {
+      'Session (5hr)': Date.parse('2026-10-12T15:42:00Z'),
+      'Weekly Sonnet': Date.parse('2026-10-15T09:00:00Z'),
+      'Weekly Opus': Date.parse('2026-10-16T09:00:00Z'),
+    });
+  });
+
+  test('other messages carry none', () => {
+    assert.equal(usageResetsOf(fromExtension({ type: 'request', request: { type: 'session_store_changed' } })), undefined);
+    assert.equal(usageResetsOf(fromExtension({ type: 'response', response: { type: 'get_usage_response', error: 'x' } })), undefined);
+    assert.equal(usageResetsOf({ type: 'io_message' }), undefined);
+  });
+
+  test("the bridge hands them to the page's script", () => {
+    const { bridge, webview, messages } = makeBridge(true);
+    const update = fromExtension({
+      type: 'request',
+      request: { type: 'panel_usage_update', unifiedWindows: { five_hour: { utilization: 0.4, resetsAt: 1_791_800_000 } } },
+    });
+    bridge.observeToWebview(webview, update);
+    assert.deepEqual(messages, [{ ccwControl: 'usageResets', resets: { 'Session (5hr)': 1_791_800_000_000 } }]);
   });
 });
 

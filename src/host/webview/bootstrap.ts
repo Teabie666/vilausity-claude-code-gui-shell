@@ -16,7 +16,9 @@ import { CommentsHost } from './comments';
 import { DEFAULT_WEBVIEW_STYLES } from './defaultStyles';
 import { InPageFinder } from './find';
 import { watchSessionRows } from './sessionRows';
+import { StatusFilter } from './statusFilter';
 import { PageTranslator } from './translate';
+import { UsageResets } from './usageResets';
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
@@ -101,6 +103,31 @@ const THEME_CLASSES = [
   const untranslated = data.hints?.untranslated;
   const translator = untranslated !== undefined ? new PageTranslator(untranslated) : undefined;
   translator?.set(data.translations);
+  // The session list's filters as one drop-down; the count may come before the body.
+  const statusFilterHints = data.hints?.statusFilter;
+  let statusFilter: StatusFilter | undefined;
+  let pendingNeedsInput: number | undefined;
+  if (statusFilterHints && labels) {
+    onDomReady(() => {
+      statusFilter = new StatusFilter(statusFilterHints, labels.needsInput);
+      if (pendingNeedsInput !== undefined) {
+        statusFilter.setNeedsInput(pendingNeedsInput);
+      }
+    });
+  }
+  // Pages with usage bars show their reset times to the minute; the times may come before the body.
+  const usageBars = data.hints?.usageBars;
+  let usageResets: UsageResets | undefined;
+  let pendingResets: Readonly<Record<string, number>> | undefined;
+  if (usageBars && labels) {
+    onDomReady(() => {
+      const originalText = (element: Element): string => translator?.originalText(element) ?? element.textContent ?? '';
+      usageResets = new UsageResets(usageBars, labels.resetsAt, labels.locale, originalText);
+      if (pendingResets) {
+        usageResets.set(pendingResets);
+      }
+    });
+  }
 
   // Control messages from the shell are consumed here and never reach the extension.
   window.addEventListener(
@@ -130,6 +157,20 @@ const THEME_CLASSES = [
         }
         case 'translations':
           translator?.set(control.translations ?? undefined);
+          break;
+        case 'usageResets':
+          if (usageResets) {
+            usageResets.set(control.resets);
+          } else {
+            pendingResets = control.resets;
+          }
+          break;
+        case 'needsInput':
+          if (statusFilter) {
+            statusFilter.setNeedsInput(control.count);
+          } else {
+            pendingNeedsInput = control.count;
+          }
           break;
       }
     },

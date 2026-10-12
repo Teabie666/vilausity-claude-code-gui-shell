@@ -102,6 +102,13 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **快速访问**（`core/quickAccess.ts`，照 VS Code 的 quick access）：一个输入框，开头的字符决定交给谁：`>` 是命令（`features/commandPalette`），没有前缀是搜索。打开时盖在标题栏的搜索框上（跟 VS Code 开着命令中心时一样，所有快速输入都在这个位置），看起来是搜索框变大成了输入框、下面接着列表；避开两边的窗口按钮，不能拖动窗口。搜索由各模块登记的分组拼成（`registerSearchContributor`，分组的顺序可以随输入变）：对话（`features/sessionSearch`）、新建对话（`features/conversations`）、文件（`features/quickOpen`；输入像文件名或路径时排到最前，Ctrl+P、文件名、回车照样打开文件）、文件夹（`features/workspace`；没输入时还有打开文件夹、最近的文件夹、以管理员身份打开）、命令（没输入时：显示所有命令，加最近用过的两个）、"在所有文件夹中搜索"。异步的分组按 id 保留上一次的结果直到新结果回来，打字时列表不闪。命令面板照 VS Code 把最近用过的命令排在前面（在命令面板和搜索里执行的才算，存在 localStorage，各窗口共用）。快捷键：Ctrl+P / Ctrl+E 搜索，Ctrl+Shift+P / F1 命令，Ctrl+R 最近的文件夹。
 - **搜对话**：主进程读 Claude Code 的会话记录（`~/.claude/projects/<文件夹>/<会话 id>.jsonl`，`CLAUDE_CONFIG_DIR` 改了就跟着改；测试用 `VILAUS_SESSIONS_DIR` 指到别处）。这是 CLI 自己的存储格式，不是接口，所以只读、容错：不认识的行和字段跳过。只看标题（用户起的名字 > 旁路文件 `<会话 id>/custom-title.json` > 生成的标题 > 第一句话）、用户打的字和 Claude 的回复（不含工具输出、思考、IDE 和 CLI 附加的上下文），以及 Claude 读过和改过的文件。读取在主进程的 worker 线程里（`host/main/sessionSearch.ts`、`sessionSearchWorker.ts`，解析和匹配是纯函数 `sessionTranscripts.ts`），按文件大小和修改时间缓存，3 秒内的搜索直接用缓存。匹配不分大小写、整串子串匹配（中文直接能搜）：标题、文件、内容依次排，同类按时间新的在前。默认只搜当前文件夹的会话（按记录里的 `cwd`）。打开结果走主进程 `sessions.open`：找到（或打开）那个文件夹的窗口，再 `conversation.open`。
 
+## 会话列表里壳加的东西（M5.5）
+
+都是页面脚本照 bridge 的页面提示做的（对照插件 2.1.296）；插件改了类名就退回插件原样。数据靠 bridge 旁听插件发给页面的消息（`observeToWebview`），再用控制消息（`ShellToWebviewControl`）交给页面脚本。页面上的显示都走 `data-vilaus-*` 属性加 bridge 的样式，React 管的内容不动。
+
+- **用量的重置时间**（`usageBars`、`host/webview/usageResets.ts`）：插件只写"Resets in 3h"。bridge 从 `panel_usage_update`（`unifiedWindows.<窗口>.resetsAt`，秒）和 `get_usage_response`（`rate_limits.<窗口>.resets_at`，ISO 日期；`model_scoped[]` 按模型）里取出精确时刻，按用量条的标签（"Session (5hr)"等，`usageResetsOf`）交给页面；页面按标签的英文原文（汉化记着原文）对上，显示"15:42 重置""明天 09:00 重置"。
+- **筛选下拉**（`statusFilter`、`host/webview/statusFilter.ts`）：插件的筛选按钮写上"活跃 · N"（从藏起来的"活跃"开关抄字），有会话在等用户时加"需要输入 · N"（bridge 数 `session_states_update.sessions` 里 `state` 是 `waiting` 的）。
+
 ## 删除会话（M5.5）
 
 插件的会话列表只能归档，删除是壳加的（对照插件 2.1.296）。
