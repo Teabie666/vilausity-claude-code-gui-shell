@@ -446,6 +446,7 @@ export class SettingsEditorPane implements EditorPane {
         const keywords = element.dataset.keywords ?? '';
         element.hidden = !words.every((word) => keywords.includes(word));
         any ||= !element.hidden;
+        shown += element.hidden ? 0 : 1;
       }
       for (const element of section.querySelectorAll<HTMLElement>('.setting-item')) {
         const row = this.rows.get(element.dataset.key ?? '');

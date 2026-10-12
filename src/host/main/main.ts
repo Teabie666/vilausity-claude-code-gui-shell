@@ -2,20 +2,25 @@
  * Electron main entry point. Keeps to startup order only; the real work is in ShellApp.
  */
 
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { app, Menu } from 'electron';
+import { parse } from 'jsonc-parser';
 import { setUnexpectedErrorHandler } from '../../platform/event';
 import { targetPlatformOf } from '../../platform/extensionUpdates';
 import { Logger, LogLevel, NullLogger, parseLogLevel } from '../../platform/log';
+import { LANGUAGE_SETTING, resolveUiLanguage, setUiLanguage } from '../../platform/nls';
+import { languagePack } from '../../nls/packs';
 import { FileLogSink } from '../node/fileLogSink';
 import { createAppPaths, pruneOldLogs, type AppPaths } from './appPaths';
 import { registerCcwSchemePrivileges } from './ccwProtocol';
 import { HELP_TEXT, parseCliArgs, userArguments, type CliArgs } from './cli';
+import { administratorInstanceArgs, isElevated, startElevated } from './elevation';
+import { ExplorerMenu, explorerMenuRoot } from './explorerMenu';
 import { locateClaudeExtension } from './extensionLocator';
-import { isElevated } from './elevation';
 import { ExtensionStore } from './extensionStore';
 import { shareSafeStorageKey } from './safeStorageKey';
-import { ShellApp } from './shellApp';
+import { explorerMenuLabels, explorerMenuTarget, ShellApp } from './shellApp';
 
 /** What a second start hands to the running instance (Electron's `additionalData`). */
 interface SecondStart {
@@ -45,6 +50,28 @@ function versionText(args: CliArgs, paths: AppPaths): string {
   ].join('\n');
 }
 
+/**
+ * The installer's option: adds (or removes) File Explorer's entries, labeled in the display
+ * language the settings ask for (or the system's), and quits.
+ */
+async function changeExplorerMenu(register: boolean, settingsFile: string): Promise<void> {
+  await app.whenReady();
+  const menu = new ExplorerMenu(explorerMenuRoot(process.env), explorerMenuTarget());
+  if (!register) {
+    await menu.unregister();
+    return;
+  }
+  let setting: unknown;
+  try {
+    setting = (parse(fs.readFileSync(settingsFile, 'utf8')) as Record<string, unknown> | undefined)?.[LANGUAGE_SETTING];
+  } catch {
+    // No settings yet: the system's language.
+  }
+  const language = resolveUiLanguage(setting, app.getPreferredSystemLanguages());
+  setUiLanguage(language, languagePack(language));
+  await menu.register(explorerMenuLabels());
+}
+
 function main(): void {
   const argv = userArguments(process.argv, app.isPackaged);
   const args = parseCliArgs(argv);
@@ -53,6 +80,25 @@ function main(): void {
   if (args.help || args.version) {
     process.stdout.write(args.help ? HELP_TEXT : versionText(args, paths));
     app.exit(0);
+    return;
+  }
+  // File Explorer's "(Administrator)" entry: Windows asks, the administrator instance opens the
+  // folder (or the running one takes it), and this start has nothing more to do.
+  if (args.admin && !paths.elevated) {
+    const appPath = app.isPackaged ? undefined : app.getAppPath();
+    void startElevated(process.execPath, administratorInstanceArgs(args.folder ?? process.cwd(), appPath, args.userDataDir)).finally(
+      () => app.exit(0),
+    );
+    return;
+  }
+  if (args.registerContextMenu || args.unregisterContextMenu) {
+    void changeExplorerMenu(args.registerContextMenu, paths.settingsFile).then(
+      () => app.exit(0),
+      (error: unknown) => {
+        process.stderr.write(`${String(error)}\n`);
+        app.exit(1);
+      },
+    );
     return;
   }
 

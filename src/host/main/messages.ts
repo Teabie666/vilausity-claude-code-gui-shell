@@ -9,6 +9,9 @@ export const t = defineMessages('main', {
   resetsAt: 'Resets {0}',
   /** On the session list's filter button while sessions wait for the user (like the page's "Active · 3"). */
   needsInput: 'Needs input · {0}',
+  /** File Explorer's context menu, on a folder, a folder's background or a drive. */
+  explorerOpen: 'Open with Vilausity',
+  explorerOpenAsAdministrator: 'Open with Vilausity (Administrator)',
   undo: 'Undo',
   redo: 'Redo',
   cut: 'Cut',

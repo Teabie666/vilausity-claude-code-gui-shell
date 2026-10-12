@@ -4,6 +4,7 @@
  * so it runs next to the normal one; settings, providers and extensions are shared.
  */
 
+import { execFile } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -58,4 +59,29 @@ export function elevatedStartScript(executable: string, args: readonly string[])
   const literal = (text: string): string => `'${text.replace(/'/g, "''")}'`;
   const commandLine = args.map(quoteWindowsArgument).join(' ');
   return `Start-Process -FilePath ${literal(executable)} -ArgumentList ${literal(commandLine)} -Verb RunAs`;
+}
+
+/**
+ * The arguments of the administrator instance on `folder`: in development the app's folder
+ * first (the executable is electron.exe), and the data folder when one was given.
+ */
+export function administratorInstanceArgs(folder: string, appPath: string | undefined, userDataDir: string | undefined): string[] {
+  return [...(appPath ? [appPath] : []), folder, ...(userDataDir ? ['--user-data-dir', userDataDir] : [])];
+}
+
+/**
+ * Starts `executable` with `args` elevated; Windows asks the user first (UAC). Resolves once
+ * Windows took the request, or with why not (declined at the prompt, most likely).
+ */
+export function startElevated(executable: string, args: readonly string[]): Promise<{ started: boolean; detail?: string }> {
+  const script = elevatedStartScript(executable, args);
+  const powershell = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  return new Promise((resolve) => {
+    execFile(
+      powershell,
+      ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+      { windowsHide: true },
+      (error, _stdout, stderr) => resolve(error ? { started: false, detail: String(stderr).trim() || error.message } : { started: true }),
+    );
+  });
 }

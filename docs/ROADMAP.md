@@ -13,7 +13,7 @@
 
 每个阶段结束都要做：typecheck、`npm test`、`node tests/ui.mjs`（动了 bridge / compat 再跑 `npm run smoke`）；看最新一次的 `shim-unimplemented.log`；确认没往 `C:\Program Files\VSCodium` 写任何东西、git 里没有密钥；用屏幕工具截图，跟 VSCodium 里的同一界面对比；用 `run-dev.cmd` 试用。
 
-测试现状（2026-10-12）：单元 321/321，语言包 0 条缺译（插件界面对照表 1748 条），界面 49/49，smoke 13/13（M4 第①块后跑的；之后没动 bridge / compat）。
+测试现状（2026-10-12，M5.5 第三块做完）：单元 344/344，语言包 0 条缺译（插件界面对照表 1748 条），界面 51/51，smoke 13/13（用 DeepSeek 接口跑的，第二块动 bridge 之后）。
 
 ## M0 技术验证：完成（2026-10-08）
 
@@ -262,9 +262,10 @@ Vilausity 多数时候拿来做简单的电脑任务，工作流基本在单个�
 
 ### 第三块：资源管理器右键菜单
 
-- [ ] 右键菜单（2026-10-12 提的）：在资源管理器里右键文件夹、文件夹空白处、驱动器，有"用 Vilausity 打开"和"用 Vilausity 打开（管理员）"，把那个路径当工作区打开。不强加给用户：安装时可选（M6 的安装包里加复选框，默认不勾），设置里也有开关。
-  - 做法：写当前用户的注册表（`HKCU\Software\Classes` 下的 `Directory\shell`、`Directory\Background\shell`、`Drive\shell`），不需要管理员权限，只影响当前用户。注册和删除的代码在程序里，设置开关和安装包都调它（命令行 `--register-context-menu` / `--unregister-context-menu`，卸载时删）。开关的状态以注册表为准，不存 settings.json，设置里做成一个小部件（跟 API 接口分区一样）。程序换了位置（重装到别处）时，启动时只修正已有条目指向的路径，不会自己添加。
-  - 管理员那项：带盾牌图标（`HasLUAShield`），命令行是 `Vilausity.exe --admin <路径>`。程序收到 `--admin` 时走现有的"以管理员身份打开此文件夹"（Windows 弹 UAC 确认，再起管理员实例），自己不开窗口；已经有普通实例在跑时，参数照常转给它处理。
+- [x] 右键菜单（2026-10-12 提的）：在资源管理器里右键文件夹、文件夹空白处、驱动器，有"用 Vilausity 打开"和"用 Vilausity 打开（管理员）"，把那个路径当工作区打开。不强加给用户：安装时可选（M6 的安装包里加复选框，默认不勾），设置里也有开关。做法见 ARCHITECTURE"资源管理器右键菜单"。
+  - 做法：写当前用户的注册表（`HKCU\Software\Classes` 下的 `Directory\shell`、`Directory\Background\shell`、`Drive\shell`），不需要管理员权限，只影响当前用户。注册和删除的代码在程序里，设置开关和安装包都调它（命令行 `--register-context-menu` / `--unregister-context-menu`，卸载时删）。开关的状态以注册表为准，不存 settings.json，设置"工作台"里一个开关（"文件资源管理器: 右键菜单"）。安装版启动时，菜单在就按当前路径和语言重写，不会自己添加。
+  - 管理员那项：带盾牌图标（`HasLUAShield`），命令行是 `Vilausity.exe --admin <路径>`。程序收到 `--admin` 时走现有的"以管理员身份打开此文件夹"（Windows 弹 UAC 确认，再起管理员实例），自己不开窗口、直接退出；管理员实例已经在跑时，由它的单实例锁接过去。
+  - 测试：单元 +7（命令、.reg 文本、真的写进测试键再读回来删掉、`--admin` 和驱动器根目录的参数）；界面 +1（设置开关加上再去掉；`--register-context-menu` / `--unregister-context-menu`）。UAC 那一步没有自动测试
   - Windows 11 的新右键菜单只收带签名的 MSIX 包注册的项，PLAN 定了不做代码签名，所以 Win11 默认设置下这两项在"显示更多选项"里；开了经典右键菜单的电脑上直接显示在第一层。
   - 开发时程序是 electron.exe，命令行要带上程序目录（跟"为此接口创建快捷方式"一样）。测试用环境变量把注册表根路径改到测试专用的键下，不碰真实的右键菜单。
 

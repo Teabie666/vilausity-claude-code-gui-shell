@@ -995,12 +995,23 @@ body.resizing {
   color: var(--vscode-descriptionForeground);
 }
 
-.setting-item {
+.setting-item,
+.settings-widget.settings-widget-row {
   padding: 8px 12px 10px 14px;
   border-left: 2px solid transparent;
 }
 
-.setting-item:hover {
+/* A widget laid out as a setting (features/explorerMenu): no box around it. */
+.settings-widget.settings-widget-row {
+  margin: 0;
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 0;
+}
+
+.setting-item:hover,
+.settings-widget.settings-widget-row:hover {
   background: var(--vscode-settings-rowHoverBackground);
 }
 

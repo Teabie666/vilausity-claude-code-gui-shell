@@ -57,6 +57,10 @@ writeFileSync(
   'utf8',
 );
 env.VILAUS_SESSIONS_DIR = sessionsDir;
+// File Explorer's menu entries go under a key of their own, not into the real menu.
+const reg = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'reg.exe');
+const registryTestKey = `HKCU\\Software\\Vilausity-test\\ui-${Date.now()}`;
+env.VILAUS_REGISTRY_ROOT = `${registryTestKey}\\Classes`;
 
 const results = [];
 async function step(name, fn) {
@@ -818,6 +822,38 @@ await step('Diff Editor: Font Size applies to diffs only', async () => {
   const { 'diffEditor.fontSize': _removed, ...rest } = readSettings();
   writeFileSync(settingsFile, JSON.stringify(rest, null, 2), 'utf8');
   return `diff ${diffSize}, editor ${editorSize}`;
+});
+
+await step("File Explorer's context menu: the switch in the settings adds the entries and removes them", async () => {
+  const registered = () => {
+    try {
+      execFileSync(reg, ['query', `${env.VILAUS_REGISTRY_ROOT}\\Directory\\shell\\Vilausity\\command`, '/ve'], { stdio: 'ignore', windowsHide: true });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  await press('Control+,');
+  await page.locator('.settings-dialog .settings-editor').waitFor({ timeout: 10_000 });
+  await page.locator('.settings-dialog .settings-search').fill('context menu');
+  const widget = page.locator('.settings-dialog .settings-widget[data-widget="explorerMenu.switch"]');
+  await widget.waitFor({ timeout: 5000 });
+  const box = widget.locator('.setting-checkbox');
+  await waitFor(async () => !(await box.isDisabled()), 5000, 'the switch to know the state');
+  if ((await box.isChecked()) || registered()) throw new Error('on before it was turned on');
+  await box.click();
+  await waitFor(async () => (await box.isChecked()) && !(await box.isDisabled()) && registered(), 10_000, 'the entries');
+  await box.click();
+  await waitFor(async () => !(await box.isChecked()) && !(await box.isDisabled()) && !registered(), 10_000, 'the entries gone');
+  await page.locator('.settings-dialog .settings-search').fill('');
+  await page.keyboard.press('Escape');
+  await waitFor(async () => (await page.locator('.settings-dialog').count()) === 0, 5000, 'the settings panel to close');
+  // The installer's switches do the same and quit, with an instance running or not.
+  const cli = (flag) => execFileSync(electronPath, ['.', '--user-data-dir', dataDir, flag], { cwd: root, env, stdio: 'ignore', timeout: 60_000 });
+  cli('--register-context-menu');
+  if (!registered()) throw new Error('--register-context-menu added nothing');
+  cli('--unregister-context-menu');
+  if (registered()) throw new Error('--unregister-context-menu left the entries');
 });
 
 await step('fonts: the UI, the conversation and its code each have their own; the bundled Noto Sans SC loads in webviews; chat.fontSize applies at once', async () => {
@@ -1748,6 +1784,17 @@ const failed = results.filter((ok) => !ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed. Artifacts: ${runDir}`);
 // The extension copies the last steps installed (a few hundred MB): never kept.
 rmSync(path.join(dataDir, 'extensions'), { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+for (const key of [registryTestKey, 'HKCU\\Software\\Vilausity-test']) {
+  try {
+    // The parent only once no other run keeps a key in it.
+    const left = key === registryTestKey ? '' : execFileSync(reg, ['query', key], { windowsHide: true, encoding: 'latin1' });
+    if (!left.includes('HKEY_CURRENT_USER\\Software\\Vilausity-test\\')) {
+      execFileSync(reg, ['delete', key, '/f'], { stdio: 'ignore', windowsHide: true });
+    }
+  } catch {
+    // Already gone.
+  }
+}
 if (failed === 0) {
   // The extension's processes may hold the folder a moment after the app closed.
   rmSync(workspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });

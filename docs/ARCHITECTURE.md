@@ -160,8 +160,16 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **API 密钥共用**（`host/main/safeStorageKey.ts`）：safeStorage 加密用的主密钥存在 Chromium 配置的 `Local State` 里（`os_crypt.encrypted_key`，本身由 DPAPI 按 Windows 用户加密）。启动时（拿到单实例锁之后、Chromium 读 `Local State` 之前）互相同步：管理员实例用普通实例的主密钥；普通实例自己没有时才用管理员实例的。这依赖 Chromium 的 `Local State` 格式；格式哪天变了，后果只是管理员实例解不开普通实例存的密钥，在管理员实例里重新输入就行。实测：主密钥第一次生成后约 10 秒内写盘，正常退出时一定会写。
 - **插件目录共用**：store 每次修改都基于磁盘上最新的 `state.json`（`update()`），两个进程不会互相覆盖。清理旧版本时先改名再删：Windows 不允许给里面有打开文件的文件夹改名，所以另一个实例正在用的版本、正在写的下载不会被删掉一半。只有普通实例会自动检查更新；管理员实例里可以手动检查更新、回滚。
 - **怎么标出来**：标题栏搜索框里文件夹名后面加"[管理员]"（照 VSCodium 窗口标题的写法）；原生窗口标题后面加 " [Administrator]"（在 `page-title-updated` 里改，页面自己的 `document.title` 不变）。
-- **入口**：Windows 的"以管理员身份运行"；普通实例搜索框（没输入时的文件夹一组）和 Ctrl+R 列表里的"以管理员身份打开此文件夹"（命令 `workspace.openAsAdministrator`）：主进程用 PowerShell 的 `Start-Process -Verb RunAs` 启动，Windows 弹 UAC 确认。参数按 CommandLineToArgvW 的规则加引号，开发时带上 app 目录，有 `--user-data-dir` 时也带上。
+- **入口**：Windows 的"以管理员身份运行"；资源管理器右键菜单的"用 Vilausity 打开（管理员）"（`--admin`，见下一节）；普通实例搜索框（没输入时的文件夹一组）和 Ctrl+R 列表里的"以管理员身份打开此文件夹"（命令 `workspace.openAsAdministrator`）：主进程用 PowerShell 的 `Start-Process -Verb RunAs` 启动，Windows 弹 UAC 确认。参数按 CommandLineToArgvW 的规则加引号，开发时带上 app 目录，有 `--user-data-dir` 时也带上。
 - **测试**：单元测试覆盖强制开关、路径、命令行引号、主密钥同步。界面测试在普通实例运行时再起一个强制管理员的实例，检查搜索框里的标记、窗口标题、它的主进程用 safeStorage 能解开普通实例存的密钥、它自己的 state 和 Chromium 目录。UAC 那一步没有自动测试。
+
+## 资源管理器右键菜单（M5.5）
+
+- **是什么**：右键文件夹、文件夹空白处、驱动器时的"用 Vilausity 打开"和"用 Vilausity 打开（管理员）"，把那个路径当工作区打开。只有用户要才加：设置"工作台"里的开关（`features/explorerMenu`），或者安装包的选项（M6，调 `--register-context-menu`，卸载时 `--unregister-context-menu`，两个都做完就退出）。
+- **写在哪**：`HKCU\Software\Classes` 下 `Directory\shell`、`Directory\Background\shell`、`Drive\shell` 各两个动词（`Vilausity`、`VilausityAdministrator`），只影响当前 Windows 用户，不需要管理员权限。开关的状态以注册表为准，不存 settings.json。主进程拼一个 .reg 文件（UTF-16，中文标签不会坏）交给 `reg import`，一次写完；查有没有用 `reg query` 的退出码，不解析它的输出（按控制台代码页输出，中文会乱）。测试用 `VILAUS_REGISTRY_ROOT` 把根换到 `HKCU\Software\Vilausity-test\...`。
+- **命令**：`"Vilausity.exe" "%V"`，管理员那项加 `--admin`、带盾牌图标（`HasLUAShield`）。驱动器的 `"%V"` 是 `"D:\"`，反斜杠把收尾的引号转义了，进程拿到的是 `D:"`，命令行解析时还原成 `D:\`。只有叫 `runas` 的动词才会自己提权，所以 `--admin` 由程序处理：普通权限的进程用"以管理员身份打开此文件夹"同一套（`startElevated`，Windows 弹 UAC）起管理员实例，自己不拿单实例锁、不开窗口，直接退出。
+- **跟着程序走**：安装版每次启动时，菜单在就按当前的程序路径和界面语言重写一遍（换了安装位置、改了语言都能跟上）；开发时不重写（那会指向 electron.exe 和这份代码）。
+- **Windows 11**：新右键菜单只收带签名的 MSIX 包注册的项，我们不签名，所以默认在"显示更多选项"里；开了经典右键菜单的电脑上直接在第一层。
 
 ## 评论（M3）
 

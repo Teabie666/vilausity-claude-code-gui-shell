@@ -18,6 +18,7 @@ import { providersModule } from '../../features/providers';
 import { quickOpenModule } from '../../features/quickOpen';
 import { extensionHostStatusModule } from '../../features/extensionHostStatus';
 import { extensionMenusModule } from '../../features/extensionMenus';
+import { explorerMenuModule } from '../../features/explorerMenu';
 import { extensionUpdatesModule } from '../../features/extensionUpdates';
 import { languageModule } from '../../features/language';
 import { sessionSearchModule } from '../../features/sessionSearch';
@@ -48,6 +49,7 @@ const modules: ShellModule[] = [
   workspaceModule,
   providersModule,
   extensionUpdatesModule,
+  explorerMenuModule,
   setupModule,
 ];
 

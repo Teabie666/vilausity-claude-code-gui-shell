@@ -5,7 +5,6 @@
  * extension host.
  */
 
-import { execFile } from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -57,7 +56,8 @@ import type { AppPaths } from './appPaths';
 import { installCcwProtocol } from './ccwProtocol';
 import type { CliArgs } from './cli';
 import { locateClaudeExtension, type LocatedExtension } from './extensionLocator';
-import { elevatedStartScript } from './elevation';
+import { administratorInstanceArgs, startElevated } from './elevation';
+import { ExplorerMenu, explorerMenuRoot, type ExplorerMenuLabels, type ExplorerMenuTarget } from './explorerMenu';
 import { ExtensionStore } from './extensionStore';
 import { ExtensionUpdater, type UpdateSettings } from './extensionUpdater';
 import { findGit } from './gitLocator';
@@ -111,6 +111,16 @@ export interface ShellEnvironment {
   readonly logLevel: LogLevel;
 }
 
+/** The program File Explorer's entries start: in development electron.exe with the app's folder. */
+export function explorerMenuTarget(): ExplorerMenuTarget {
+  return { executable: process.execPath, prefixArgs: app.isPackaged ? [] : [app.getAppPath()] };
+}
+
+/** File Explorer's entries in the display language. */
+export function explorerMenuLabels(): ExplorerMenuLabels {
+  return { open: t('explorerOpen'), openAsAdministrator: t('explorerOpenAsAdministrator') };
+}
+
 /** Handlers for the page's calls; `window` is the window whose page called. */
 type RendererHandlers = {
   [M in keyof MainApiForRenderer]: (
@@ -136,6 +146,8 @@ export class ShellApp extends Disposable implements WindowHost {
   private readonly sessionSearch: SessionSearch;
   /** Claude Code's transcripts (`~/.claude/projects`), for the search and for deleting sessions. */
   private readonly projectsDir = claudeProjectsDir(process.env, os.homedir());
+  /** File Explorer's "Open with Vilausity" entries. */
+  private readonly explorerMenu = new ExplorerMenu(explorerMenuRoot(process.env), explorerMenuTarget());
   private readonly themesDir: string;
   private currentTheme: ThemeData;
   private currentZoom: number;
@@ -282,6 +294,10 @@ export class ShellApp extends Disposable implements WindowHost {
     }
     await this.applyCommandLine(args, true);
     this.scheduleUpdateChecks();
+    // Not in development: there the entries would point at electron.exe and this checkout.
+    if (app.isPackaged) {
+      this.refreshExplorerMenu().catch((error: unknown) => this.logger.warn("cannot rewrite File Explorer's menu entries", error));
+    }
   }
 
   /** A second start's arguments: its folder, file, conversation or link, in the right window. */
@@ -734,6 +750,12 @@ export class ShellApp extends Disposable implements WindowHost {
         (await this.openWindow(folder)).openConversation({ sessionId });
         return true;
       },
+      'explorerMenu.get': () => this.explorerMenu.isRegistered(),
+      'explorerMenu.set': async ({ enabled }) => {
+        await (enabled ? this.explorerMenu.register(explorerMenuLabels()) : this.explorerMenu.unregister());
+        this.logger.info(`File Explorer's context menu entries ${enabled ? 'added' : 'removed'}`);
+        return this.explorerMenu.isRegistered();
+      },
       'sessions.delete': async ({ sessionId }) => {
         const deleted = await deleteSession(this.projectsDir, sessionId);
         this.logger.info(`deleted session ${sessionId}: ${deleted.paths.length} path(s)`);
@@ -830,31 +852,22 @@ export class ShellApp extends Disposable implements WindowHost {
   }
 
   /** The administrator instance on `folder`, with this instance's data folder; Windows asks first (UAC). */
-  private startAdministratorInstance(folder: string): Promise<void> {
-    const args = [
-      // In development the executable is electron.exe, which needs the app's folder first.
-      ...(app.isPackaged ? [] : [app.getAppPath()]),
-      folder,
-      ...(this.env.args.userDataDir ? ['--user-data-dir', this.env.args.userDataDir] : []),
-    ];
-    const script = elevatedStartScript(process.execPath, args);
-    const powershell = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-    return new Promise((resolve) => {
-      execFile(
-        powershell,
-        ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
-        { windowsHide: true },
-        (error, _stdout, stderr) => {
-          if (error) {
-            // Declined at the UAC prompt, most likely.
-            this.logger.info(`the administrator instance did not start: ${String(stderr).trim() || error.message}`);
-          } else {
-            this.logger.info(`asked Windows to start the administrator instance on ${folder}`);
-          }
-          resolve();
-        },
-      );
-    });
+  private async startAdministratorInstance(folder: string): Promise<void> {
+    const appPath = app.isPackaged ? undefined : app.getAppPath();
+    const result = await startElevated(process.execPath, administratorInstanceArgs(folder, appPath, this.env.args.userDataDir));
+    this.logger.info(
+      result.started
+        ? `asked Windows to start the administrator instance on ${folder}`
+        : `the administrator instance did not start: ${result.detail ?? ''}`,
+    );
+  }
+
+  /** File Explorer's entries: rewritten at start when there (this program may have moved, the language changed). */
+  private async refreshExplorerMenu(): Promise<void> {
+    if (await this.explorerMenu.isRegistered()) {
+      await this.explorerMenu.register(explorerMenuLabels());
+      this.logger.info("rewrote File Explorer's context menu entries");
+    }
   }
 
   private requireUpdater(): ExtensionUpdater {

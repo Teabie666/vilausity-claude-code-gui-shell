@@ -35,6 +35,11 @@ export interface CliArgs {
   readonly secondaryDisplay: boolean;
   /** Do not use VSCodium's or VS Code's copy of the extension (tests of the first run do). */
   readonly ignoreOtherEditors: boolean;
+  /** Open the folder in the administrator instance (File Explorer's "(Administrator)" entry). */
+  readonly admin: boolean;
+  /** Add, or remove, File Explorer's "Open with Vilausity" entries and quit (the installer does). */
+  readonly registerContextMenu: boolean;
+  readonly unregisterContextMenu: boolean;
   readonly help: boolean;
   readonly version: boolean;
 }
@@ -52,6 +57,9 @@ export const HELP_TEXT = `Usage: vilaus [folder] [options]
   --theme <id>                    Start with this color theme
   --log-level <level>             trace, debug, info, warn or error
   --devtools                      Open the developer tools
+  --admin                         Open the folder as administrator (Windows asks first)
+  --register-context-menu         Add "Open with Vilausity" to File Explorer's menu and exit
+  --unregister-context-menu       Remove it again and exit
   -v, --version                   Print the version and exit
   -h, --help                      Print this help and exit
 
@@ -92,13 +100,16 @@ export function parseCliArgs(argv: readonly string[], cwd = process.cwd()): CliA
       devtools: { type: 'boolean' },
       'secondary-display': { type: 'boolean' },
       'ignore-other-editors': { type: 'boolean' },
+      admin: { type: 'boolean' },
+      'register-context-menu': { type: 'boolean' },
+      'unregister-context-menu': { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
     },
   });
   const str = (value: unknown): string | undefined =>
     typeof value === 'string' && value.length > 0 ? value : undefined;
-  const resolvePath = (p: string | undefined): string | undefined => (p ? path.resolve(cwd, p) : undefined);
+  const resolvePath = (p: string | undefined): string | undefined => (p ? path.resolve(cwd, driveRoot(p)) : undefined);
   const positional = positionals.find((p) => !p.startsWith('-'));
   const uri = positional && /^vilaus:/i.test(positional) ? positional : undefined;
 
@@ -117,9 +128,20 @@ export function parseCliArgs(argv: readonly string[], cwd = process.cwd()): CliA
     devtools: values.devtools === true,
     secondaryDisplay: values['secondary-display'] === true,
     ignoreOtherEditors: values['ignore-other-editors'] === true,
+    admin: values.admin === true,
+    registerContextMenu: values['register-context-menu'] === true,
+    unregisterContextMenu: values['unregister-context-menu'] === true,
     help: values.help === true,
     version: values.version === true,
   };
+}
+
+/**
+ * `D:"` is a drive's root as File Explorer's menu passes it: in `"%V"` the backslash of `D:\`
+ * escapes the closing quote, which then ends up in the argument.
+ */
+function driveRoot(value: string): string {
+  return /^[a-z]:"$/i.test(value) ? `${value.slice(0, 2)}\\` : value;
 }
 
 /** `C:\a\b.ts:12:5` -> path, line 12, column 5 (the drive letter's colon is part of the path). */

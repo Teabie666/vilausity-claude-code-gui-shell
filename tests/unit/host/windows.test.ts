@@ -44,6 +44,18 @@ describe('parseCliArgs', () => {
     assert.equal(parseCliArgs(['--devtools']).devtools, true);
   });
 
+  test("File Explorer's menu: --admin, a drive's root as it arrives, and the installer's switches", () => {
+    const admin = parseCliArgs(['--admin', 'C:\\work\\shop']);
+    assert.equal(admin.admin, true);
+    assert.equal(admin.folder, 'C:\\work\\shop');
+    // "%V" for D:\ arrives as D:" (the backslash escaped the closing quote).
+    assert.equal(parseCliArgs(['D:"']).folder, 'D:\\');
+    assert.equal(parseCliArgs(['--admin', 'd:"']).folder, 'd:\\');
+    assert.equal(parseCliArgs(['--register-context-menu']).registerContextMenu, true);
+    assert.equal(parseCliArgs(['--unregister-context-menu']).unregisterContextMenu, true);
+    assert.equal(parseCliArgs([]).admin, false);
+  });
+
   test('a vilaus:// link is a link, not a folder', () => {
     const args = parseCliArgs(['vilaus://anthropic.claude-code/open?session=x']);
     assert.equal(args.uri, 'vilaus://anthropic.claude-code/open?session=x');

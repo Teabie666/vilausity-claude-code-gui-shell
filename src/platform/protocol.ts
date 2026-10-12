@@ -728,6 +728,10 @@ export type MainApiForRenderer = {
    * it already comes to the front. False when the folder no longer exists.
    */
   'sessions.open': (p: { folder: string; sessionId: string }) => boolean;
+  /** Whether File Explorer's "Open with Vilausity" entries are there (for this Windows user). */
+  'explorerMenu.get': (p: void) => boolean;
+  /** Adds or removes them; resolves to whether they are there now. */
+  'explorerMenu.set': (p: { enabled: boolean }) => boolean;
   /**
    * Deletes a session for good: its transcript and the folders Claude Code keeps next to it.
    * False when nothing of it was found. Every window's session list hears of it.
