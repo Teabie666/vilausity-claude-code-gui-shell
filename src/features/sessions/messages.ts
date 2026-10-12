@@ -13,7 +13,6 @@ export const t = defineMessages('sessions', {
   deleteTitle: 'Delete the session "{0}" for good?',
   deleteDetail: 'Its conversation is deleted from this computer and cannot be brought back.',
   delete: 'Delete',
-  deleteOpen: 'The session "{0}" is open in this window. Close its tab first, then delete it.',
   deleteElsewhere:
     'The session "{0}" is in use elsewhere: in another window, in VS Code or on the command line. Close it there first, then delete it.',
   deleteNotFound: 'The session "{0}" was not found on this computer.',

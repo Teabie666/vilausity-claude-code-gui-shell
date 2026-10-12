@@ -114,7 +114,8 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 插件的会话列表只能归档，删除是壳加的（对照插件 2.1.296）。
 
 - **按钮**：bridge 的页面提示 `sessionRows` 告诉页面脚本行在哪（`<button id="sessions-list-row-<会话 id>">`）、按钮组在哪、插件按钮用的类名；`host/webview/sessionRows.ts` 在每行的重命名、归档后面加一个同样样式的垃圾桶按钮（文字随引导数据的 `labels` 来，主进程按界面语言给）。点击不往上冒泡，免得行本身打开会话；消息 `deleteSession` 交给壳。
-- **能不能删**：插件给它的每个页面推 `session_states_update`，里面有本窗口打开的会话（`openSessionIds`）和别的进程占着的（`liveElsewhereSessions`：另一个窗口、VS Code、命令行，插件靠 Claude Code 记的运行中进程知道）。bridge 旁听插件发给页面的消息（`observeToWebview`）记下这两份名单，渲染进程删之前问一次（`sessions.busy`），确认后再问一次。在用的不删，提示先关掉。
+- **能不能删**：插件给它的每个页面推 `session_states_update`，里面有本窗口打开的会话（`openSessionIds`）和别的进程占着的（`liveElsewhereSessions`：另一个窗口、VS Code、命令行，插件靠 Claude Code 记的运行中进程知道）。bridge 旁听插件发给页面的消息（`observeToWebview`）记下这两份名单，渲染进程删之前问一次（`sessions.busy`），确认后再问一次。别的进程在用的不删，提示先在那边关掉；本窗口标签页里开着的照常确认、照常删。
+- **开着的先关**：确认后插件进程关掉显示这个会话的标签页（`sessions.close`，按页面状态里的会话 id 找面板，跟用户点关闭一样 dispose），插件随之结束它的 claude 进程，但进程要过一会儿才退出，退出前还可能写记录。所以主进程删之前先等：Claude Code 运行时在 `sessions/<pid>.json` 里登记（`{pid, sessionId, ...}`，退出时删掉），等到没有活着的进程登记这个会话（`sessionFiles.ts` 的 `waitForSessionEnd`，最多 10 秒；实测一百多毫秒）；等不到就不删，提示在别处使用。
 - **删什么**：主进程 `sessions.delete`（`host/main/sessionFiles.ts`）。会话 id 必须是 UUID 才会拼进路径。删 Claude Code 存的这几处：`projects/<文件夹>/<id>.jsonl` 和同名目录、`file-history/<id>`、`session-env/<id>`；输入历史 `history.jsonl` 不动（CLI 一直在往里追加）。不进回收站，确认框写明删了就找不回。目录跟搜索一样按主进程的 `CLAUDE_CONFIG_DIR` 找；某个 API 接口在自己的环境变量里改了 `CLAUDE_CONFIG_DIR` 的话，那个目录里的会话找不到（提示"找不到"）。
 - **删完**：主进程通知每个窗口的插件进程，bridge 给插件页面发插件自己的 `session_store_changed` 请求（插件在 Claude Code 目录换了时也发这个），页面重新读会话列表。
 

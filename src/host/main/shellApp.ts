@@ -63,7 +63,7 @@ import { ExtensionUpdater, type UpdateSettings } from './extensionUpdater';
 import { findGit } from './gitLocator';
 import { t } from './messages';
 import { ProviderStore, type SecretCipher } from './providerStore';
-import { deleteSession } from './sessionFiles';
+import { deleteSession, waitForSessionEnd } from './sessionFiles';
 import { claudeProjectsDir, SessionSearch } from './sessionSearch';
 import { SettingsStore } from './settingsStore';
 import { isExternalUrl, nextZoomLevel } from './shellWindow';
@@ -94,6 +94,8 @@ const UPDATE_SETTING_KEYS = [AUTO_UPDATE_SETTING, PINNED_VERSION_SETTING, OPEN_V
 const GIT_NOTICE_KEY = 'gitNoticeShown';
 /** Where the one window's placement and zoom were kept before there were several windows. */
 const LEGACY_WINDOW_STATE_KEY = 'vilaus.window';
+/** How long a session about to be deleted may take to stop running (its tab was just closed). */
+const SESSION_END_TIMEOUT_MS = 10_000;
 
 /** Provider keys at rest: Electron's safeStorage (DPAPI on Windows, for this Windows user). */
 const electronCipher: SecretCipher = {
@@ -757,12 +759,18 @@ export class ShellApp extends Disposable implements WindowHost {
         return this.explorerMenu.isRegistered();
       },
       'sessions.delete': async ({ sessionId }) => {
+        // Its tab was just closed: the Claude process would write the transcript again as it ends.
+        const started = Date.now();
+        if (!(await waitForSessionEnd(path.dirname(this.projectsDir), sessionId, SESSION_END_TIMEOUT_MS))) {
+          this.logger.warn(`session ${sessionId} still runs: not deleted`);
+          return 'running';
+        }
         const deleted = await deleteSession(this.projectsDir, sessionId);
-        this.logger.info(`deleted session ${sessionId}: ${deleted.paths.length} path(s)`);
+        this.logger.info(`deleted session ${sessionId}: ${deleted.paths.length} path(s), ${Date.now() - started} ms after the request`);
         for (const window of this.windows) {
           window.sessionStoreChanged();
         }
-        return deleted.transcript;
+        return deleted.transcript ? 'deleted' : 'notFound';
       },
       'window.shownFolders': () => this.windows.map((window) => window.folder),
       'window.close': (_params, window) => this.requestClose(window),

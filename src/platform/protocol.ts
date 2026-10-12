@@ -225,8 +225,14 @@ export interface WebviewLabels {
   readonly locale: string;
 }
 
-/** Why a session cannot be deleted now: open in this window, or held by another process. */
+/**
+ * Who uses a session: a tab of this window (closed before the session is deleted), or
+ * another process (it is not deleted then).
+ */
 export type SessionBusy = 'open' | 'elsewhere';
+
+/** How deleting a session went; `running`: a Claude Code process still runs it. */
+export type SessionDeleteResult = 'deleted' | 'notFound' | 'running';
 
 export interface WebviewDocument {
   readonly webviewId: string;
@@ -589,6 +595,11 @@ export type ExtHostApiForRenderer = {
   'extension.contributions': (p: void) => ExtensionContributions;
   /** Whether a session is in use (as the extension last told its pages); undefined when not. */
   'sessions.busy': (p: { sessionId: string }) => SessionBusy | undefined;
+  /**
+   * Closes the tabs that show a session (before it is deleted); the extension then ends
+   * its Claude process, a moment later. Resolves to how many were closed.
+   */
+  'sessions.close': (p: { sessionId: string }) => number;
 
   // ---- documents and editors ----
   /** The shell opens a file (quick open, drop...); answered by `editor.showText`. False if it cannot be read. */
@@ -734,9 +745,10 @@ export type MainApiForRenderer = {
   'explorerMenu.set': (p: { enabled: boolean }) => boolean;
   /**
    * Deletes a session for good: its transcript and the folders Claude Code keeps next to it.
-   * False when nothing of it was found. Every window's session list hears of it.
+   * Waits a while for a Claude process that still runs it to end (a tab just closed), and
+   * deletes nothing if one does not. Every window's session list hears of it.
    */
-  'sessions.delete': (p: { sessionId: string }) => boolean;
+  'sessions.delete': (p: { sessionId: string }) => SessionDeleteResult;
   /** The folders the open windows show (the calling window's too). */
   'window.shownFolders': (p: void) => string[];
   /** Closes the calling window; closing the last one quits. */

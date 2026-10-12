@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { deleteSession, isSessionId, sessionPaths } from '../../../src/host/main/sessionFiles';
+import { deleteSession, isSessionId, processRuns, sessionPaths, sessionProcesses, waitForSessionEnd } from '../../../src/host/main/sessionFiles';
 
 const ID = '0f9c2b1e-4d5a-4c3b-9e8f-7a6b5c4d3e2f';
 const OTHER = '11111111-2222-4333-8444-555555555555';
@@ -76,6 +76,49 @@ describe('session files', () => {
       await assert.rejects(deleteSession(projects, '..'), /not a session id/);
       await assert.rejects(deleteSession(projects, `../${ID}`), /not a session id/);
       assert.equal(existsSync(path.join(projects, 'C--work-shop', `${ID}.jsonl`)), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('the processes that run a session, by the records they keep while they run', async () => {
+    const { root } = claudeFolder();
+    try {
+      const records = path.join(root, 'sessions');
+      mkdirSync(records);
+      writeFileSync(path.join(records, '101.json'), JSON.stringify({ pid: 101, sessionId: ID, kind: 'interactive' }));
+      // Left behind by a crash: the process is gone.
+      writeFileSync(path.join(records, '102.json'), JSON.stringify({ pid: 102, sessionId: ID }));
+      writeFileSync(path.join(records, '103.json'), JSON.stringify({ pid: 103, sessionId: OTHER }));
+      writeFileSync(path.join(records, '104.json'), '{"pid": 104, "sessi');
+      writeFileSync(path.join(records, '101.6ea1.key'), 'not a record');
+      const runs = (pid: number): boolean => pid !== 102;
+      assert.deepEqual(await sessionProcesses(root, ID, runs), [101]);
+      assert.deepEqual(await sessionProcesses(root, OTHER, runs), [103]);
+      assert.deepEqual(await sessionProcesses(path.join(root, 'nowhere'), ID, runs), []);
+      // This test's own process runs; a process id nobody has does not.
+      assert.equal(processRuns(process.pid), true);
+      assert.equal(processRuns(2 ** 31 - 2), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('waits for a session to stop running, and gives up after a while', async () => {
+    const { root } = claudeFolder();
+    try {
+      mkdirSync(path.join(root, 'sessions'));
+      writeFileSync(path.join(root, 'sessions', '101.json'), JSON.stringify({ pid: 101, sessionId: ID }));
+      let ended = false;
+      const runs = (): boolean => !ended;
+      setTimeout(() => (ended = true), 50);
+      assert.equal(await waitForSessionEnd(root, ID, 2000, runs, 10), true);
+      ended = false;
+      const started = Date.now();
+      assert.equal(await waitForSessionEnd(root, ID, 100, runs, 10), false);
+      assert.ok(Date.now() - started >= 100);
+      // Nothing runs it: no waiting at all.
+      assert.equal(await waitForSessionEnd(root, OTHER, 0, runs), true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

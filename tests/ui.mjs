@@ -1,12 +1,13 @@
 // Shell UI test: keybindings, sidebar, conversation tabs, command palette, themes, find, zoom,
 // context menus, restart restore.
 // Sends no messages to Claude (no usage).   npm run build && node tests/ui.mjs
+// UI_ONLY=<text> runs only the steps whose name contains it (for steps that need no earlier one).
 import { _electron as electron } from 'playwright-core';
 import electronPath from 'electron';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -64,6 +65,7 @@ env.VILAUS_REGISTRY_ROOT = `${registryTestKey}\\Classes`;
 
 const results = [];
 async function step(name, fn) {
+  if (process.env.UI_ONLY && !name.includes(process.env.UI_ONLY)) return;
   const started = Date.now();
   try {
     const detail = await fn();
@@ -1546,7 +1548,7 @@ await step('first run: no extension, no Git -> install from Open VSX without a r
   }
 });
 
-await step('the session list: the filters are one drop-down, usage resets show the time, and a row deletes its session after asking', async () => {
+await step('the session list: the filters are one drop-down, usage resets show the time, and a row deletes its session after asking, open or not', async () => {
   // An instance of its own, whose Claude Code folder holds one session of its workspace.
   const own = path.join(runDir, 'delete-session');
   const ownData = path.join(own, 'data');
@@ -1616,24 +1618,44 @@ await step('the session list: the filters are one drop-down, usage resets show t
       `the reset time ${time}`,
     );
 
+    // Open in a tab: it is deleted all the same, the tab closed first.
     const row = list.locator(rowSelector);
+    const tabs = () => otherPage.locator('#tabs .tab').count();
+    const tabsBefore = await tabs();
+    await row.click();
+    await waitFor(async () => (await tabs()) === tabsBefore + 1, 15_000, 'the session in a tab');
+    // Its Claude process runs (and says so in sessions/<pid>.json) until the tab closes.
+    const runningRecord = () => {
+      const records = path.join(claudeDir, 'sessions');
+      if (!existsSync(records)) return undefined;
+      return readdirSync(records).find((name) => name.endsWith('.json') && readFileSync(path.join(records, name), 'utf8').includes(id));
+    };
+    await waitFor(() => runningRecord() !== undefined, 15_000, 'its Claude process');
     await row.hover();
     await row.locator('.vilaus-delete-session[title="Delete session"]').click();
     const modal = otherPage.locator('.overlay-box.modal');
     await modal.waitFor({ timeout: 5000 });
     if (!(await modal.innerText()).includes('"Tidy the downloads"')) throw new Error(`the question: ${await modal.innerText()}`);
-    // Cancel keeps it; Delete deletes it.
+    // Cancel keeps it and its tab; Delete deletes it.
     await modal.locator('.button', { hasText: 'Cancel' }).click();
     await otherPage.waitForTimeout(500);
     if (!existsSync(transcript)) throw new Error('deleted on Cancel');
+    if ((await tabs()) !== tabsBefore + 1) throw new Error('the tab closed on Cancel');
+    await row.hover();
     await row.locator('.vilaus-delete-session').click();
     await modal.locator('.button', { hasText: 'Delete' }).click();
-    await waitFor(() => !existsSync(transcript) && !existsSync(path.join(claudeDir, 'file-history', id)), 5000, 'the files to go');
+    await waitFor(async () => (await tabs()) === tabsBefore, 5000, 'its tab to close');
+    await waitFor(() => !existsSync(transcript) && !existsSync(path.join(claudeDir, 'file-history', id)), 15_000, 'the files to go');
+    if (runningRecord() !== undefined) throw new Error('deleted while its Claude process still ran');
     await waitFor(async () => (await list.locator(rowSelector).count()) === 0, 10_000, 'the row to leave the list');
+    if (await modal.isVisible()) throw new Error(`a message after deleting: ${await modal.innerText()}`);
+    // The process ended before: nothing writes the transcript again.
+    await otherPage.waitForTimeout(1000);
+    if (existsSync(transcript)) throw new Error('the transcript came back');
   } finally {
     await other.close();
   }
-  return 'transcript and file history deleted, the list read again';
+  return 'its tab closed, transcript and file history deleted, the list read again';
 });
 
 await step('administrator instance: runs next to the normal one, says so, and reads the API keys the normal one stored', async () => {

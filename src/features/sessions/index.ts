@@ -2,7 +2,8 @@
  * The session list: the Claude Code extension's own session-list webview view, shown in
  * the sidebar in place of a file tree. Clicking a session asks the extension to open it,
  * which arrives as a conversation panel. The shell adds a delete button to each row (the
- * extension can only archive): it asks first, then main deletes the session's files.
+ * extension can only archive): it asks first, closes the session's tab if one shows it, then
+ * main deletes the session's files.
  */
 
 import type { ShellModule } from '../../core/module';
@@ -109,20 +110,20 @@ export const sessionsModule: ShellModule = {
     );
     subscriptions.add(keybindings.register({ key: 'ctrl+b', command: 'sessions.toggleSidebar' }));
 
-    // A session in use is not deleted: its Claude process would write it again, or fail.
+    // A session another process runs is not deleted: that process would write it again, or
+    // fail. One that a tab here shows is: the tab closes first, which ends its process.
     const dialogs = services.get(IDialogs);
     const native = services.get(INative);
-    const refuseIfBusy = async (sessionId: string, name: string): Promise<boolean> => {
-      const busy = await connection.rpc?.call('sessions.busy', { sessionId });
-      if (busy) {
-        const message = busy === 'open' ? t('deleteOpen', name) : t('deleteElsewhere', name);
-        await dialogs.showMessage({ severity: 'info', modal: true, message, items: [] });
+    const refuseIfElsewhere = async (sessionId: string, name: string): Promise<boolean> => {
+      if ((await connection.rpc?.call('sessions.busy', { sessionId })) !== 'elsewhere') {
+        return false;
       }
-      return busy !== undefined;
+      await dialogs.showMessage({ severity: 'info', modal: true, message: t('deleteElsewhere', name), items: [] });
+      return true;
     };
     const deleteSession = async (sessionId: string, title: string): Promise<void> => {
       const name = title || t('untitled');
-      if (await refuseIfBusy(sessionId, name)) {
+      if (await refuseIfElsewhere(sessionId, name)) {
         return;
       }
       const choice = await dialogs.showMessage({
@@ -132,12 +133,15 @@ export const sessionsModule: ShellModule = {
         detail: t('deleteDetail'),
         items: [t('delete')],
       });
-      // It may have been opened while the question was up.
-      if (choice !== 0 || (await refuseIfBusy(sessionId, name))) {
+      // It may have been taken up elsewhere while the question was up.
+      if (choice !== 0 || (await refuseIfElsewhere(sessionId, name))) {
         return;
       }
-      if (!(await native.call('sessions.delete', { sessionId }))) {
-        void dialogs.showMessage({ severity: 'error', modal: false, message: t('deleteNotFound', name), items: [] });
+      await connection.rpc?.call('sessions.close', { sessionId });
+      const result = await native.call('sessions.delete', { sessionId });
+      if (result !== 'deleted') {
+        const message = result === 'running' ? t('deleteElsewhere', name) : t('deleteNotFound', name);
+        void dialogs.showMessage({ severity: 'error', modal: false, message, items: [] });
       }
     };
     subscriptions.add(

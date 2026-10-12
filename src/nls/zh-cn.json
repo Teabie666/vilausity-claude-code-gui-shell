@@ -318,7 +318,6 @@
   "sessions.deleteElsewhere": "会话“{0}”正在别处使用：另一个窗口、VS Code 或命令行。先在那边关掉，再删除。",
   "sessions.deleteFailed": "无法删除会话“{0}”，详情见日志。",
   "sessions.deleteNotFound": "在这台电脑上找不到会话“{0}”。",
-  "sessions.deleteOpen": "会话“{0}”在这个窗口里开着。先关掉它的标签页，再删除。",
   "sessions.deleteTitle": "永久删除会话“{0}”？",
   "sessions.loading": "正在加载会话…",
   "sessions.noSessionList": "这个版本的 Claude Code 没有会话列表。",
