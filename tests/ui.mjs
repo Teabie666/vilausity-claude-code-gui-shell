@@ -1697,12 +1697,15 @@ await step('the session list: the filters are one drop-down, usage resets show t
       5000,
       `the reset time ${time}`,
     );
+    // The made-up bar sits beside the list and narrows it: gone again.
+    await list.evaluate(() => document.querySelector('body > .usageBarContainer_8s5nuw')?.remove());
 
-    // Open in a tab: it is deleted all the same, the tab closed first.
+    // Open in a tab: it is deleted all the same, the tab closed first. Clicked on its name: the
+    // row's other end has its buttons.
     const row = list.locator(rowSelector);
     const tabs = () => otherPage.locator('#tabs .tab').count();
     const tabsBefore = await tabs();
-    await row.click();
+    await row.click({ position: { x: 30, y: 10 } });
     await waitFor(async () => (await tabs()) === tabsBefore + 1, 15_000, 'the session in a tab');
     // Its Claude process runs (and says so in sessions/<pid>.json) until the tab closes.
     const runningRecord = () => {
@@ -1738,7 +1741,7 @@ await step('the session list: the filters are one drop-down, usage resets show t
   return 'its tab closed, transcript and file history deleted, the list read again';
 });
 
-await step('a session clicked in the list opens as a preview: another click replaces it, leaving or Escape closes it, a double click keeps it; back and forward go between the tabs used', async () => {
+await step('a session clicked in the list opens as a preview, its row left in place: another click replaces it, leaving or Escape closes it, a double click keeps it; back and forward (keys, mouse) go between the tabs used; Shift+Escape rewinds', async () => {
   // An instance of its own, whose Claude Code folder holds three sessions of its workspace.
   const own = path.join(runDir, 'preview');
   const ownData = path.join(own, 'data');
@@ -1778,6 +1781,8 @@ await step('a session clicked in the list opens as a preview: another click repl
   try {
     const otherPage = await other.firstWindow();
     const row = (name) => `[id="sessions-list-row-${sessions[name]}"]`;
+    // On the name: the row's other end has its buttons.
+    const onName = { position: { x: 30, y: 10 } };
     const list = await waitFor(async () => {
       for (const frame of otherPage.frames()) {
         if (frame.url().startsWith('ccw://wv') && (await frame.locator(row('Charlie')).count().catch(() => 0)) === 1) return frame;
@@ -1805,12 +1810,30 @@ await step('a session clicked in the list opens as a preview: another click repl
         contents.sendInputEvent({ type: 'keyDown', keyCode, modifiers: ['alt'] });
         contents.sendInputEvent({ type: 'keyUp', keyCode, modifiers: ['alt'] });
       }, shortcut);
-    // Windows sends the mouse's side buttons to the window as app commands.
+    // Windows sends the mouse's side buttons to the window as app commands where no page takes
+    // the mouse; over a page, the page has them (button 3 and 4).
     const mouseBack = () => other.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].emit('app-command', {}, 'browser-backward'));
+    const cdp = await otherPage.context().newCDPSession(otherPage);
+    const mouseButton = async (button, locator) => {
+      const box = await locator.boundingBox();
+      const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button, buttons: button === 'back' ? 8 : 16, clickCount: 1 });
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button, buttons: 0, clickCount: 1 });
+    };
+    const conversationFrame = otherPage.locator('#main .panel:not([hidden]) .webview-frame');
+    // The rows in the list's order, with the dot of a session open in a tab.
+    const rows = () =>
+      list.locator('button[id^="sessions-list-row-"]').evaluateAll((elements) =>
+        elements.map((element) => `${element.querySelector('[class*=sessionName]')?.textContent}${element.querySelector('[title="Open in a tab"]') ? ' (open)' : ''}`),
+      );
+    const rowsBefore = await rows();
 
-    await list.locator(row('Alpha')).click();
+    await list.locator(row('Alpha')).click(onName);
     await showing('Alpha', true);
-    await list.locator(row('Bravo')).click();
+    // In preview its row stays where it was clicked, without the dot of an open session.
+    await otherPage.waitForTimeout(1000);
+    if (JSON.stringify(await rows()) !== JSON.stringify(rowsBefore)) throw new Error(`the rows moved for a preview: ${await rows()}`);
+    await list.locator(row('Bravo')).click(onName);
     await showing('Bravo', true);
     await waitFor(async () => (await tabs.count()) === 2 && (await tab('Alpha').count()) === 0, 10_000, 'Bravo in place of Alpha');
     // Back to the first conversation: the preview it leaves closes.
@@ -1818,24 +1841,56 @@ await step('a session clicked in the list opens as a preview: another click repl
     await waitFor(async () => (await tabs.count()) === 1, 10_000, 'the preview to close');
 
     // Its tab double-clicked: kept, it stays when the first comes back (the mouse's back button).
-    await list.locator(row('Alpha')).click();
+    await list.locator(row('Alpha')).click(onName);
     await showing('Alpha', true);
     await active.dblclick();
     await showing('Alpha', false);
+    // Kept, it is open: first in the list, with the dot.
+    await waitFor(async () => (await rows())[0] === 'Alpha session (open)', 10_000, `Alpha first and open in the list: ${await rows()}`);
     await backTo(first, mouseBack);
     await otherPage.waitForTimeout(500);
     if ((await tabs.count()) !== 2) throw new Error(`a kept tab closed: ${await tabs.allInnerTexts()}`);
     await keys('Right');
     await showing('Alpha', false);
+    // The mouse's buttons over the conversation's page, and over the shell's.
+    await backTo(first, () => mouseButton('back', conversationFrame));
+    await mouseButton('forward', tabs.first());
+    await showing('Alpha', false);
 
     // Its row double-clicked: kept from the start.
-    await list.locator(row('Bravo')).dblclick();
+    await list.locator(row('Bravo')).dblclick(onName);
     await showing('Bravo', false);
     await waitFor(async () => (await tabs.count()) === 3, 10_000, 'Bravo kept next to Alpha');
 
+    // The page's own uses of Escape are the shell's keybindings: Shift+Escape opens its rewind
+    // picker; two plain Escapes in the empty input no longer do (and interrupt nothing).
+    const frameOf = async () => (await conversationFrame.elementHandle())?.contentFrame();
+    const bravoPage = await waitFor(async () => {
+      const frame = await frameOf();
+      return (await frame?.locator('[role="textbox"][aria-label="Message input"]').count()) === 1 ? frame : undefined;
+    }, 30_000, "Bravo's input");
+    const input = bravoPage.locator('[role="textbox"][aria-label="Message input"]');
+    const rewindPicker = bravoPage.locator('[role="dialog"]', { hasText: 'Rewind to' });
+    await input.click();
+    await input.press('Escape');
+    await input.press('Escape');
+    await otherPage.waitForTimeout(800);
+    if ((await rewindPicker.count()) > 0) throw new Error('two Escapes opened the rewind picker');
+    await other.evaluate(({ BrowserWindow }) => {
+      const contents = BrowserWindow.getAllWindows()[0].webContents;
+      contents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape', modifiers: ['shift'] });
+      contents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape', modifiers: ['shift'] });
+    });
+    await rewindPicker.waitFor({ timeout: 5000 });
+    // Escape closes the picker, and only that.
+    await bravoPage.locator('[role="dialog"]').press('Escape');
+    await waitFor(async () => (await rewindPicker.count()) === 0, 5000, 'the picker to close');
+    await otherPage.waitForTimeout(300);
+    if ((await tabs.count()) !== 3) throw new Error('the Escape that closed the picker closed the tab');
+
     // Escape in a preview closes it (the input is empty: the page has no use for one Escape).
     const bravo = await active.getAttribute('data-panel-id');
-    await list.locator(row('Charlie')).click();
+    await list.locator(row('Charlie')).click(onName);
     await showing('Charlie', true);
     const charlie = await waitFor(async () => {
       const handle = await otherPage.locator('#main .panel:not([hidden]) .webview-frame').elementHandle();
@@ -1848,7 +1903,7 @@ await step('a session clicked in the list opens as a preview: another click repl
   } finally {
     await other.close();
   }
-  return 'replaced, closed on leaving and on Escape, kept by a double click on the tab and on the row';
+  return 'replaced, closed on leaving and on Escape, kept by a double click on the tab and on the row; the rewind picker on Shift+Escape only';
 });
 
 await step('administrator instance: runs next to the normal one, says so, and reads the API keys the normal one stored', async () => {

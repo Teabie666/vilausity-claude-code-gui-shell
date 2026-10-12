@@ -18,6 +18,7 @@ import { CHAT_PANEL_VIEW_TYPE, type WebviewImpl, type WebviewMessageInterceptor 
 import type { OsBackend } from '../../compat/vscode/host';
 import type { ILogger } from '../../platform/log';
 import type {
+  ConversationEscapeHints,
   SessionBusy,
   SessionRowHints,
   ShellToWebviewControl,
@@ -41,6 +42,18 @@ interface WebviewRequest {
  * it). Comment blocks go right before the form, so the page makes room for them too.
  */
 const CHAT_INPUT_FORM = 'form:has([role="textbox"][aria-label="Message input"])';
+
+/**
+ * The conversation page's own uses of a plain Escape (anthropic.claude-code 2.1.296), which the
+ * shell makes keybindings instead: one that reaches the page's body unprevented interrupts
+ * Claude (unless a permission prompt waits), and two in the empty message input within 800 ms
+ * open the rewind picker. Its other uses of Escape (menus, dialogs, editing a message) work
+ * the same when it is prevented.
+ */
+const CONVERSATION_ESCAPES: ConversationEscapeHints = {
+  input: '[role="textbox"][aria-label="Message input"]',
+  doubleMs: 800,
+};
 
 /** The session list view and the plan preview panel (anthropic.claude-code 2.1.282). */
 const SESSION_LIST_VIEW_TYPE = 'claudeVSCodeSessionsList';
@@ -427,6 +440,10 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   private lastListOpen: { sessionId: string; at: number } | undefined;
   /** The session each preview panel's webview shows, by webview id. */
   private readonly previews = new Map<string, string>();
+  /** The session list's pages, and the session states they were last sent (every session open in it). */
+  private readonly listPages = new Map<WebviewImpl, Record<string, unknown>>();
+  /** What the bridge itself posts to pages, which it does not look at again. */
+  private readonly ownPosts = new WeakSet<object>();
 
   constructor(
     private readonly os: OsBackend,
@@ -504,8 +521,8 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   }
 
   private pin(webviewId: string): void {
-    this.previews.delete(webviewId);
     this.options.pinPreview?.(webviewId);
+    this.keepPreview(webviewId);
   }
 
   /**
@@ -564,14 +581,21 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
    * keeps its last value). Open: in a panel of this window. Elsewhere: Claude Code holds it in
    * another process (another window, VS Code, the CLI), which the extension learns from the
    * records Claude Code keeps of its running sessions.
+   *
+   * The session list puts the sessions open here first and marks them with a dot. A session
+   * in preview is left out of what it is told, so its row stays where it was clicked (and can
+   * be double-clicked there) until the preview is kept.
    */
-  observeToWebview(webview: WebviewImpl, message: unknown): void {
+  observeToWebview(webview: WebviewImpl, message: unknown): unknown {
+    if (isRecord(message) && this.ownPosts.has(message)) {
+      return undefined;
+    }
     const resets = usageResetsOf(message);
     if (resets) {
       // To the page's script, which shows the bars' reset times to the minute.
       const control: ShellToWebviewControl = { ccwControl: 'usageResets', resets };
       void webview.postMessage(control);
-      return;
+      return undefined;
     }
     const inner = isRecord(message) && message.type === 'from-extension' ? message.message : undefined;
     // The session list's open is answered: panels from now on are not its.
@@ -580,7 +604,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     }
     const request = isRecord(inner) && inner.type === 'request' && isRecord(inner.request) ? inner.request : undefined;
     if (request?.type !== 'session_states_update') {
-      return;
+      return undefined;
     }
     if (!this.loggedStatesShape) {
       this.loggedStatesShape = true;
@@ -598,6 +622,43 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
       const control: ShellToWebviewControl = { ccwControl: 'needsInput', count };
       void webview.postMessage(control);
     }
+    if (webview.viewType !== SESSION_LIST_VIEW_TYPE || !isRecord(message) || !isRecord(inner)) {
+      return undefined;
+    }
+    const told = { ...request, openSessionIds: request.openSessionIds ?? this.listPages.get(webview)?.openSessionIds };
+    this.listPages.set(webview, told);
+    const open = request.openSessionIds;
+    const shown = Array.isArray(open) ? this.withoutPreviews(open) : open;
+    return shown === open ? undefined : { ...message, message: { ...inner, request: { ...request, openSessionIds: shown } } };
+  }
+
+  /**
+   * A preview became a tab of its own, kept here (double click, message) or in the shell (its
+   * tab double-clicked): the session list is told again what is open, with its session now.
+   */
+  keepPreview(webviewId: string): void {
+    if (!this.previews.delete(webviewId)) {
+      return;
+    }
+    for (const [page, told] of this.listPages) {
+      const open = told.openSessionIds;
+      const request = { ...told, openSessionIds: Array.isArray(open) ? this.withoutPreviews(open) : open };
+      const message = { type: 'from-extension', message: { type: 'request', channelId: '', requestId: randomUUID(), request } };
+      this.ownPosts.add(message);
+      void page.postMessage(message);
+    }
+  }
+
+  didDisposeWebview(webview: WebviewImpl): void {
+    this.previews.delete(webview.id);
+    this.listPages.delete(webview);
+  }
+
+  /** The entries of `openSessionIds` that are no session in preview. */
+  private withoutPreviews(open: readonly unknown[]): unknown[] {
+    const previewing = new Set(this.previews.values());
+    const kept = open.filter((entry) => !sessionIdOf(entry).some((id) => previewing.has(id)));
+    return kept.length === open.length ? (open as unknown[]) : kept;
   }
 
   sessionBusy(sessionId: string): SessionBusy | undefined {
@@ -628,6 +689,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
           styles: FONT_STYLES + ACCENT_STYLES + USAGE_STYLES + CONVERSATION_STYLES,
           meters: USAGE_METERS,
           usageBars: USAGE_BARS,
+          conversationEscapes: CONVERSATION_ESCAPES,
         };
       case SESSION_LIST_VIEW_TYPE:
         return {

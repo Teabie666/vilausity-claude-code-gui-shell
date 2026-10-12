@@ -355,6 +355,25 @@ await step('a comment not sent yet stays with its session: the tab closes, Ctrl+
   await waitFor(async () => (await blocks().count()) === 0, 5000, 'the comment to go');
 });
 
+// The conversation's own Escape no longer interrupts (the shell's command, unbound by default, does).
+await step('a plain Escape does not interrupt Claude; the Interrupt Claude command does', async () => {
+  const sendButton = () => frame.locator('button[aria-label="Send message"]');
+  await send('Count from 1 to 1000, one number per line, nothing else. Do not use any tool.');
+  await waitFor(async () => (await sendButton().count()) === 0, RESPONSE_TIMEOUT, 'Claude to start');
+  await input().press('Escape');
+  await page.waitForTimeout(2000);
+  if ((await sendButton().count()) > 0) throw new Error('Escape interrupted Claude (or the reply was over in 2 s)');
+  await press('Control+Shift+P');
+  const filter = page.locator('.quick-input-filter');
+  await filter.waitFor({ timeout: 5000 });
+  await filter.fill('>Interrupt Claude');
+  await waitFor(async () => (await page.locator('.quick-input-item').count()) > 0, 5000, 'the command in the palette');
+  await filter.press('Enter');
+  await waitFor(async () => (await sendButton().count()) > 0, 15_000, 'the reply to stop');
+  const numbers = (await conversation().innerText()).match(/^\d+$/gm) ?? [];
+  return `stopped after ${numbers.length} lines`;
+});
+
 // Last: Claude may keep planning after the plan is declined.
 await step('in plan mode, the plan preview opens as a content pane tab', async () => {
   await input().click();

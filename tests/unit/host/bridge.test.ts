@@ -460,3 +460,78 @@ describe('ClaudeWebviewBridge and previews', () => {
     bridge2.interceptFromWebview(list2, openInEditor('r2', 'S1')); // double click pins without a callback
   });
 });
+
+describe('ClaudeWebviewBridge, previews and the session list', () => {
+  const states = (openSessionIds: string[]) => ({
+    type: 'from-extension',
+    message: {
+      type: 'request',
+      channelId: '',
+      requestId: 'states',
+      request: { type: 'session_states_update', sessions: [], activeSessionId: 'S1', openSessionIds },
+    },
+  });
+  const statesOf = (messages: unknown[]) =>
+    messages.filter((message) => (message as { message?: { request?: { type?: string } } }).message?.request?.type === 'session_states_update');
+  const openIdsOf = (message: unknown) =>
+    ((message as { message: { request: { openSessionIds?: string[] } } }).message.request.openSessionIds);
+
+  function previewing() {
+    // The session states the list page is sent (it also gets the shell's needs-input count).
+    const sent: unknown[] = [];
+    const posted = { get length() { return statesOf(sent).length; }, at: (index: number) => statesOf(sent)[index] };
+    const bridge = makePreviewBridge();
+    const list = { id: 'list', viewType: 'claudeVSCodeSessionsList', postMessage: (message: unknown) => (sent.push(message), Promise.resolve(true)) } as unknown as WebviewImpl;
+    const chat = fakeWebview('chat', 'claudeVSCodePanel');
+    bridge.interceptFromWebview(list, openInEditor('r1', 'S1'));
+    const panel = fakeWebview('panel', 'claudeVSCodePanel');
+    assert.equal(bridge.opensAsPreview(panel), true);
+    return { bridge, list, chat, panel, posted };
+  }
+
+  test("the list is not told that a session in preview is open; other pages are", () => {
+    const { bridge, list, chat } = previewing();
+    const replaced = bridge.observeToWebview(list, states(['S0', 'S1']));
+    assert.deepEqual(openIdsOf(replaced), ['S0']);
+    assert.equal(bridge.observeToWebview(chat, states(['S0', 'S1'])), undefined);
+    // Nothing in preview among them: posted as it is.
+    assert.equal(bridge.observeToWebview(list, states(['S0'])), undefined);
+  });
+
+  test('keeping the preview tells the list again, with its session open', () => {
+    const { bridge, list, panel, posted } = previewing();
+    bridge.observeToWebview(list, states(['S0', 'S1']));
+    bridge.keepPreview(panel.id);
+    assert.equal(posted.length, 1);
+    assert.deepEqual(openIdsOf(posted.at(0)), ['S0', 'S1']);
+    // Its own post is not looked at again, and a second keep tells nothing.
+    assert.equal(bridge.observeToWebview(list, posted.at(0)), undefined);
+    bridge.keepPreview(panel.id);
+    assert.equal(posted.length, 1);
+    assert.equal(bridge.observeToWebview(list, states(['S0', 'S1'])), undefined);
+  });
+
+  test('a message sent in the preview keeps it and tells the list', () => {
+    const { bridge, list, panel, posted } = previewing();
+    bridge.observeToWebview(list, states(['S1']));
+    bridge.interceptFromWebview(panel, userMessage());
+    assert.deepEqual(openIdsOf(posted.at(0)), ['S1']);
+  });
+
+  test('a preview that closes is forgotten, and so is a list page that goes', () => {
+    const { bridge, list, panel, posted } = previewing();
+    bridge.observeToWebview(list, states(['S1']));
+    bridge.didDisposeWebview(panel);
+    assert.equal(bridge.observeToWebview(list, states(['S1'])), undefined);
+    bridge.didDisposeWebview(list);
+    bridge.keepPreview(panel.id);
+    assert.equal(posted.length, 0);
+  });
+
+  test("a conversation page is told how its own Escapes work, which the shell takes over", () => {
+    const hints = makePreviewBridge().pageHints(fakeWebview('chat', 'claudeVSCodePanel'));
+    assert.equal(hints?.conversationEscapes?.input, '[role="textbox"][aria-label="Message input"]');
+    assert.equal(hints?.conversationEscapes?.doubleMs, 800);
+    assert.equal(makePreviewBridge().pageHints(fakeWebview('list', 'claudeVSCodeSessionsList'))?.conversationEscapes, undefined);
+  });
+});

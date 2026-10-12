@@ -11,6 +11,8 @@ export const t = defineMessages('conversations', {
   /** `{0}`: its place in the row of tabs, from 1. */
   openConversationAt: 'Open Conversation {0}',
   focusInput: 'Focus Input',
+  interrupt: 'Interrupt Claude',
+  rewind: 'Rewind to…',
   findInConversation: 'Find in Conversation',
   showLogs: 'Show Logs',
   signOut: 'Sign Out',

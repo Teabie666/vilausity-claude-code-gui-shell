@@ -172,6 +172,9 @@ const THEME_CLASSES = [
             pendingNeedsInput = control.count;
           }
           break;
+        case 'escape':
+          playEscape(control.action);
+          break;
       }
     },
     true,
@@ -189,13 +192,68 @@ const THEME_CLASSES = [
       post({ kind: 'keydown', event: toKeyEventDto(event) });
     }
   });
-  // An Escape the page did not use may close the tab (the shell decides). From the capture
-  // phase on: the page's handlers may change the page before a bubble listener here runs.
+  // A plain Escape. The conversation page's own uses of it that the shell took over (see the
+  // hints) are kept from the page: the Escape is prevented, which keeps the page from
+  // interrupting Claude, and one that would be the second in the empty input does not reach
+  // it (no rewind picker). Played by the shell, they do reach it. An Escape the page did not use
+  // otherwise may close the tab (the shell decides). From the capture phase on: the page's
+  // handlers may change the page before a bubble listener here runs.
+  const escapes = data.hints?.conversationEscapes;
+  const played = new WeakMap<Event, 'interrupt' | 'rewind'>();
+  // When the page last had an Escape in the empty input.
+  let inputEscapeAt = Number.NEGATIVE_INFINITY;
   window.addEventListener(
     'keydown',
     (event) => {
-      if (isPlainEscape(event)) {
-        whenUnused(event, () => post({ kind: 'keydown', event: toKeyEventDto(event) }));
+      const play = played.get(event);
+      if (play !== undefined) {
+        // The rewind's Escapes must not interrupt Claude as well.
+        if (play === 'rewind') {
+          event.preventDefault();
+        }
+        return;
+      }
+      if (!isPlainEscape(event)) {
+        return;
+      }
+      if (escapes) {
+        event.preventDefault();
+        const input = event.target instanceof Element ? event.target.closest(escapes.input) : null;
+        if (input && (input.textContent ?? '').trim() === '') {
+          const now = Date.now();
+          if (now - inputEscapeAt <= escapes.doubleMs) {
+            event.stopImmediatePropagation();
+            return;
+          }
+          inputEscapeAt = now;
+        }
+      }
+      whenUnused(event, escapes !== undefined, () => post({ kind: 'keydown', event: toKeyEventDto(event) }));
+    },
+    true,
+  );
+  const playEscape = (action: 'interrupt' | 'rewind'): void => {
+    // The rewind picker: two Escapes in the empty input; interrupting: one that reaches the body.
+    const target = action === 'rewind' ? document.querySelector<HTMLElement>(escapes?.input ?? '') : document.body;
+    if (!escapes || !target) {
+      return;
+    }
+    if (action === 'rewind') {
+      target.focus();
+    }
+    for (let count = action === 'rewind' ? 2 : 1; count > 0; count--) {
+      const escape = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true });
+      played.set(escape, action);
+      target.dispatchEvent(escape);
+    }
+  };
+  // The mouse's back and forward buttons go to the shell, which moves between the tabs used.
+  window.addEventListener(
+    'mouseup',
+    (event) => {
+      if (event.button === 3 || event.button === 4) {
+        event.preventDefault();
+        post({ kind: 'navigate', direction: event.button === 3 ? 'back' : 'forward' });
       }
     },
     true,
@@ -327,10 +385,11 @@ function isShellShortcut(event: KeyboardEvent): boolean {
 
 /**
  * Calls `unused` once the event's dispatch is over if nothing used it: no listener prevented
- * its default or stopped it before it bubbled back to the window, and it changed nothing on
- * the page (some menus close on Escape without either).
+ * its default (unless this script did itself: then only the rest tells) or stopped it before
+ * it bubbled back to the window, and it changed nothing on the page (some menus close on
+ * Escape without either).
  */
-function whenUnused(event: KeyboardEvent, unused: () => void): void {
+function whenUnused(event: KeyboardEvent, preventedHere: boolean, unused: () => void): void {
   let changed = false;
   const observer = new MutationObserver(() => {
     changed = true;
@@ -346,7 +405,7 @@ function whenUnused(event: KeyboardEvent, unused: () => void): void {
     window.removeEventListener('keydown', onBubble);
     changed ||= observer.takeRecords().length > 0;
     observer.disconnect();
-    if (bubbled && !changed && !event.defaultPrevented) {
+    if (bubbled && !changed && (preventedHere || !event.defaultPrevented)) {
       unused();
     }
   });

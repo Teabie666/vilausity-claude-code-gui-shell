@@ -165,12 +165,13 @@ export class ConversationTabs {
     }
   }
 
-  /** Keeps a preview: it stays when another tab shows. */
+  /** Keeps a preview: it stays when another tab shows (and the session list shows it open now). */
   pin(panelId: string): void {
     const entry = this.panels.get(panelId);
     if (entry?.isPreview && !entry.closing) {
       entry.isPreview = false;
       entry.tab.classList.remove('preview');
+      this.connection.rpc?.notify('panel.didPin', { panelId });
     }
   }
 

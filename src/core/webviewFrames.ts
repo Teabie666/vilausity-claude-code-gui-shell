@@ -155,6 +155,9 @@ export class WebviewFrames {
   private readonly deleteSessionEmitter = new Emitter<{ sessionId: string; title: string }>();
   /** The delete button of a session list's row was clicked (pages with `hints.sessionRows`). */
   readonly onDidRequestSessionDelete = this.deleteSessionEmitter.event;
+  private readonly navigateEmitter = new Emitter<'back' | 'forward'>();
+  /** The mouse's back or forward button was released over a webview. */
+  readonly onDidRequestNavigate: Event<'back' | 'forward'> = this.navigateEmitter.event;
 
   constructor(
     private readonly connection: ExtensionHostConnection,
@@ -264,6 +267,15 @@ export class WebviewFrames {
     this.frames.get(webviewId)?.post(control);
   }
 
+  /**
+   * Plays a conversation page its own use of Escape that the shell took over: interrupting
+   * Claude, or the rewind picker (pages with `hints.conversationEscapes`).
+   */
+  playEscape(webviewId: string, action: 'interrupt' | 'rewind'): void {
+    const control: ShellToWebviewControl = { ccwControl: 'escape', action };
+    this.get(webviewId)?.post(control);
+  }
+
   /** The iframe that shows a webview, e.g. to place shell UI over a spot of its page. */
   element(webviewId: string): HTMLIFrameElement | undefined {
     return this.frames.get(webviewId)?.iframe;
@@ -322,6 +334,11 @@ export class WebviewFrames {
       case 'deleteSession':
         if (typeof data.sessionId === 'string') {
           this.deleteSessionEmitter.fire({ sessionId: data.sessionId, title: typeof data.title === 'string' ? data.title : '' });
+        }
+        break;
+      case 'navigate':
+        if (data.direction === 'back' || data.direction === 'forward') {
+          this.navigateEmitter.fire(data.direction);
         }
         break;
       default:

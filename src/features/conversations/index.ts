@@ -110,6 +110,14 @@ export const conversationsModule: ShellModule = {
     );
 
     const ext = (id: string) => () => connection.executeCommand(id);
+    // The conversation page's own uses of Escape, made keybindings here (the page no longer gets
+    // them from a plain Escape, see host/webview/bootstrap.ts): interrupting has no keys by default.
+    const playEscape = (action: 'interrupt' | 'rewind') => () => {
+      const panel = tabs.active;
+      if (panel) {
+        frames.playEscape(panel.webviewId, action);
+      }
+    };
     const register = [
       commands.register('conversations.new', ext(EXT_OPEN_CHAT), { title: t('newConversation'), category: 'Claude' }),
       commands.register('conversations.close', () => tabs.requestClose(), {
@@ -140,6 +148,16 @@ export const conversationsModule: ShellModule = {
         category: 'Claude',
       }),
       commands.register('conversations.focusInput', ext(EXT_FOCUS_INPUT), { title: t('focusInput'), category: 'Claude' }),
+      commands.register('conversations.interrupt', playEscape('interrupt'), {
+        title: t('interrupt'),
+        category: 'Claude',
+        when: 'conversations.hasActive',
+      }),
+      commands.register('conversations.rewind', playEscape('rewind'), {
+        title: t('rewind'),
+        category: 'Claude',
+        when: 'conversations.hasActive',
+      }),
       commands.register('conversations.find', () => find.show(), {
         title: t('findInConversation'),
         category: 'Claude',
@@ -149,6 +167,8 @@ export const conversationsModule: ShellModule = {
       commands.register('claude.logout', ext(EXT_LOGOUT), { title: t('signOut'), category: 'Claude' }),
       keybindings.register({ key: 'ctrl+n', command: 'conversations.new' }),
       keybindings.register({ key: 'ctrl+w', command: 'conversations.close' }),
+      // Of Escape with a modifier only Shift is left: Windows takes Alt+Esc and Ctrl+Esc itself.
+      keybindings.register({ key: 'shift+escape', command: 'conversations.rewind' }),
       keybindings.register({ key: 'ctrl+tab', command: 'conversations.next' }),
       keybindings.register({ key: 'ctrl+pagedown', command: 'conversations.next' }),
       keybindings.register({ key: 'ctrl+shift+tab', command: 'conversations.previous' }),

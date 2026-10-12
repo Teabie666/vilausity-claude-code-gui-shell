@@ -186,6 +186,22 @@ export interface WebviewPageHints {
   readonly usageBars?: UsageBarHints;
   /** The session list's status filter, which the shell makes one drop-down with the "Active" count. */
   readonly statusFilter?: StatusFilterHints;
+  /** A conversation page's own uses of a plain Escape, which the shell takes over (see the type). */
+  readonly conversationEscapes?: ConversationEscapeHints;
+}
+
+/**
+ * A conversation page acts on a plain Escape by itself: one that no listener prevented
+ * interrupts Claude, and two in the empty message input open the rewind picker. The shell
+ * makes both keybindings of its own instead: the page script prevents every plain Escape (so it
+ * interrupts nothing) and keeps from the page an Escape in the empty input that would be the
+ * second; the shell's `escape` control plays the page those Escapes itself.
+ */
+export interface ConversationEscapeHints {
+  /** CSS selector of the message input. */
+  readonly input: string;
+  /** How close together two Escapes in the empty input open the rewind picker (ms). */
+  readonly doubleMs: number;
 }
 
 /** CSS selectors of the session list's status filter button and of its "Active · N" toggle. */
@@ -592,6 +608,8 @@ export type ExtHostApiForRenderer = {
   'panel.didChangeViewState': (p: { panelId: string; active: boolean; visible: boolean }) => void;
   /** The user closed a panel's tab in the shell. */
   'panel.didClose': (p: { panelId: string }) => void;
+  /** A preview (`PanelCreateParams.preview`) became a tab of its own in the shell. */
+  'panel.didPin': (p: { panelId: string }) => void;
   /**
    * The shell wants to show the view registered under `viewType`. Resolves to false when
    * the extension registered no provider for it.
@@ -947,7 +965,9 @@ export type WebviewToShellMessage =
   | { readonly ccw: string; readonly kind: 'findResult'; readonly matches: number; readonly active: number }
   | { readonly ccw: string; readonly kind: 'comments'; readonly event: CommentsHostEvent }
   /** The delete button of a session list's row (see `hints.sessionRows`); `title` as the row shows it. */
-  | { readonly ccw: string; readonly kind: 'deleteSession'; readonly sessionId: string; readonly title: string };
+  | { readonly ccw: string; readonly kind: 'deleteSession'; readonly sessionId: string; readonly title: string }
+  /** The mouse's back or forward button was released over the page. */
+  | { readonly ccw: string; readonly kind: 'navigate'; readonly direction: 'back' | 'forward' };
 
 export type FindDirection = 'restart' | 'next' | 'previous';
 
@@ -971,4 +991,6 @@ export type ShellToWebviewControl =
   /** When each usage bar resets (epoch ms), by the bar's label as the extension writes it (from the bridge). */
   | { readonly ccwControl: 'usageResets'; readonly resets: Readonly<Record<string, number>> }
   /** How many sessions wait for the user (from the bridge). */
-  | { readonly ccwControl: 'needsInput'; readonly count: number };
+  | { readonly ccwControl: 'needsInput'; readonly count: number }
+  /** Plays the page its own use of Escape that the shell took over (pages with `hints.conversationEscapes`). */
+  | { readonly ccwControl: 'escape'; readonly action: 'interrupt' | 'rewind' };

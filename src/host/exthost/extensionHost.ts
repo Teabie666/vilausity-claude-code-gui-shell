@@ -139,6 +139,12 @@ export class ExtensionHost {
     webviews.interceptor = bridge;
     this.bridge = bridge;
     renderer.handle('sessions.busy', ({ sessionId }) => bridge.sessionBusy(sessionId));
+    renderer.handle('panel.didPin', ({ panelId }) => {
+      const panel = webviews.allPanels.find((candidate) => candidate.id === panelId);
+      if (panel) {
+        bridge.keepPreview(panel.webview.id);
+      }
+    });
     renderer.handle('sessions.close', ({ sessionId }) => {
       // As if its tabs were closed: the extension's dispose handlers end the Claude process.
       const shown = webviews.allPanels.filter((panel) => conversationSessionId(panel.webview.state) === sessionId);

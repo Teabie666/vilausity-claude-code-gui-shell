@@ -31,8 +31,14 @@ export interface WebviewMessageInterceptor {
    * also rewrite the message in place and return false to pass it on changed.
    */
   interceptFromWebview(webview: WebviewImpl, message: unknown): boolean;
-  /** Sees what the extension posts to a webview, without changing it. */
-  observeToWebview?(webview: WebviewImpl, message: unknown): void;
+  /**
+   * Sees what the extension posts to a webview. It may return a message to post in its place:
+   * a changed copy, never the message itself changed (the extension may post one object to
+   * several pages). Undefined posts the message as it is.
+   */
+  observeToWebview?(webview: WebviewImpl, message: unknown): unknown;
+  /** The webview is gone with its panel or view. */
+  didDisposeWebview?(webview: WebviewImpl): void;
   /** What the shell's script in this webview should know about the page (asked once per webview). */
   pageHints?(webview: WebviewImpl): WebviewPageHints | undefined;
   /** Whether a panel being created for this webview opens as a preview (see `PanelCreateParams.preview`). */
@@ -49,8 +55,8 @@ export class WebviewImpl implements vscode.Webview {
   state: unknown = undefined;
   /** Passed to the shell's script in the page with every document. */
   pageHints: WebviewPageHints | undefined = undefined;
-  /** Sees each message the extension posts (the manager hands them to its interceptor). */
-  onPost: ((message: unknown) => void) | undefined = undefined;
+  /** Sees each message the extension posts (the manager hands them to its interceptor), maybe a replacement. */
+  onPost: ((message: unknown) => unknown) | undefined = undefined;
   private readonly messageEmitter = new Emitter<unknown>();
   readonly onDidReceiveMessage: Event<unknown> = this.messageEmitter.event;
 
@@ -87,10 +93,10 @@ export class WebviewImpl implements vscode.Webview {
     if (this.disposed) {
       return Promise.resolve(false);
     }
-    this.onPost?.(message);
+    const replacement = this.onPost?.(message);
     // MessagePort delivery is ordered, so resolving right away keeps the extension's
     // send queue moving without a round trip per message.
-    this.backend.postMessage(this.id, message);
+    this.backend.postMessage(this.id, replacement === undefined ? message : replacement);
     return Promise.resolve(true);
   }
 
@@ -401,6 +407,7 @@ export class WebviewManager implements IDisposable {
     const view = new WebviewViewImpl(viewId, viewType, webview, this.host.webviews, (disposed) => {
       this.views.delete(disposed.viewType);
       this.webviews.delete(disposed.webview.id);
+      this.interceptor?.didDisposeWebview?.(disposed.webview);
     });
     this.views.set(viewType, view);
     this.host.webviews.createView({ viewId, webviewId, viewType });
@@ -437,6 +444,7 @@ export class WebviewManager implements IDisposable {
       (disposed) => {
         this.panels.delete(disposed.id);
         this.webviews.delete(disposed.webview.id);
+        this.interceptor?.didDisposeWebview?.(disposed.webview);
         this.panelsEmitter.fire();
       },
     );

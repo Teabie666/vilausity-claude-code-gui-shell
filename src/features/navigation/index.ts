@@ -15,6 +15,9 @@ import { IConversations } from '../conversations';
 import { NavigationHistory } from './history';
 import { t } from './messages';
 
+/** A mouse button press reported twice (by the page and as an app command) comes this close together, the same way (ms). */
+const SAME_PRESS_MS = 150;
+
 /** A tab: a conversation panel, or a content pane tab by its input. */
 export interface TabLocation {
   readonly area: 'conversation' | 'content';
@@ -79,9 +82,28 @@ export const navigationModule: ShellModule = {
     );
     subscriptions.add(keybindings.register({ key: 'alt+left', command: 'navigation.back' }));
     subscriptions.add(keybindings.register({ key: 'alt+right', command: 'navigation.forward' }));
-    subscriptions.add(
-      services.get(INative).on('navigate', ({ direction }) => void commands.execute(direction === 'back' ? 'navigation.back' : 'navigation.forward')),
-    );
+
+    // The mouse's back and forward buttons. The pages report them: this one here, a webview's
+    // through its script. Windows sends them as app commands too, which main passes on, but
+    // only where no page takes the mouse (the title bar). A press heard twice counts once.
+    let lastMouse = { direction: '', at: Number.NEGATIVE_INFINITY };
+    const mouseNavigate = (direction: 'back' | 'forward'): void => {
+      const now = Date.now();
+      if (direction !== lastMouse.direction || now - lastMouse.at >= SAME_PRESS_MS) {
+        lastMouse = { direction, at: now };
+        void commands.execute(direction === 'back' ? 'navigation.back' : 'navigation.forward');
+      }
+    };
+    const onMouseUp = (event: MouseEvent): void => {
+      if (event.button === 3 || event.button === 4) {
+        event.preventDefault();
+        mouseNavigate(event.button === 3 ? 'back' : 'forward');
+      }
+    };
+    window.addEventListener('mouseup', onMouseUp, true);
+    subscriptions.add({ dispose: () => window.removeEventListener('mouseup', onMouseUp, true) });
+    subscriptions.add(frames.onDidRequestNavigate(mouseNavigate));
+    subscriptions.add(services.get(INative).on('navigate', ({ direction }) => mouseNavigate(direction)));
 
     /**
      * An Escape nothing took (a menu, a widget, the editor's own use of it) closes the tab it
