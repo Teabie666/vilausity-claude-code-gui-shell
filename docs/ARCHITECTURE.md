@@ -92,8 +92,18 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **截住按键**：渲染进程把用到的组合键集合交给主进程（`window.setKeybindings`），主进程在 `before-input-event` 里截住（页面、iframe、Monaco 都收不到），发回渲染进程按规则分派（`core/keybindings.ts`，后面的规则优先，`when` 不成立的跳过）。所以快捷键在哪里都能用，代价是集合里的组合键页面永远收不到。组合键按物理键（`KeyboardEvent.code`）算，跟键盘布局无关（`platform/keybindings.ts`）。
 - **两层**（照 VS Code）：各模块 `IKeybindings.register` 的是默认；用户的 `keybindings.json`（settings.json 旁边，VS Code 的格式：`key`、`command`、`when`、`args`）盖在上面：普通条目加在默认之后（优先），`-命令` 去掉这个命令的默认（`key` 给了就只去掉这个键的，`when` 给了要相同）。只有主进程写这个文件（`host/main/keybindingsStore.ts`，jsonc-parser 改，保留注释；手改也会重新读），渲染进程启动时读一次（`keybindings.read`，在模块登记默认之前），之后收 `keybindingsChanged`。不支持的条目（连按两下的 `ctrl+k ctrl+s`、缺 key 或 command）读的时候跳过；`when` 写错的那条永远不生效。
 - **显示**：菜单、命令面板、提示里的按键都现查（`labelFor`：用户的优先，否则第一条默认；`bindTooltip` 在鼠标移上去时重算），改了快捷键跟着变。
-- **设置里的"键盘快捷方式"**（`features/keybindings`）：设置面板里的一个分区，整块是一张表（照 VS Code 的键盘快捷方式编辑器）：在用的规则、还没有快捷键的命令（可以加）、最后是灰色的只读行（系统的复制粘贴、对话输入框的 Enter、Monaco 的常用键，`builtins.ts`），按命令名排序。设置的搜索框也搜表里的行（`SettingsWidgetHandle.search`）。双击一行或点铅笔录新按键：录的时候主进程暂停截键（`pauseInterception`，不然 Ctrl+P 会直接打开搜索），Enter 确定、Esc 取消；只收带 Ctrl、Alt、Win 的组合或 F 键（别的键要留着打字）；跟别的命令或只读行重了会提示。改法跟 VS Code 一样（`edits.ts`）：默认的不就地改，加一条新的、再加一条 `-命令` 去掉默认，"重置"把这个命令的条目都删掉；用户自己的条目就地改。行上有重置、删除按钮，左边的竖线标出改过的命令。"在 keybindings.json 中编辑"用普通文本标签页打开，带 schema（命令 id 的补全）。
+- **设置里的"键盘快捷方式"**（`features/keybindings`）：设置面板里的一个分区，整块是一张表（照 VS Code 的键盘快捷方式编辑器）：在用的规则、还没有快捷键的命令（可以加）、最后是灰色的只读行（系统的复制粘贴、对话输入框的 Enter、Monaco 的常用键、鼠标侧键、Esc 关标签页，`builtins.ts`），按命令名排序。设置的搜索框也搜表里的行（`SettingsWidgetHandle.search`）。双击一行或点铅笔录新按键：录的时候主进程暂停截键（`pauseInterception`，不然 Ctrl+P 会直接打开搜索），Enter 确定、Esc 取消；只收带 Ctrl、Alt、Win 的组合或 F 键（别的键要留着打字）；跟别的命令或只读行重了会提示。改法跟 VS Code 一样（`edits.ts`）：默认的不就地改，加一条新的、再加一条 `-命令` 去掉默认，"重置"把这个命令的条目都删掉；用户自己的条目就地改。行上有重置、删除按钮，左边的竖线标出改过的命令。"在 keybindings.json 中编辑"用普通文本标签页打开，带 schema（命令 id 的补全）。
 - **命令要有标题**：表里显示命令的标题；只给快捷键用、不想出现在命令面板里的命令，注册时加 `palette: false`（比如"打开第 N 个对话"，照 VS Code 拆成 9 个命令）。
+
+## 标签页导航（M5.5）
+
+`features/navigation` 记着"用过的标签页"（`history.ts`）：对话标签页和内容面板的标签页在同一条历史里，像浏览器一样，切到一个标签页记一条，后退之后再切到别处就丢掉前面的，关掉的标签页从历史里删掉。
+
+- **前进 / 后退**：命令 `navigation.back` / `navigation.forward`（Alt+← / Alt+→，跟 VS Code 一样，可以在快捷键设置里改）。已经在屏幕上的标签页跳过：对话区和内容面板同时显示，切到正在显示的那个看起来像没反应。鼠标侧键由 Windows 当成 app command 发给窗口（`WM_APPCOMMAND`），焦点在插件页面（iframe）里也一样；主进程的 BrowserWindow 收到 `app-command`（`browser-backward` / `browser-forward`）后发 `navigate` 给渲染进程，标签页的独立窗口也转发。
+- **Esc 关标签页**：Esc 没被别处用掉时，关掉按下它的那个标签页，再回到上一个用过的标签页。只关内容面板的标签页和预览中的对话。正式打开的对话不关，关错了会丢掉正在看的对话。有未保存修改的不关，关掉就等于做了决定的也不关（`EditorPane.closesOnEscape`）：Claude 提议改动的 diff（关掉就是拒绝），以及 API 接口编辑页这种表单。主进程不截 Esc（截了页面就收不到了），"有没有被用掉"由页面自己判断：
+  - 壳的页面：窗口上的 keydown 监听等事件分派完再看 `defaultPrevented`。壳的弹窗、查找框、选中文字弹出的菜单用掉 Esc 时都会 `preventDefault`；Monaco 有浮层、选区或多个光标时自己处理 Esc，也会 `preventDefault`。
+  - 插件页面：引导脚本从捕获阶段开始看这次 Esc，被 `preventDefault`、被拦下没冒泡回 window、或者让页面变了，都算用掉了，否则报给壳（`keydown`）。看页面变没变（`MutationObserver`），是因为有的菜单按 Esc 关掉自己时前两样都不做。插件对话页的输入框空着时，第一下 Esc 插件不用（连按两下才是插件自己的功能），所以在预览里按一下就关。
+- **预览对话**：照 VS Code 的预览编辑器。从会话列表单击打开的对话是预览（标题斜体）；再单击别的会话，新的预览在原位置顶替它；切到别的对话标签页，它就关掉。双击标签页、在列表里双击这一行，或者在里面发了消息，就转成正式标签页。插件那边（对照 2.1.296）：单击一行时页面发 `open_in_editor`（带 `sessionId`），插件执行 `claude-vscode.editor.open` 新建这个会话的面板（已经开着就提到前面），然后回 `open_in_editor_response`。bridge 把这个请求进来到回答之前新建的对话面板标成预览（`opensAsPreview` → `PanelCreateParams.preview`）；同一个会话 500 ms 内的第二次 `open_in_editor` 算双击，`io_message` 里的用户消息算发了消息，这两种都让 exthost 发 `panel.update`（`pinned`）。关预览跟用户点关闭一样（`panel.didClose`，插件 dispose 面板，结束它的 claude 进程）。
 
 ## 窗口和工作区（M4）
 
