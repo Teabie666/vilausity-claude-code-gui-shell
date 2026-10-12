@@ -98,8 +98,8 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 
 ## 标题栏搜索框和快速访问（M5.5）
 
-- **标题栏**：左边侧栏开关、软件名、API 接口按钮；中间搜索框（照 VS Code 的命令中心，显示当前文件夹名，右端一个按钮进命令面板）；右边设置、内容面板开关。左右两边平分剩下的宽度，搜索框在窗口正中。
-- **快速访问**（`core/quickAccess.ts`，照 VS Code 的 quick access）：一个输入框，开头的字符决定交给谁：`>` 是命令（`features/commandPalette`），没有前缀是搜索。搜索由各模块登记的分组拼成（`registerSearchContributor`，分组的顺序可以随输入变）：对话（`features/sessionSearch`）、新建对话（`features/conversations`）、文件（`features/quickOpen`；输入像文件名或路径时排到最前，Ctrl+P、文件名、回车照样打开文件）、文件夹（`features/workspace`）、"在所有文件夹中搜索"。异步的分组按 id 保留上一次的结果直到新结果回来，打字时列表不闪。快捷键：Ctrl+P / Ctrl+E 搜索，Ctrl+Shift+P / F1 命令，Ctrl+R 最近的文件夹。
+- **标题栏**：左边侧栏开关、软件名、API 接口按钮；中间搜索框（照 VS Code 的命令中心，显示"工作区：<文件夹名>"，用户主文件夹后面加"（全局）"——在那里 Claude 能动整台电脑；管理员实例在后面加"[管理员]"）；右边设置、内容面板开关。左右两边平分剩下的宽度，搜索框在窗口正中。
+- **快速访问**（`core/quickAccess.ts`，照 VS Code 的 quick access）：一个输入框，开头的字符决定交给谁：`>` 是命令（`features/commandPalette`），没有前缀是搜索。打开时盖在标题栏的搜索框上（跟 VS Code 开着命令中心时一样，所有快速输入都在这个位置），看起来是搜索框变大成了输入框、下面接着列表；避开两边的窗口按钮，不能拖动窗口。搜索由各模块登记的分组拼成（`registerSearchContributor`，分组的顺序可以随输入变）：对话（`features/sessionSearch`）、新建对话（`features/conversations`）、文件（`features/quickOpen`；输入像文件名或路径时排到最前，Ctrl+P、文件名、回车照样打开文件）、文件夹（`features/workspace`；没输入时还有打开文件夹、最近的文件夹、以管理员身份打开）、命令（没输入时：显示所有命令，加最近用过的两个）、"在所有文件夹中搜索"。异步的分组按 id 保留上一次的结果直到新结果回来，打字时列表不闪。命令面板照 VS Code 把最近用过的命令排在前面（在命令面板和搜索里执行的才算，存在 localStorage，各窗口共用）。快捷键：Ctrl+P / Ctrl+E 搜索，Ctrl+Shift+P / F1 命令，Ctrl+R 最近的文件夹。
 - **搜对话**：主进程读 Claude Code 的会话记录（`~/.claude/projects/<文件夹>/<会话 id>.jsonl`，`CLAUDE_CONFIG_DIR` 改了就跟着改；测试用 `VILAUS_SESSIONS_DIR` 指到别处）。这是 CLI 自己的存储格式，不是接口，所以只读、容错：不认识的行和字段跳过。只看标题（用户起的名字 > 旁路文件 `<会话 id>/custom-title.json` > 生成的标题 > 第一句话）、用户打的字和 Claude 的回复（不含工具输出、思考、IDE 和 CLI 附加的上下文），以及 Claude 读过和改过的文件。读取在主进程的 worker 线程里（`host/main/sessionSearch.ts`、`sessionSearchWorker.ts`，解析和匹配是纯函数 `sessionTranscripts.ts`），按文件大小和修改时间缓存，3 秒内的搜索直接用缓存。匹配不分大小写、整串子串匹配（中文直接能搜）：标题、文件、内容依次排，同类按时间新的在前。默认只搜当前文件夹的会话（按记录里的 `cwd`）。打开结果走主进程 `sessions.open`：找到（或打开）那个文件夹的窗口，再 `conversation.open`。
 
 ## API 接口（M4）
@@ -143,9 +143,9 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **哪些分开、哪些共用**（`AppPaths`）：管理员实例的 `instanceRoot` 是 `<数据目录>\admin`，state（窗口、最近的文件夹、插件的 globalState / workspaceState）、logs、Chromium 配置、插件的 globalStorage / workspaceStorage 都在它下面。Electron 的 userData 也指向它，所以单实例锁也是自己的：管理员实例可以跟普通实例同时开，第二次启动只转发给同一种实例。settings.json、providers.json、`extensions\` 共用。
 - **API 密钥共用**（`host/main/safeStorageKey.ts`）：safeStorage 加密用的主密钥存在 Chromium 配置的 `Local State` 里（`os_crypt.encrypted_key`，本身由 DPAPI 按 Windows 用户加密）。启动时（拿到单实例锁之后、Chromium 读 `Local State` 之前）互相同步：管理员实例用普通实例的主密钥；普通实例自己没有时才用管理员实例的。这依赖 Chromium 的 `Local State` 格式；格式哪天变了，后果只是管理员实例解不开普通实例存的密钥，在管理员实例里重新输入就行。实测：主密钥第一次生成后约 10 秒内写盘，正常退出时一定会写。
 - **插件目录共用**：store 每次修改都基于磁盘上最新的 `state.json`（`update()`），两个进程不会互相覆盖。清理旧版本时先改名再删：Windows 不允许给里面有打开文件的文件夹改名，所以另一个实例正在用的版本、正在写的下载不会被删掉一半。只有普通实例会自动检查更新；管理员实例里可以手动检查更新、回滚。
-- **怎么标出来**：标题栏有"管理员"徽标（用 `activityErrorBadge` 的颜色）；原生窗口标题后面加 " [Administrator]"（在 `page-title-updated` 里改，页面自己的 `document.title` 不变）。
-- **入口**：Windows 的"以管理员身份运行"；普通实例「文件夹 ▾」里的"以管理员身份打开此文件夹"（命令 `workspace.openAsAdministrator`）：主进程用 PowerShell 的 `Start-Process -Verb RunAs` 启动，Windows 弹 UAC 确认。参数按 CommandLineToArgvW 的规则加引号，开发时带上 app 目录，有 `--user-data-dir` 时也带上。
-- **测试**：单元测试覆盖强制开关、路径、命令行引号、主密钥同步。界面测试在普通实例运行时再起一个强制管理员的实例，检查徽标、窗口标题、它的主进程用 safeStorage 能解开普通实例存的密钥、它自己的 state 和 Chromium 目录。UAC 那一步没有自动测试。
+- **怎么标出来**：标题栏搜索框里文件夹名后面加"[管理员]"（照 VSCodium 窗口标题的写法）；原生窗口标题后面加 " [Administrator]"（在 `page-title-updated` 里改，页面自己的 `document.title` 不变）。
+- **入口**：Windows 的"以管理员身份运行"；普通实例搜索框（没输入时的文件夹一组）和 Ctrl+R 列表里的"以管理员身份打开此文件夹"（命令 `workspace.openAsAdministrator`）：主进程用 PowerShell 的 `Start-Process -Verb RunAs` 启动，Windows 弹 UAC 确认。参数按 CommandLineToArgvW 的规则加引号，开发时带上 app 目录，有 `--user-data-dir` 时也带上。
+- **测试**：单元测试覆盖强制开关、路径、命令行引号、主密钥同步。界面测试在普通实例运行时再起一个强制管理员的实例，检查搜索框里的标记、窗口标题、它的主进程用 safeStorage 能解开普通实例存的密钥、它自己的 state 和 Chromium 目录。UAC 那一步没有自动测试。
 
 ## 评论（M3）
 

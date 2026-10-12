@@ -17,6 +17,7 @@ import {
   IQuickAccess,
   IWorkspace,
 } from '../../core/serviceIds';
+import { folderLabel } from '../workspace';
 import { matchRanges, scorePath } from './fuzzy';
 import { t } from './messages';
 
@@ -47,27 +48,34 @@ export const quickOpenModule: ShellModule = {
     subscriptions.add(keybindings.register({ key: 'ctrl+p', command: 'quickOpen.show' }));
     subscriptions.add(keybindings.register({ key: 'ctrl+e', command: 'quickOpen.show' }));
 
-    // The box: the folder's name (it stands for the folder button too) and the command palette.
+    // The box names the workspace (it stands for the folder button too) and, in the
+    // administrator instance, says so after the name, as VS Code's title does. Opening the
+    // search puts the picker right over it (styles.css), so the box seems to become the input.
     const box = document.createElement('div');
     box.className = 'search-box';
     const openButton = document.createElement('button');
     openButton.className = 'search-box-open';
     const label = document.createElement('span');
     label.className = 'search-box-label';
-    label.textContent = workspace.name || t('search');
+    const folder = workspace.folders[0];
+    label.textContent = folder ? t('workspaceLabel', folderLabel(folder, workspace.homeFolder)) : t('search');
     openButton.append(label);
+    if (workspace.elevated) {
+      const administrator = document.createElement('span');
+      administrator.className = 'search-box-administrator';
+      administrator.textContent = t('administrator');
+      openButton.append(administrator);
+    }
     openButton.addEventListener('click', () => void commands.execute('quickOpen.show'));
-    const paletteButton = document.createElement('button');
-    paletteButton.className = 'icon-button search-box-commands';
-    paletteButton.setAttribute('aria-label', t('commandPalette'));
-    paletteButton.addEventListener('click', () => void commands.execute('commandPalette.show'));
     // Keybindings are known once every module has registered its own.
     box.addEventListener('mouseenter', () => {
-      const shortcut = (id: string): string => keybindings.labelFor(id) ?? '';
-      openButton.title = [t('searchTooltip', shortcut('quickOpen.show')), ...workspace.folders].join('\n');
-      paletteButton.title = t('commandPaletteTooltip', shortcut('commandPalette.show'));
+      openButton.title = [
+        t('searchTooltip', keybindings.labelFor('quickOpen.show') ?? ''),
+        ...workspace.folders,
+        ...(workspace.elevated ? [t('administratorTooltip')] : []),
+      ].join('\n');
     });
-    box.append(openButton, paletteButton);
+    box.append(openButton);
     services.get(ILayout).titleBarCenter.appendChild(box);
     subscriptions.add({ dispose: () => box.remove() });
 

@@ -199,9 +199,25 @@ await step('command palette switches the color theme for shell and webviews', as
 });
 
 await step('the search box finds conversations by title, words and files; > lists commands', async () => {
+  const label = await page.locator('.search-box').innerText();
+  if (!label.startsWith('Workspace: ') || (await page.locator('.search-box button').count()) !== 1) {
+    throw new Error(`the search box: "${label}", ${await page.locator('.search-box button').count()} button(s)`);
+  }
   await page.locator('.search-box-open').click();
   const filter = page.locator('.quick-input-filter');
   await filter.waitFor({ timeout: 5000 });
+  // The picker opens over the box, which seems to grow into it.
+  const [box, picker] = await page.evaluate(() =>
+    ['.search-box', '.overlay-box.quick-input'].map((selector) => document.querySelector(selector).getBoundingClientRect().toJSON()),
+  );
+  if (picker.top > box.top + 1 || picker.left > box.left + 1 || picker.right < box.right - 1) {
+    throw new Error(`the picker at ${JSON.stringify(picker)} does not cover the box at ${JSON.stringify(box)}`);
+  }
+  // With nothing typed, the last group is the commands: the palette, and the command run last
+  // (the color theme, in the step before).
+  await page.locator('.quick-input-separator', { hasText: 'Commands' }).waitFor({ timeout: 5000 });
+  await page.locator('.quick-input-item', { hasText: 'Show All Commands' }).waitFor({ timeout: 5000 });
+  await page.locator('.quick-input-item', { hasText: 'Color Theme' }).waitFor({ timeout: 5000 });
   const row = page.locator('.quick-input-item', { hasText: 'Receipts by month' });
   await row.waitFor({ timeout: 10_000 });
   for (const [query, detail] of [
@@ -908,7 +924,7 @@ await step('a folder opens in a window of its own; opening it again brings that 
   await page.waitForTimeout(1000);
   if (shellPages().length !== 2) throw new Error(`${shellPages().length} windows`);
   const button = await secondPage.locator('.search-box-label').innerText();
-  if (button !== 'second') throw new Error(`the search box says ${button}`);
+  if (button !== 'Workspace: second') throw new Error(`the search box says ${button}`);
   return `${shellPages().length} windows`;
 });
 
@@ -1509,7 +1525,8 @@ await step('administrator instance: runs next to the normal one, says so, and re
   let title;
   try {
     const adminPage = await admin.firstWindow();
-    await adminPage.locator('.titlebar-admin').waitFor({ timeout: 30_000 });
+    // The search box says so after the folder's name.
+    await adminPage.locator('.search-box-administrator', { hasText: /\[(Administrator|管理员)\]/ }).waitFor({ timeout: 30_000 });
     // The display language is Chinese by now (an earlier step switched it).
     title = await waitFor(async () => {
       const titles = await admin.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((w) => w.getTitle()));

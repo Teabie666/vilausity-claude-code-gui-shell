@@ -252,6 +252,7 @@ export class WindowContext extends Disposable {
       language: this.host.language,
       providers: this.host.providersState(this.currentProvider),
       elevated: this.host.env.paths.elevated,
+      homeFolder: app.getPath('home'),
     };
   }
 

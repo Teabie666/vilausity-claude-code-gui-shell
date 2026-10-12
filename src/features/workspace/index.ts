@@ -1,6 +1,7 @@
 /**
  * The window's workspace folder: the commands that open folders, and the folders group of
- * the search (the title bar's search box shows the folder's name). Folders open here (in place of the current one, as VS Code does) or in a new window. A folder has at
+ * the search (the title bar's search box shows the folder's name). Folders open here (in
+ * place of the current one, as VS Code does) or in a new window. A folder has at
  * most one window: opening one that another window shows brings that window forward.
  * Opening a folder here closes this window's conversations and files (unsaved changes are
  * asked about first); the conversations come back when the old folder is opened again.
@@ -31,6 +32,15 @@ export function sameFolder(a: string, b: string): boolean {
 
 export function folderName(folder: string): string {
   return folder.split(/[\\/]/).filter((part) => part.length > 0).pop() ?? folder;
+}
+
+/**
+ * A folder as the shell names it: its base name, and for the user's home folder a note that
+ * it stands for the whole computer (Claude works anywhere from there).
+ */
+export function folderLabel(folder: string, homeFolder: string): string {
+  const name = folderName(folder);
+  return homeFolder && sameFolder(folder, homeFolder) ? t('globalFolder', name) : name;
 }
 
 interface PickEntry {
@@ -119,7 +129,7 @@ export const workspaceModule: ShellModule = {
         .map(
           (folder): PickEntry => ({
             item: {
-              label: folderName(folder),
+              label: folderLabel(folder, workspace.homeFolder),
               description: shown.some((other) => sameFolder(other, folder))
                 ? `${folder} - ${t('openElsewhere')}`
                 : folder,
@@ -165,7 +175,7 @@ export const workspaceModule: ShellModule = {
       }),
     );
     // Not offered in the administrator instance itself.
-    const elevated = (await native.call('app.getInitData', undefined)).elevated;
+    const elevated = workspace.elevated;
     const openAsAdministrator = (): Promise<void> => native.call('window.openFolderAsAdministrator', { folder: current });
     subscriptions.add(
       commands.register(
@@ -222,7 +232,7 @@ export const workspaceModule: ShellModule = {
               }
               return [
                 {
-                  label: name,
+                  label: folderLabel(folder, workspace.homeFolder),
                   labelHighlights: needle && at >= 0 ? [[at, at + needle.length]] : undefined,
                   description: shown.some((other) => sameFolder(other, folder)) ? `${folder} - ${t('openElsewhere')}` : folder,
                   icon: 'folder',
@@ -241,6 +251,9 @@ export const workspaceModule: ShellModule = {
                 accept: () => commands.execute('workspace.openRecent'),
               },
             );
+            if (!elevated) {
+              items.push({ label: t('openAsAdministrator'), icon: 'shield', accept: () => openAsAdministrator() });
+            }
           }
           return items.length > 0 ? { label: t('folders'), items } : undefined;
         },

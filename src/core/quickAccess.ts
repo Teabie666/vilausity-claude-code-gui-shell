@@ -2,7 +2,9 @@
  * Quick access, after VS Code's: one input over the window whose leading characters pick a
  * provider (`>`: commands; none: search). The search is made of groups that modules
  * contribute (conversations, files, folders...). A group that answers asynchronously keeps
- * its previous rows until the new ones arrive, so the list does not flicker while typing.
+ * its previous rows until the new ones arrive, so the list does not flicker while typing;
+ * an Enter pressed before they arrive waits for them, so typing a name and Enter opens the
+ * first match rather than whatever row was there a moment before.
  */
 
 import { CancellationTokenSource, type CancellationToken } from '../platform/cancellation';
@@ -60,6 +62,9 @@ export interface SearchContributor {
   onDidOpen?(): void;
   provide(query: string, token: CancellationToken): QuickAccessResult | Promise<QuickAccessResult>;
 }
+
+/** How long an Enter waits for the groups still answering before it takes the first row anyway. */
+const ACCEPT_WAIT_MS = 2000;
 
 function orderOf(contributor: SearchContributor, query: string): number {
   return typeof contributor.order === 'number' ? contributor.order : contributor.order(query);
@@ -125,6 +130,7 @@ export class QuickAccess {
   private open(initialValue: string): void {
     const { box, finish } = this.dialogs.openOverlay<void>(() => {
       this.setValue = undefined;
+      cancelDeferredAccept();
       tokenSource?.cancel();
       tokenSource?.dispose();
     }, undefined);
@@ -145,6 +151,19 @@ export class QuickAccess {
     let navigated = false;
     let generation = 0;
     let tokenSource: CancellationTokenSource | undefined;
+    /** Groups still answering the current text. */
+    let pending = 0;
+    /**
+     * Enter came before every group had answered (text typed and Enter pressed at once): the
+     * first row is not known yet, so it is taken once they have, or after a while.
+     */
+    let deferredAccept: { alternate: boolean; timer: ReturnType<typeof setTimeout> } | undefined;
+    const cancelDeferredAccept = (): void => {
+      if (deferredAccept) {
+        clearTimeout(deferredAccept.timer);
+        deferredAccept = undefined;
+      }
+    };
 
     const render = (): void => {
       rows = [];
@@ -180,6 +199,9 @@ export class QuickAccess {
       tokenSource = new CancellationTokenSource();
       const current = ++generation;
       navigated = false;
+      // New text: an Enter pressed for the old one no longer applies.
+      cancelDeferredAccept();
+      pending = 0;
       const previous = new Map(switched ? [] : slots.map((slot) => [slot.key, slot.group]));
       let results: readonly QuickAccessSlot[];
       try {
@@ -188,23 +210,31 @@ export class QuickAccess {
         this.logger.error('quick access provider failed', error);
         results = [];
       }
+      const answered = (index: number, key: string, group: QuickAccessResult): void => {
+        if (current !== generation) {
+          return;
+        }
+        slots[index] = { key, group };
+        pending--;
+        render();
+        if (pending === 0 && deferredAccept) {
+          const { alternate } = deferredAccept;
+          cancelDeferredAccept();
+          choose(focused, alternate);
+        }
+      };
       slots = results.map(({ key, result }, index) => {
         if (!(result instanceof Promise)) {
           return { key, group: result };
         }
+        pending++;
         result.then(
-          (group) => {
-            if (current === generation) {
-              slots[index] = { key, group };
-              render();
-            }
-          },
+          (group) => answered(index, key, group),
           (error: unknown) => {
             if (current === generation) {
               this.logger.error(`quick access group ${key} failed`, error);
-              slots[index] = { key, group: undefined };
-              render();
             }
+            answered(index, key, undefined);
           },
         );
         // Until it answers, the group shows what it found for the previous text.
@@ -221,6 +251,7 @@ export class QuickAccess {
       const index = focused ? items.indexOf(focused) : 0;
       focused = items[(index + offset + items.length) % items.length];
       navigated = true;
+      cancelDeferredAccept();
       render();
     };
 
@@ -241,7 +272,18 @@ export class QuickAccess {
         move(event.key === 'ArrowDown' ? 1 : -1);
       } else if (event.key === 'Enter') {
         event.preventDefault();
-        choose(focused, event.ctrlKey);
+        if (pending > 0 && !navigated) {
+          const alternate = event.ctrlKey;
+          deferredAccept ??= {
+            alternate,
+            timer: setTimeout(() => {
+              cancelDeferredAccept();
+              choose(focused, alternate);
+            }, ACCEPT_WAIT_MS),
+          };
+        } else {
+          choose(focused, event.ctrlKey);
+        }
       }
     });
     this.setValue = (value) => {

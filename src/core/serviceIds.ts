@@ -23,6 +23,10 @@ export interface WorkspaceInfo {
   readonly folders: readonly string[];
   /** Display name: the first folder's base name. */
   readonly name: string;
+  /** The user's home folder: as a workspace, it stands for the whole computer. */
+  readonly homeFolder: string;
+  /** The administrator instance (elevated). */
+  readonly elevated: boolean;
 }
 
 export const ICommands = createServiceId<CommandService>('commands');

@@ -10,7 +10,7 @@ import type { Highlight, QuickAccessItem } from '../../core/quickAccess';
 import { IDialogs, INative, IQuickAccess, IWorkspace } from '../../core/serviceIds';
 import { getUiLanguage, htmlLang } from '../../platform/nls';
 import type { SessionSearchResult } from '../../platform/protocol';
-import { folderName } from '../workspace';
+import { folderLabel } from '../workspace';
 import { t } from './messages';
 
 const RECENT_ROWS = 8;
@@ -46,7 +46,8 @@ export const sessionSearchModule: ShellModule = {
     const native = services.get(INative);
     const dialogs = services.get(IDialogs);
     const quickAccess = services.get(IQuickAccess);
-    const folder = services.get(IWorkspace).folders[0];
+    const workspace = services.get(IWorkspace);
+    const folder = workspace.folders[0];
     /** This opening of the picker searches every folder ("Search ... in All Folders" reopened it). */
     let allFolders = false;
     let widenNext = false;
@@ -76,7 +77,7 @@ export const sessionSearchModule: ShellModule = {
       return {
         label: result.title,
         labelHighlights: match?.kind === 'title' ? match.highlights : undefined,
-        description: [showFolder ? folderName(result.folder) : undefined, timeAgo(result.updatedAt, now)]
+        description: [showFolder ? folderLabel(result.folder, workspace.homeFolder) : undefined, timeAgo(result.updatedAt, now)]
           .filter((part) => part !== undefined)
           .join(' · '),
         detail,

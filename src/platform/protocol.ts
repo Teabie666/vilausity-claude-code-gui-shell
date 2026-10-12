@@ -421,6 +421,8 @@ export interface RendererInitData {
   readonly providers: ProvidersState;
   /** The administrator instance (elevated): the title bar says so. */
   readonly elevated: boolean;
+  /** The user's home folder: as a workspace, it stands for the whole computer. */
+  readonly homeFolder: string;
 }
 
 /** What the extension updater is doing. */

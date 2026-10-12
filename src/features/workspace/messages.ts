@@ -20,4 +20,6 @@ export const t = defineMessages('workspace', {
   open: 'Open',
   openInNewWindow: 'Open in New Window',
   folderMissing: 'The folder {0} does not exist.',
+  /** The user's home folder: as a workspace, Claude works across the whole computer. */
+  globalFolder: '{0} (global)',
 });

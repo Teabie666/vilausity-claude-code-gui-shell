@@ -88,7 +88,12 @@ export async function startWorkbench(modules: readonly ShellModule[]): Promise<v
   services.register(IThemes, themes);
   services.register(IDialogs, dialogs);
   services.register(IExtensionHost, connection);
-  services.register(IWorkspace, { folders: init.workspaceFolders, name: folder.split(/[\\/]/).pop() || folder });
+  services.register(IWorkspace, {
+    folders: init.workspaceFolders,
+    name: folder.split(/[\\/]/).pop() || folder,
+    homeFolder: init.homeFolder,
+    elevated: init.elevated,
+  });
   services.register(IEditors, new EditorRegistry());
   services.register(IPanels, new PanelRouter(connection, logger.child('panels')));
   services.register(ISettings, settings);

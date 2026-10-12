@@ -1,6 +1,6 @@
 /**
- * Window-level features: title, closing and quitting, zoom, developer tools; in the
- * administrator instance, a badge in the title bar.
+ * Window-level features: title, closing and quitting, zoom, developer tools. (The search box
+ * says when this is the administrator instance.)
  */
 
 import type { ShellModule } from '../../core/module';
@@ -10,27 +10,19 @@ import { t } from './messages';
 
 export const windowModule: ShellModule = {
   id: 'window',
-  async activate({ services, subscriptions }) {
+  activate({ services, subscriptions }) {
     const layout = services.get(ILayout);
     const commands = services.get(ICommands);
     const keybindings = services.get(IKeybindings);
     const native = services.get(INative);
     const workspace = services.get(IWorkspace);
 
-    // The folder button next to it comes from the workspace module.
     const brand = document.createElement('div');
     brand.className = 'titlebar-brand';
     const app = document.createElement('span');
     app.className = 'titlebar-app';
     app.textContent = 'Vilausity';
     brand.append(app);
-    if ((await native.call('app.getInitData', undefined)).elevated) {
-      const badge = document.createElement('span');
-      badge.className = 'titlebar-admin';
-      badge.textContent = t('administrator');
-      badge.title = t('administratorTooltip');
-      brand.append(badge);
-    }
     subscriptions.add(layout.addTitleBarItem('left', brand, 10));
     document.title = `${workspace.name} - Vilausity`;
 
