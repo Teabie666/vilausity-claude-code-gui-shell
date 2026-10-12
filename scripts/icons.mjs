@@ -1,8 +1,9 @@
 // Draws the app icon and writes resources/icon/: icon.svg (the icon: the mark on a transparent
 // square), mark.svg (the mark alone, cropped to its bounds) and icon.ico (every Windows size,
-// rendered from icon.svg); and src/platform/logoMark.ts, the same polygons for the app itself
-// (the title bar's logo, icons in other colors). Rendering uses a Chromium through Playwright,
-// so the outputs are committed and the build does not run this.
+// rendered from icon.svg); src/platform/logoMark.ts, the same polygons for the app itself
+// (the title bar's logo, icons in other colors); and build/installerSidebar.bmp, the picture
+// beside the installer's and uninstaller's first and last pages. Rendering uses a Chromium
+// through Playwright, so the outputs are committed and the build does not run this.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -117,6 +118,38 @@ function ico(images) {
   return Buffer.concat([header, ...images.map((image) => image.data)]);
 }
 
+/**
+ * NSIS's welcome and finish pages: 164 x 314, the size the pages show it at 100% (they stretch
+ * it on scaled displays, which a flat picture survives). The dark editor background of Dark
+ * Modern with the mark.
+ */
+const SIDEBAR = { width: 164, height: 314, background: '#181818', markSize: 96 };
+
+/** A 24-bit BMP, what NSIS takes: rows of BGR from the bottom up, each padded to 4 bytes. */
+function bmp(width, height, rgba) {
+  const row = Math.ceil((width * 3) / 4) * 4;
+  const data = Buffer.alloc(54 + row * height);
+  data.write('BM', 0, 'ascii');
+  data.writeUInt32LE(data.length, 2);
+  data.writeUInt32LE(54, 10);
+  data.writeUInt32LE(40, 14);
+  data.writeInt32LE(width, 18);
+  data.writeInt32LE(height, 22);
+  data.writeUInt16LE(1, 26);
+  data.writeUInt16LE(24, 28);
+  data.writeUInt32LE(row * height, 34);
+  for (let y = 0; y < height; y++) {
+    const start = 54 + (height - 1 - y) * row;
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      data[start + x * 3] = rgba[i + 2];
+      data[start + x * 3 + 1] = rgba[i + 1];
+      data[start + x * 3 + 2] = rgba[i];
+    }
+  }
+  return data;
+}
+
 /** Playwright's own Chromium if it was downloaded, else Edge (every Windows has it), else Chrome. */
 async function launch() {
   for (const channel of [undefined, 'msedge', 'chrome']) {
@@ -145,7 +178,25 @@ try {
     images.push({ size, data: await page.screenshot({ omitBackground: true, type: 'png' }) });
   }
   writeFileSync(path.join(out, 'icon.ico'), ico(images));
-  console.log(`resources/icon: icon.svg, mark.svg, icon.ico (${ICO_SIZES.join(', ')}); src/platform/logoMark.ts`);
+
+  // Drawn on a canvas, which hands its pixels back (a screenshot would be a PNG to decode).
+  const pixels = await page.evaluate(async ({ svg, width, height, background, markSize }) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    context.fillStyle = background;
+    context.fillRect(0, 0, width, height);
+    const image = new Image();
+    image.src = `data:image/svg+xml;base64,${btoa(svg)}`;
+    await image.decode();
+    // A little above the middle, where the eye expects it beside the pages' headings.
+    context.drawImage(image, (width - markSize) / 2, (height - markSize) / 2 - 24, markSize, markSize);
+    return Array.from(context.getImageData(0, 0, width, height).data);
+  }, { svg: icon, ...SIDEBAR });
+  mkdirSync(path.join(root, 'build'), { recursive: true });
+  writeFileSync(path.join(root, 'build/installerSidebar.bmp'), bmp(SIDEBAR.width, SIDEBAR.height, pixels));
+  console.log(`resources/icon: icon.svg, mark.svg, icon.ico (${ICO_SIZES.join(', ')}); src/platform/logoMark.ts; build/installerSidebar.bmp`);
 } finally {
   await browser.close();
 }

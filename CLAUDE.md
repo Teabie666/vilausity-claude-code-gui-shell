@@ -19,6 +19,7 @@ npm run smoke        # 端到端：真实 Claude 会话发 3 条消息。条款�
 npm run icons        # 重新生成 resources/icon/ 的图标（SVG + .ico），几何形状和颜色在 scripts/icons.mjs 里改
 npm run package      # 正式构建 + electron-builder：release\win-unpacked\ 和 NSIS 安装包
 npm run package:dir  # 只出 release\win-unpacked\（快，测打包版用）
+node tests/installer.mjs   # 静默装、查、启动、卸载 release\ 里的安装包（--all-users 装进 Program Files，要管理员 shell）；会真写快捷方式和注册表，跑完恢复
 run-dev.cmd          # 在资源管理器里双击：构建并启动（手动试用就用它）
 ```
 

@@ -231,7 +231,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **壳里的提示**：插件经 `window.showInformationMessage` / `showQuickPick` / `showInputBox` 弹出的文字，在插件进程里（`host/exthost/compatHost.ts`）查表后再发给渲染进程。返回给插件的仍是它自己的条目，插件按英文比较选项不受影响。表经 `ExtHostInitData.extensionTranslations` 交给插件进程，是否翻译按当时的设置。
 - **设置** `vilaus.translateExtensionUi`：默认开，只在中文界面起作用，改了立即生效：main 通知渲染进程，渲染进程给每个 webview 发控制消息（开 = 发表，关 = 换回原文）。
 
-## 打包（M6）
+## 打包和安装包（M6）
 
 - **构建**：`npm run package` = `node scripts/build.mjs --production`（压缩、不带 source map；`keepNames` 留住函数名和类名，日志里的调用栈看得懂，插件看到的 API 类名也不变）+ electron-builder（配置在 `electron-builder.config.ts`，electron-builder 用 jiti 直接加载 TS）。输出在 `release/`：`win-unpacked\`（装好后的样子）和 `Vilausity-Setup-<版本>.exe`。`npm run package:dir` 只出 `win-unpacked`，快。
 - **只装 `dist/` 和 package.json**：esbuild 把运行时要的东西全打进了 `dist/`，所以 package.json 里的包都是 devDependencies，electron-builder 一个 `node_modules` 也不带。打成 `app.asar`，不用 `asarUnpack`：插件进程（`utilityProcess.fork`）、搜索会话的 worker 线程、`ccw:` 协议、`fs` 读主题 / 字体 / 引导脚本、窗口图标都直接读 asar（界面测试和 smoke 在打包版上全过）。
@@ -239,7 +239,14 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **fuse**：关掉 `RunAsNode`：从 VS Code 系的终端启动时会继承 `ELECTRON_RUN_AS_NODE`，exe 就成了纯 Node；程序和插件都不靠它（插件进程是 utilityProcess，插件不 fork）。打开 `OnlyLoadAppFromAsar`。`--inspect` 留着：Playwright 靠它连打包版。
 - **AppUserModelID**：`platform/product.ts` 的 `APP_ID` 既是安装包的 appId，也是开始菜单快捷方式的 AUMID；安装版启动时 `app.setAppUserModelId(APP_ID)`，于是从右键菜单、链接、接口快捷方式启动的窗口也跟开始菜单、固定到任务栏的图标合成一组，系统通知也算在它名下。开发时不设，免得跟装好的那份混成一组。`APP_ID` 不能改：安装信息的注册表项由它算出来，改了会装成第二份。
 - **许可证**：打包时去掉了第三方库的许可证注释（`legalComments: 'none'`），所以构建按 esbuild 的 metafile 找出打进包的每个 npm 包（加上复制进去的 Monaco 样式和思源黑体），把它们的 LICENSE / NOTICE / ThirdPartyNotices 拼成 `dist/ThirdPartyNotices.txt`；安装时它和本项目的 `LICENSE.txt` 放在 exe 旁边，Electron 自带的 `LICENSE.electron.txt`、`LICENSES.chromium.html` 也在。
-- **在打包版上跑测试**：`VILAUS_EXECUTABLE=release\win-unpacked\Vilausity.exe node tests/ui.mjs`（smoke 也认这个变量）启动打包的 exe（不带 app 目录），asar、fuse、`app.isPackaged` 的分支都测到。
+- **在打包版上跑测试**：`VILAUS_EXECUTABLE=release\win-unpacked\Vilausity.exe node tests/ui.mjs`（smoke 也认这个变量）启动打包的 exe（不带 app 目录），asar、fuse、`app.isPackaged` 的分支都测到。测试一律把右键菜单的注册表根换到测试键（`VILAUS_REGISTRY_ROOT`）：安装版启动时会改写真实的菜单项。
+- **安装包**（NSIS 的向导式安装）：第一页选"仅为我安装"（默认：不用管理员权限，装到 `%LOCALAPPDATA%\Programs\Vilausity`）或"所有用户"（Program Files，Windows 要管理员权限），然后是安装位置、右键菜单、安装、完成（可勾"运行 Vilausity"）。开始菜单和桌面快捷方式；卸载时保留 `%APPDATA%\Vilausity`。界面只有英文和简体中文，跟系统语言走。完成页和卸载页的侧边图由 `npm run icons` 画（`build/installerSidebar.bmp`，Dark Modern 的底色加 logo）。electron-updater 才用的 `elevate.exe` 和 blockmap 不要。
+- **`build/installer.nsh`**（electron-builder 的 NSIS 钩子）：
+  - `vilaus://`：electron-builder 的 `protocols` 在 Windows 上什么都不写，所以自己写进 `SHCTX\Software\Classes\vilaus`（仅为我 = HKCU，所有用户 = HKLM）。命令是 `"Vilausity.exe" -- "%1"`：`--` 之后 Chromium 不认开关、程序不认选项，一个带引号逃出来的链接塞不进 `--gpu-launcher=…` 这类开关。Electron 自己不会在链接处停下（实测：没有 `--` 时链接后面的 `--remote-debugging-port` 照样生效）。
+  - 右键菜单：安装位置之后一页复选框，第一次装默认不勾，重装时照现在有没有。装的时候运行 `Vilausity.exe --register-context-menu`（取消勾选、原来有就 `--unregister-context-menu`），用 UAC 插件的 `UAC_AsUser_Call` 在用户自己启动的那个安装程序里跑：为所有用户安装时安装程序会提权重启自己，提权后的进程的 HKCU 可能是另一个管理员账户的。卸载时只删指向本次安装的 exe 的项（别处的安装、开发版的不动）。
+  - 更新安装：electron-builder 装新版本之前总会带 `--updated` 跑旧版的卸载程序，这时协议和右键菜单都不删，新版本装完再写。
+  - 写法上的坑：electron-builder 把这个文件插在它的脚本最前面，那时还没有 MUI2、语言和 `common.nsh` 的宏（`APP_EXECUTABLE_FILENAME`），所以文案用语言号（1033、2052），用到它们的函数写在之后才展开的宏里（`customPageAfterChangeDir`、`customHeader`）；安装程序和卸载程序分两遍编译（`BUILD_UNINSTALLER`），只在一边用的变量和函数要放进对应的 `!ifdef`，否则 makensis 的警告会被当成错误。
+- **测试安装包**：`node tests/installer.mjs`（当前用户，装进 `.test-data` 下带空格和括号的文件夹）、`node tests/installer.mjs --all-users`（要在提升过的 shell 里，装进 Program Files）：静默安装 → 检查文件（没有 `default_app.asar`、`elevate.exe`）、卸载信息、快捷方式、`vilaus://`、右键菜单 → 启动装好的程序（提升过的 shell 里是管理员实例；所有用户模式再用 `runas /trustlevel:0x20000` 以普通令牌启动一次）→ 静默卸载 → 检查只剩数据目录。两轮：原来有右键菜单（装好后指向新装的 exe，卸载时删掉）、原来没有（不加；之后冒出别处的菜单项，卸载时不动）。它会真的写快捷方式和注册表，所以已经装了 Vilausity 时拒绝运行，跑完把右键菜单和 `vilaus` 键恢复原样。安装和卸载的图形界面（各页、复选框、完成页）用屏幕工具点过一遍，没有自动测试；提权那一步（UAC）也没有。
 
 ## 加功能该改哪里
 

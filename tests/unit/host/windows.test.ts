@@ -62,6 +62,15 @@ describe('parseCliArgs', () => {
     assert.equal(args.folder, undefined);
   });
 
+  test('after -- (how the installer registers vilaus://) nothing is an option, not even what a link smuggles in', () => {
+    // A link that broke out of its quotes in "Vilausity.exe" -- "%1".
+    const args = parseCliArgs(['--', 'vilaus://anthropic.claude-code/open', '--new-window', '--extension-dir', 'C:\\elsewhere', 'C:\\work']);
+    assert.equal(args.uri, 'vilaus://anthropic.claude-code/open');
+    assert.equal(args.newWindow, false);
+    assert.equal(args.extensionDir, undefined);
+    assert.equal(args.folder, undefined);
+  });
+
   test('conversation, window and help options', () => {
     const args = parseCliArgs(['--session', 's1', '--prompt', 'hi there', '--new-window', '-v']);
     assert.equal(args.session, 's1');

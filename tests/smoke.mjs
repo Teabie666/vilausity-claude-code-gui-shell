@@ -12,6 +12,7 @@
 //                            instead of electron.exe with this checkout
 import { _electron as electron } from 'playwright-core';
 import electronPath from 'electron';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -89,6 +90,11 @@ for (const name of Object.keys(env)) {
 // The normal instance even when the run starts from an elevated shell (an administrator
 // instance keeps its state apart and marks its windows).
 env.VILAUS_ELEVATED = '0';
+// File Explorer's menu entries under a key of their own: the packaged program rewrites the
+// real ones when they exist, to point at itself.
+const reg = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'reg.exe');
+const registryTestKey = `HKCU\\Software\\Vilausity-test\\smoke-${Date.now()}`;
+env.VILAUS_REGISTRY_ROOT = `${registryTestKey}\\Classes`;
 
 const results = [];
 async function step(name, fn) {
@@ -431,6 +437,17 @@ if (existsSync(unimplemented)) {
 }
 const failed = results.filter((r) => !r.ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed. Artifacts: ${runDir}`);
+for (const key of [registryTestKey, 'HKCU\\Software\\Vilausity-test']) {
+  try {
+    // The parent only once no other run keeps a key in it.
+    const left = key === registryTestKey ? '' : execFileSync(reg, ['query', key], { windowsHide: true, encoding: 'latin1' });
+    if (!left.includes('HKEY_CURRENT_USER\\Software\\Vilausity-test\\')) {
+      execFileSync(reg, ['delete', key, '/f'], { stdio: 'ignore', windowsHide: true });
+    }
+  } catch {
+    // Never written, or already gone.
+  }
+}
 if (failed === 0 && !process.argv.includes('--keep')) {
   // The extension's processes may hold the folder a moment after the app closed.
   rmSync(workspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });

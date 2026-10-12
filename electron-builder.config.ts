@@ -39,6 +39,30 @@ const config: Configuration = {
   },
   nsis: {
     artifactName: 'Vilausity-Setup-${version}.${ext}',
+    // Pages: for whom (only for me, the default: no administrator rights, under
+    // %LOCALAPPDATA%\Programs; or for everyone: Program Files, Windows asks for administrator
+    // rights), the folder, File Explorer's menu (build/installer.nsh), the files, done.
+    oneClick: false,
+    perMachine: false,
+    allowElevation: true,
+    allowToChangeInstallationDirectory: true,
+    installerIcon: 'resources/icon/icon.ico',
+    uninstallerIcon: 'resources/icon/icon.ico',
+    // Drawn by scripts/icons.mjs (npm run icons).
+    installerSidebar: 'build/installerSidebar.bmp',
+    uninstallerSidebar: 'build/installerSidebar.bmp',
+    createDesktopShortcut: true,
+    createStartMenuShortcut: true,
+    // Settings, API providers and keys, state, logs and the extension stay in %APPDATA%\Vilausity.
+    deleteAppDataOnUninstall: false,
+    // The program's two languages: the installer takes the system's, or else English.
+    installerLanguages: ['en_US', 'zh_CN'],
+    multiLanguageInstaller: true,
+    // vilaus:// links and File Explorer's menu.
+    include: 'build/installer.nsh',
+    // For electron-updater only, which the app does not use: no elevate.exe, no block map.
+    packElevateHelper: false,
+    differentialPackage: false,
   },
   // Released by hand on GitHub; no update feed.
   publish: null,

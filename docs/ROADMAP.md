@@ -6,13 +6,13 @@
 
 ## 下一步
 
-1. M6 打包和发布：① 能跑的打包版已完成，接着是 ② 安装包
+1. M6 打包和发布：①② 已完成（安装包待试用），接着是 ③ 发布前补的功能
 
 2026-10-10 把视觉打磨和打包对调了：功能做完不直接发布，先把界面打磨好。
 
 每个阶段结束都要做：typecheck、`npm test`、`node tests/ui.mjs`（动了 bridge / compat 再跑 `npm run smoke`）；看最新一次的 `shim-unimplemented.log`；确认没往 `C:\Program Files\VSCodium` 写任何东西、git 里没有密钥；用屏幕工具截图，跟 VSCodium 里的同一界面对比；用 `run-dev.cmd` 试用。
 
-测试现状（2026-10-13，M6 ①）：单元 410/410，语言包 0 条缺译（插件界面对照表 1748 条），界面 55/55，smoke 14/14（用 DeepSeek 接口跑的）；打包版（`VILAUS_EXECUTABLE`）界面 55/55、smoke 14/14。
+测试现状（2026-10-13，M6 ②）：单元 411/411，语言包 0 条缺译（插件界面对照表 1748 条），界面 55/55，smoke 14/14（用 DeepSeek 接口跑的）；打包版（`VILAUS_EXECUTABLE`）界面 55/55、smoke 14/14；安装包（`tests/installer.mjs`）当前用户 6/6、所有用户 7/7。
 
 ## M0 技术验证：完成（2026-10-08）
 
@@ -331,16 +331,24 @@ Vilausity 多数时候拿来做简单的电脑任务，工作流基本在单个�
 - [x] 第三方许可证：按 esbuild 的 metafile 生成 `ThirdPartyNotices.txt`，跟 `LICENSE.txt` 一起放在 exe 旁边
 - [x] 测试能跑在打包版上（`VILAUS_EXECUTABLE`）：界面 55/55、smoke 14/14；asar 里的窗口图标能读
 
+### ② 安装包：完成（2026-10-13，待试用）
+
+- [x] NSIS 向导：仅为我安装（默认）/ 所有用户（Program Files）、可改位置、开始菜单和桌面快捷方式、卸载保留数据；英文和简体中文；完成页和卸载页的侧边图（`npm run icons` 画）。做法见 ARCHITECTURE"打包和安装包"
+- [x] 右键菜单的复选框（第一次装默认不勾，重装照旧）：以启动安装程序的用户运行 `--register-context-menu` / `--unregister-context-menu`；卸载只删指向本次安装的项；更新安装时不删
+- [x] `vilaus://` 由安装包登记（electron-builder 的 `protocols` 在 Windows 上不写）；命令里 `%1` 前加 `--`，链接塞不进命令行开关（实测没有 `--` 时能塞进去）
+- [x] 安装测试 `tests/installer.mjs`：当前用户 6/6、所有用户（Program Files，管理员实例 + 普通令牌）7/7；图形界面的安装和卸载用屏幕工具点过；smoke 改成把右键菜单写进测试键（以前拿打包版跑会改写真实的菜单项）
+- [ ] 试用：为所有用户安装（UAC 那一步）、勾上右键菜单、完成页"运行 Vilausity"、右键文件夹打开、`vilaus://` 链接、卸载
+
 ### 整个 M6 的清单
 
-- [ ] electron-builder 打 NSIS 安装包：可以选只装当前用户，或装到 Program Files 给所有用户；建开始菜单和桌面快捷方式；卸载时默认保留 `%APPDATA%\Vilausity`
-- [ ] 安装时可选"在资源管理器右键菜单里加'用 Vilausity 打开'"（默认不勾），卸载时删掉（用 M5.5 第三块的 `--register-context-menu` / `--unregister-context-menu`）
-- [ ] 安装包里不含任何 Anthropic 代码（插件首次启动时从 Open VSX 下载）；不出便携版
+- [x] electron-builder 打 NSIS 安装包：可以选只装当前用户，或装到 Program Files 给所有用户；建开始菜单和桌面快捷方式；卸载时默认保留 `%APPDATA%\Vilausity`
+- [x] 安装时可选"在资源管理器右键菜单里加'用 Vilausity 打开'"（默认不勾），卸载时删掉（用 M5.5 第三块的 `--register-context-menu` / `--unregister-context-menu`）
+- [x] 安装包里不含任何 Anthropic 代码（插件首次启动时从 Open VSX 下载）；不出便携版
 - [ ] 目标环境：干净的 Windows 10/11 x64，只有安装包和网络；不需要 VS Code / VSCodium、单独的 Claude Code CLI、Node、Python、Git
 - [ ] 发布到 GitHub Releases，新版本手动下载安装（不做自动更新）；不做代码签名，发布说明写清楚 SmartScreen 怎么放行
 - [ ] 全新环境测试：临时 user-data-dir、不依赖 VSCodium、模拟没登录的情况
 - [ ] 发布后交给几位使用者，在各自的电脑上从零试用：安装 → 首次启动下载插件 → 登录或配置 API → 发消息、审批改文件（没装 Git 的电脑上 Claude 用 PowerShell）；收集问题
-- [ ] 装到 Program Files，分别用普通权限和管理员权限运行，再卸载
+- [x] 装到 Program Files，分别用普通权限和管理员权限运行，再卸载（`node tests/installer.mjs --all-users`，2026-10-13）
 
 ## 贯穿各阶段（PLAN 的工程规范）
 
