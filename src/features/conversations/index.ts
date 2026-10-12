@@ -48,6 +48,14 @@ export const conversationsModule: ShellModule = {
 
     const emptyState = createEmptyState(() => void commands.execute('conversations.new'));
     layout.main.appendChild(emptyState);
+    subscriptions.add(keybindings.bindLabel(emptyState.querySelector('kbd')!, 'conversations.new'));
+    // The tabs' close buttons name the keys that close.
+    layout.tabs.addEventListener('pointerover', (event) => {
+      const close = (event.target as Element).closest<HTMLElement>('.tab-close');
+      if (close) {
+        close.title = keybindings.tooltip(t('close'), 'conversations.close');
+      }
+    });
 
     const frames = services.get(IWebviewFrames);
     const tabs = new ConversationTabs(layout.tabs, layout.main, frames, connection, themes);
@@ -184,11 +192,9 @@ function createEmptyState(onNew: () => void): HTMLElement {
   action.className = 'link-button';
   action.textContent = t('newConversation');
   action.addEventListener('click', onNew);
-  const hint = document.createElement('kbd');
-  hint.textContent = 'Ctrl+N';
   const row = document.createElement('div');
   row.className = 'empty-state-row';
-  row.append(action, hint);
+  row.append(action, document.createElement('kbd'));
   empty.append(title, row);
   return empty;
 }

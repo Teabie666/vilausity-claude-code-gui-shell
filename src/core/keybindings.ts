@@ -152,6 +152,17 @@ export class KeybindingService {
     element.addEventListener('pointerenter', update);
   }
 
+  /** Keeps `element` showing the command's keybinding (hidden when it has none). */
+  bindLabel(element: HTMLElement, commandId: string): IDisposable {
+    const update = (): void => {
+      const label = this.labelFor(commandId);
+      element.textContent = label ?? '';
+      element.hidden = label === undefined;
+    };
+    update();
+    return this.onDidChange(update);
+  }
+
   /** Main stops taking chords until disposed: a new one is being recorded. */
   pauseInterception(): IDisposable {
     this.pauses++;

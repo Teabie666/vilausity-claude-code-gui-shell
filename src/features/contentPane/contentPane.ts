@@ -52,6 +52,8 @@ export class ContentPane {
   private readonly strip: HTMLElement;
   private readonly body: HTMLElement;
   private readonly empty: HTMLElement;
+  /** The keys that open a file, in the empty pane (the module keeps it current). */
+  readonly emptyHint: HTMLElement;
   private readonly entries = new Map<string, TabEntry>();
   /** Most recently active first (tabs in the pane); picks the next tab when one closes. */
   private history: string[] = [];
@@ -89,6 +91,7 @@ export class ContentPane {
     this.body = document.createElement('div');
     this.body.className = 'content-body';
     this.empty = createEmptyState();
+    this.emptyHint = this.empty.querySelector('kbd')!;
     this.body.appendChild(this.empty);
     root.append(header, this.body);
 
@@ -535,9 +538,7 @@ function createEmptyState(): HTMLElement {
   row.className = 'empty-state-row';
   const label = document.createElement('span');
   label.textContent = t('openFileHint');
-  const hint = document.createElement('kbd');
-  hint.textContent = 'Ctrl+P';
-  row.append(label, hint);
+  row.append(label, document.createElement('kbd'));
   empty.append(title, row);
   return empty;
 }
