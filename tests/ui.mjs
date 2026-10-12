@@ -1943,6 +1943,68 @@ await step('a session clicked in the list opens as a preview, its row left in pl
   return 'replaced, closed on leaving and on Escape, kept by a double click on the tab and on the row; the rewind picker on Shift+Escape only';
 });
 
+await step("a conversation of another folder, found by searching all folders, opens in that folder's window", async () => {
+  // An instance of its own, whose Claude Code folder holds a session of another folder.
+  const own = path.join(runDir, 'elsewhere');
+  const ownData = path.join(own, 'data');
+  const here = path.join(own, 'here');
+  const there = path.join(own, 'there');
+  const claudeDir = path.join(own, 'claude');
+  const project = path.join(claudeDir, 'projects', there.replace(/[^a-zA-Z0-9]/g, '-'));
+  for (const dir of [ownData, here, there, project]) mkdirSync(dir, { recursive: true });
+  const id = 'd4d4d4d4-0000-4000-8000-000000000004';
+  const at = (secondsAgo) => new Date(Date.now() - secondsAgo * 1000).toISOString();
+  writeFileSync(
+    path.join(project, `${id}.jsonl`),
+    [
+      { type: 'user', uuid: 'w-u', parentUuid: null, sessionId: id, timestamp: at(60), cwd: there, message: { role: 'user', content: 'When should I water the basil?' } },
+      { type: 'assistant', uuid: 'w-a', parentUuid: 'w-u', sessionId: id, timestamp: at(50), cwd: there, message: { role: 'assistant', content: [{ type: 'text', text: 'Every other morning.' }] } },
+      { type: 'ai-title', aiTitle: 'Watering plan', sessionId: id },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join('\n'),
+    'utf8',
+  );
+  writeFileSync(
+    path.join(ownData, 'settings.json'),
+    JSON.stringify({ 'claudeCode.hideOnboarding': true, 'claudeCode.disableLoginPrompt': true, 'vilaus.language': 'en', 'vilaus.extension.autoUpdate': false }),
+    'utf8',
+  );
+  const other = await electron.launch({
+    executablePath: electronPath,
+    args: ['.', '--user-data-dir', ownData, '--folder', here, '--secondary-display'],
+    cwd: root,
+    env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+    timeout: 60_000,
+  });
+  try {
+    const otherPage = await other.firstWindow();
+    const titles = () => other.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((window) => window.getTitle()));
+    await otherPage.locator('.search-box-open').click();
+    const filter = otherPage.locator('.quick-input-filter');
+    await filter.waitFor({ timeout: 10_000 });
+    await filter.fill('basil');
+    // Not this folder's: the search offers to widen.
+    const widen = otherPage.locator('.quick-input-item', { hasText: 'Search Conversations in All Folders' });
+    await widen.waitFor({ timeout: 10_000 });
+    const found = otherPage.locator('.quick-input-item', { hasText: 'Watering plan' });
+    if ((await found.count()) !== 0) throw new Error("found among this folder's conversations");
+    await widen.click();
+    await found.waitFor({ timeout: 10_000 });
+    const description = await found.locator('.quick-input-description').innerText();
+    if (!description.includes('there')) throw new Error(`the result does not say its folder: "${description}"`);
+    await found.click();
+    // That folder's window, showing the conversation (the extension read it from its folder).
+    const wanted = `Watering plan - ${windowTitle(there)}`;
+    await waitFor(async () => (await titles()).includes(wanted), 30_000, `a window "${wanted}"`);
+    const all = await titles();
+    if (!all.some((title) => showsFolder(title, here))) throw new Error(`the first window is gone: ${JSON.stringify(all)}`);
+    return `windows: ${all.join(' | ')}`;
+  } finally {
+    await other.close();
+  }
+});
+
 await step('administrator instance: runs next to the normal one, says so, and reads the API keys the normal one stored', async () => {
   const stored = readJson(path.join(dataDir, 'providers.json'))?.keys?.mock;
   if (!stored) throw new Error('the normal instance stored no key');
