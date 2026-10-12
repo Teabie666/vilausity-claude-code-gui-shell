@@ -183,6 +183,9 @@ export class ShellWindow extends Disposable {
       this.window.webContents.setZoomLevel(options.zoomLevel());
     });
     this.window.on('focus', () => this.window.flashFrame(false));
+    // The mouse's back and forward buttons: Windows sends them as app commands, wherever the
+    // pointer is (a webview's iframe too).
+    this.window.on('app-command', (_event, command) => this.forwardAppCommand(command));
     // Auxiliary windows run on the main page's scripts: they cannot outlive it, and their
     // close handlers must not hold up quitting.
     this.window.on('closed', () => this.destroyAuxWindows());
@@ -318,9 +321,16 @@ export class ShellWindow extends Disposable {
     };
   }
 
+  private forwardAppCommand(command: string): void {
+    if (command === 'browser-backward' || command === 'browser-forward') {
+      this.emit('navigate', { direction: command === 'browser-backward' ? 'back' : 'forward' });
+    }
+  }
+
   private adoptAuxWindow(child: BrowserWindow): void {
     this.auxWindows.add(child);
     child.on('closed', () => this.auxWindows.delete(child));
+    child.on('app-command', (_event, command) => this.forwardAppCommand(command));
     const contents = child.webContents;
     contents.setZoomLevel(this.window.webContents.getZoomLevel());
     // The page is written by the main window's scripts; it never navigates on its own.

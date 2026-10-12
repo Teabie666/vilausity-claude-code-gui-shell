@@ -810,6 +810,8 @@ export type MainApiForRenderer = {
 /** Events main pushes to the renderer (through the preload, as window messages). */
 export type MainEventsForRenderer = {
   keybinding: { readonly chord: string };
+  /** The mouse's back or forward button was pressed over the window. */
+  navigate: { readonly direction: 'back' | 'forward' };
   extensionHostState: { readonly state: 'running' | 'crashed'; readonly detail?: string };
   /** The theme changed (picked in the shell, or theme/font settings edited by hand). */
   themeChanged: ThemeData;

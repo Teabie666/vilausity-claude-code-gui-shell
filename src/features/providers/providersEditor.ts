@@ -177,6 +177,8 @@ function positiveInteger(text: string): number | undefined {
 }
 
 export class ProvidersEditorPane implements EditorPane {
+  /** A form: Escape in a field must not close it. */
+  readonly closesOnEscape = false;
   private readonly root: HTMLElement;
   private readonly list: HTMLElement;
   private readonly form: HTMLElement;

@@ -136,7 +136,9 @@ export class MarkdownPane implements EditorPane {
       }
     });
     this.preview.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !this.menuWidget.hidden) {
+        // The key closes the menu, not the tab (features/navigation).
+        event.preventDefault();
         this.hideMenu();
       }
     });

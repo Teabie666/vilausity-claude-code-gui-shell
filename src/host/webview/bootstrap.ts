@@ -189,6 +189,17 @@ const THEME_CLASSES = [
       post({ kind: 'keydown', event: toKeyEventDto(event) });
     }
   });
+  // An Escape the page did not use may close the tab (the shell decides). From the capture
+  // phase on: the page's handlers may change the page before a bubble listener here runs.
+  window.addEventListener(
+    'keydown',
+    (event) => {
+      if (isPlainEscape(event)) {
+        whenUnused(event, () => post({ kind: 'keydown', event: toKeyEventDto(event) }));
+      }
+    },
+    true,
+  );
   window.addEventListener('focus', () => post({ kind: 'focus' }));
   window.addEventListener('blur', () => post({ kind: 'blur' }));
 })();
@@ -312,6 +323,39 @@ function handleClick(event: MouseEvent, post: (message: OutgoingMessage) => void
 /** Keys the shell may act on: anything with Ctrl/Alt/Meta, and the function keys. */
 function isShellShortcut(event: KeyboardEvent): boolean {
   return event.ctrlKey || event.altKey || event.metaKey || /^F\d{1,2}$/.test(event.key);
+}
+
+/**
+ * Calls `unused` once the event's dispatch is over if nothing used it: no listener prevented
+ * its default or stopped it before it bubbled back to the window, and it changed nothing on
+ * the page (some menus close on Escape without either).
+ */
+function whenUnused(event: KeyboardEvent, unused: () => void): void {
+  let changed = false;
+  const observer = new MutationObserver(() => {
+    changed = true;
+  });
+  observer.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+  // Added now, it runs after the page's own listeners on window.
+  let bubbled = false;
+  const onBubble = (candidate: Event): void => {
+    bubbled ||= candidate === event;
+  };
+  window.addEventListener('keydown', onBubble);
+  setTimeout(() => {
+    window.removeEventListener('keydown', onBubble);
+    changed ||= observer.takeRecords().length > 0;
+    observer.disconnect();
+    if (bubbled && !changed && !event.defaultPrevented) {
+      unused();
+    }
+  });
+}
+
+function isPlainEscape(event: KeyboardEvent): boolean {
+  return (
+    event.key === 'Escape' && !event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && !event.repeat && !event.isComposing
+  );
 }
 
 function toKeyEventDto(event: KeyboardEvent): KeyEventDto {

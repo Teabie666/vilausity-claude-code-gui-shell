@@ -199,6 +199,10 @@ export class MonacoSelectionWidget implements IDisposable {
     this.disposables.add(
       editor.onKeyDown((event) => {
         if (event.keyCode === monaco.KeyCode.Escape) {
+          if (this.toolbar.visible) {
+            // The key closes the menu, not the tab (features/navigation).
+            event.preventDefault();
+          }
           this.hideToolbar();
         }
       }),

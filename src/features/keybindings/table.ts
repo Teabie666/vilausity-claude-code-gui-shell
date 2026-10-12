@@ -31,6 +31,8 @@ export interface ShortcutRow {
   readonly command?: string;
   readonly title: string;
   readonly key?: string;
+  /** What is pressed when it is not a key (a mouse button). */
+  readonly keyLabel?: string;
   readonly when?: string;
   readonly source: string;
   readonly rule?: ResolvedKeybinding;
@@ -66,7 +68,8 @@ export function shortcutRows(keybindings: KeybindingService, commands: CommandSe
     .map((info) => ({ command: info.id, title: commandTitle(commands, info.id), source: '', modified: modified.has(info.id) }));
   const builtins: ShortcutRow[] = builtinKeybindings().map((builtin) => ({
     title: builtin.title,
-    key: normalizeChord(builtin.key),
+    ...(builtin.key !== undefined ? { key: normalizeChord(builtin.key) } : {}),
+    ...(builtin.label !== undefined ? { keyLabel: builtin.label } : {}),
     when: builtin.where,
     source: builtin.source,
     modified: false,
@@ -80,7 +83,9 @@ export function conflictsOf(rows: readonly ShortcutRow[], chord: string, except?
 }
 
 function rowText(row: ShortcutRow): string {
-  return [row.title, row.command ?? '', row.key ?? '', row.key ? formatChord(row.key) : '', row.when ?? '', row.source].join(' ').toLowerCase();
+  return [row.title, row.command ?? '', row.key ?? '', row.key ? formatChord(row.key) : '', row.keyLabel ?? '', row.when ?? '', row.source]
+    .join(' ')
+    .toLowerCase();
 }
 
 export function createShortcutsTable(container: HTMLElement, context: ShortcutsTableContext): SettingsWidgetHandle {
@@ -175,6 +180,10 @@ export function createShortcutsTable(container: HTMLElement, context: ShortcutsT
         key.className = 'keybinding-key';
         if (row.key) {
           key.appendChild(renderChord(row.key));
+        } else if (row.keyLabel) {
+          const label = document.createElement('kbd');
+          label.textContent = row.keyLabel;
+          key.appendChild(label);
         }
         const when = tr.insertCell();
         when.className = 'keybinding-when';

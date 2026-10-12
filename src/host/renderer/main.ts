@@ -15,6 +15,7 @@ import { editorModule } from '../../features/editor';
 import { fontsModule } from '../../features/fonts';
 import { keybindingsModule } from '../../features/keybindings';
 import { markdownModule } from '../../features/markdown';
+import { navigationModule } from '../../features/navigation';
 import { providersModule } from '../../features/providers';
 import { quickOpenModule } from '../../features/quickOpen';
 import { extensionHostStatusModule } from '../../features/extensionHostStatus';
@@ -34,6 +35,7 @@ const modules: ShellModule[] = [
   windowModule,
   conversationsModule,
   contentPaneModule,
+  navigationModule,
   editorModule,
   markdownModule,
   commentsModule,

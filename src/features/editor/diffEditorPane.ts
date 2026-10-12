@@ -27,6 +27,8 @@ export interface DiffInputData {
 }
 
 export class DiffEditorPane implements EditorPane {
+  /** Closing a proposed edit's diff rejects the edit: not on a stray Escape. */
+  readonly closesOnEscape = false;
   editor: DiffEditor;
   private readonly original: ModelReference;
   private readonly modified: ModelReference;

@@ -629,6 +629,29 @@ await step('Ctrl+W in the editor closes its tab and the pane hides; the conversa
   if ((await tabCount()) !== conversations) throw new Error('a conversation closed too');
 });
 
+await step('Escape in the editor closes its tab once nothing there uses it, and the conversation has the focus again', async () => {
+  await press('Control+P');
+  const filter = page.locator('.quick-input-filter');
+  await filter.waitFor({ timeout: 5000 });
+  await filter.fill('sampl');
+  await waitFor(async () => (await page.locator('.quick-input-item').count()) > 0, 10_000, 'the file in the list');
+  await filter.press('Enter');
+  await waitFor(async () => (await contentTabs().count()) === 1, 15_000, 'a content tab');
+  // A selection takes the first Escape (Monaco clears it), the second closes the tab.
+  await editorLine('answer').dblclick();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  if ((await contentTabs().count()) !== 1) throw new Error('the first Escape closed the tab');
+  await page.keyboard.press('Escape');
+  await waitFor(async () => (await contentTabs().count()) === 0, 5000, 'the content tab to close');
+  await waitFor(() => page.locator('#content-pane').isHidden(), 5000, 'the pane to hide');
+  await waitFor(
+    () => page.evaluate(() => document.activeElement?.closest('#main .panel:not([hidden])') !== null),
+    5000,
+    'the focus back in the conversation',
+  );
+});
+
 await step('Claude: Show Logs opens the extension log in the content pane', async () => {
   await press('Control+Shift+P');
   await page.locator('.quick-input-filter').fill('>Claude: Show Logs');
@@ -1713,6 +1736,119 @@ await step('the session list: the filters are one drop-down, usage resets show t
     await other.close();
   }
   return 'its tab closed, transcript and file history deleted, the list read again';
+});
+
+await step('a session clicked in the list opens as a preview: another click replaces it, leaving or Escape closes it, a double click keeps it; back and forward go between the tabs used', async () => {
+  // An instance of its own, whose Claude Code folder holds three sessions of its workspace.
+  const own = path.join(runDir, 'preview');
+  const ownData = path.join(own, 'data');
+  const ownWorkspace = path.join(own, 'workspace');
+  const claudeDir = path.join(own, 'claude');
+  const project = path.join(claudeDir, 'projects', ownWorkspace.replace(/[^a-zA-Z0-9]/g, '-'));
+  mkdirSync(ownData, { recursive: true });
+  mkdirSync(ownWorkspace, { recursive: true });
+  mkdirSync(project, { recursive: true });
+  const sessions = { Alpha: 'a1a1a1a1-0000-4000-8000-000000000001', Bravo: 'b2b2b2b2-0000-4000-8000-000000000002', Charlie: 'c3c3c3c3-0000-4000-8000-000000000003' };
+  const at = (secondsAgo) => new Date(Date.now() - secondsAgo * 1000).toISOString();
+  for (const [name, id] of Object.entries(sessions)) {
+    writeFileSync(
+      path.join(project, `${id}.jsonl`),
+      [
+        { type: 'user', uuid: `${name}-u`, parentUuid: null, sessionId: id, timestamp: at(60), cwd: ownWorkspace, message: { role: 'user', content: `${name} question` } },
+        { type: 'assistant', uuid: `${name}-a`, parentUuid: `${name}-u`, sessionId: id, timestamp: at(50), cwd: ownWorkspace, message: { role: 'assistant', content: [{ type: 'text', text: `${name} answer` }] } },
+        { type: 'ai-title', aiTitle: `${name} session`, sessionId: id },
+      ]
+        .map((line) => JSON.stringify(line))
+        .join('\n'),
+      'utf8',
+    );
+  }
+  writeFileSync(
+    path.join(ownData, 'settings.json'),
+    JSON.stringify({ 'claudeCode.hideOnboarding': true, 'claudeCode.disableLoginPrompt': true, 'vilaus.language': 'en', 'vilaus.extension.autoUpdate': false }),
+    'utf8',
+  );
+  const other = await electron.launch({
+    executablePath: electronPath,
+    args: ['.', '--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'],
+    cwd: root,
+    env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+    timeout: 60_000,
+  });
+  try {
+    const otherPage = await other.firstWindow();
+    const row = (name) => `[id="sessions-list-row-${sessions[name]}"]`;
+    const list = await waitFor(async () => {
+      for (const frame of otherPage.frames()) {
+        if (frame.url().startsWith('ccw://wv') && (await frame.locator(row('Charlie')).count().catch(() => 0)) === 1) return frame;
+      }
+    }, 30_000, 'the sessions in the list');
+    const tabs = otherPage.locator('#tabs .tab');
+    const active = otherPage.locator('#tabs .tab.active');
+    const tab = (name) => otherPage.locator('#tabs .tab', { hasText: `${name} session` });
+    await waitFor(async () => (await tabs.count()) === 1, 30_000, 'the first conversation');
+    const first = await active.getAttribute('data-panel-id');
+    const showing = async (name, preview) => {
+      await waitFor(
+        async () => (await active.innerText()).includes(`${name} session`) && (await active.evaluate((element) => element.classList.contains('preview'))) === preview,
+        15_000,
+        `${name} active${preview ? ', in preview' : ''}`,
+      );
+    };
+    const backTo = async (panelId, how) => {
+      await how();
+      await waitFor(async () => (await active.getAttribute('data-panel-id')) === panelId, 5000, 'the tab used before');
+    };
+    const keys = (shortcut) =>
+      other.evaluate(({ BrowserWindow }, keyCode) => {
+        const contents = BrowserWindow.getAllWindows()[0].webContents;
+        contents.sendInputEvent({ type: 'keyDown', keyCode, modifiers: ['alt'] });
+        contents.sendInputEvent({ type: 'keyUp', keyCode, modifiers: ['alt'] });
+      }, shortcut);
+    // Windows sends the mouse's side buttons to the window as app commands.
+    const mouseBack = () => other.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].emit('app-command', {}, 'browser-backward'));
+
+    await list.locator(row('Alpha')).click();
+    await showing('Alpha', true);
+    await list.locator(row('Bravo')).click();
+    await showing('Bravo', true);
+    await waitFor(async () => (await tabs.count()) === 2 && (await tab('Alpha').count()) === 0, 10_000, 'Bravo in place of Alpha');
+    // Back to the first conversation: the preview it leaves closes.
+    await backTo(first, () => keys('Left'));
+    await waitFor(async () => (await tabs.count()) === 1, 10_000, 'the preview to close');
+
+    // Its tab double-clicked: kept, it stays when the first comes back (the mouse's back button).
+    await list.locator(row('Alpha')).click();
+    await showing('Alpha', true);
+    await active.dblclick();
+    await showing('Alpha', false);
+    await backTo(first, mouseBack);
+    await otherPage.waitForTimeout(500);
+    if ((await tabs.count()) !== 2) throw new Error(`a kept tab closed: ${await tabs.allInnerTexts()}`);
+    await keys('Right');
+    await showing('Alpha', false);
+
+    // Its row double-clicked: kept from the start.
+    await list.locator(row('Bravo')).dblclick();
+    await showing('Bravo', false);
+    await waitFor(async () => (await tabs.count()) === 3, 10_000, 'Bravo kept next to Alpha');
+
+    // Escape in a preview closes it (the input is empty: the page has no use for one Escape).
+    const bravo = await active.getAttribute('data-panel-id');
+    await list.locator(row('Charlie')).click();
+    await showing('Charlie', true);
+    const charlie = await waitFor(async () => {
+      const handle = await otherPage.locator('#main .panel:not([hidden]) .webview-frame').elementHandle();
+      const frame = await handle?.contentFrame();
+      return (await frame?.locator('[role="textbox"][aria-label="Message input"]').count()) === 1 ? frame : undefined;
+    }, 30_000, "Charlie's input");
+    await charlie.locator('[role="textbox"][aria-label="Message input"]').press('Escape');
+    await waitFor(async () => (await tabs.count()) === 3 && (await tab('Charlie').count()) === 0, 10_000, 'Charlie to close on Escape');
+    await waitFor(async () => (await active.getAttribute('data-panel-id')) === bravo, 5000, 'Bravo back');
+  } finally {
+    await other.close();
+  }
+  return 'replaced, closed on leaving and on Escape, kept by a double click on the tab and on the row';
 });
 
 await step('administrator instance: runs next to the normal one, says so, and reads the API keys the normal one stored', async () => {

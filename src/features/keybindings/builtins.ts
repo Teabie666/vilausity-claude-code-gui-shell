@@ -8,8 +8,9 @@ import { t } from './messages';
 
 export interface BuiltinKeybinding {
   readonly title: string;
-  /** Normalized chord, see platform/keybindings.ts. */
-  readonly key: string;
+  /** Normalized chord, see platform/keybindings.ts; or, for what is not a key, `label`. */
+  readonly key?: string;
+  readonly label?: string;
   /** Where it applies, in words (the When column). */
   readonly where: string;
   readonly source: string;
@@ -32,6 +33,11 @@ export function builtinKeybindings(): BuiltinKeybinding[] {
     { title: t('sendMessage'), key: 'enter', where: t('whereChatInput'), source: t('sourceConversation') },
     { title: t('newLine'), key: 'shift+enter', where: t('whereChatInput'), source: t('sourceConversation') },
     { title: t('closeMenus'), key: 'escape', where: t('whereConversation'), source: t('sourceConversation') },
+    // The mouse's side buttons (main hears them from Windows: features/navigation).
+    { title: t('goBack'), label: t('mouseBack'), where: '', source: t('sourceMouse') },
+    { title: t('goForward'), label: t('mouseForward'), where: '', source: t('sourceMouse') },
+    // Escape that nothing else used (features/navigation): main must not take it from the pages.
+    { title: t('closeTabOnEscape'), key: 'escape', where: t('whereEscapeClose'), source: t('sourceDefault') },
     // Monaco's, in the content pane's text editor.
     editor(t('addCursorAbove'), 'ctrl+alt+up'),
     editor(t('addCursorBelow'), 'ctrl+alt+down'),
