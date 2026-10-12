@@ -56,6 +56,7 @@ export class ExtensionHost {
   private extension: ExtensionModule | undefined;
   private context: vscode.ExtensionContext | undefined;
   private panelRestore: PanelRestore | undefined;
+  private bridge: ClaudeWebviewBridge | undefined;
   private readonly rendererReady: Promise<void>;
   private markRendererReady: () => void = () => {};
   /** Settles once `activate` has run; true when it succeeded. */
@@ -124,11 +125,14 @@ export class ExtensionHost {
     registerCommentRequests(renderer, comments, this.logger.child('comments'));
     this.panelRestore = new PanelRestore(webviews, compat.host.storage, comments, this.logger.child('restore'));
     // The content pane shows `vscode.diff` (ADR 0002 held open_diff before it existed).
-    webviews.interceptor = new ClaudeWebviewBridge(compat.host.os, this.logger.child('bridge'), {
+    const bridge = new ClaudeWebviewBridge(compat.host.os, this.logger.child('bridge'), {
       diffEditorAvailable: () => true,
       comments,
       workspaceFolders: init.workspaceFolders,
     });
+    webviews.interceptor = bridge;
+    this.bridge = bridge;
+    renderer.handle('sessions.busy', ({ sessionId }) => bridge.sessionBusy(sessionId));
     installVSCodeModule(api);
 
     this.activation = this.activate(init, packageJson, compat, services);
@@ -145,6 +149,13 @@ export class ExtensionHost {
 
   storageChanged(scope: StorageScope, key: string, value: unknown): void {
     this.compat?.storageChanged(scope, key, value);
+  }
+
+  /** Sessions were deleted (in any window): the extension's pages list them again. */
+  sessionStoreChanged(): void {
+    if (this.services) {
+      this.bridge?.sessionStoreChanged(this.services.webviews.allWebviews);
+    }
   }
 
   async openConversation(request: ConversationRequest): Promise<void> {

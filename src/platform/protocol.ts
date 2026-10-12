@@ -179,7 +179,31 @@ export interface WebviewPageHints {
    * color it by.
    */
   readonly meters?: string;
+  /** The rows of a session list, where the shell adds its own row actions (delete). */
+  readonly sessionRows?: SessionRowHints;
 }
+
+/** How to find a session list's rows and their action buttons. */
+export interface SessionRowHints {
+  /** CSS selector of a row; its element id is `idPrefix` followed by the session id. */
+  readonly row: string;
+  readonly idPrefix: string;
+  /** CSS selector, within a row, of the session's name. */
+  readonly name: string;
+  /** CSS selector, within a row, of the element holding its action buttons. */
+  readonly actions: string;
+  /** Class names for an added button and its icon: the page's own, for the page's look. */
+  readonly buttonClass: string;
+  readonly iconClass: string;
+}
+
+/** The shell's text for what it adds to the extension's pages, in the display language. */
+export interface WebviewLabels {
+  readonly deleteSession: string;
+}
+
+/** Why a session cannot be deleted now: open in this window, or held by another process. */
+export type SessionBusy = 'open' | 'elsewhere';
 
 export interface WebviewDocument {
   readonly webviewId: string;
@@ -512,6 +536,8 @@ export type ExtHostApiForMain = {
   'documents.show': (p: { uri: string; selection?: RangeDto }) => boolean;
   /** A `vilaus://<extension id>/...` link from outside, for the extension's URI handler; asks the user first. */
   'uri.handle': (p: { uri: string }) => void;
+  /** Sessions were deleted: the extension's pages list them again. */
+  'sessions.storeChanged': (p: void) => void;
   shutdown: (p: void) => void;
 };
 
@@ -538,6 +564,8 @@ export type ExtHostApiForRenderer = {
   'commands.execute': (p: { id: string; args: readonly unknown[] }) => unknown;
   /** Read from the manifest, so it does not wait for activation. */
   'extension.contributions': (p: void) => ExtensionContributions;
+  /** Whether a session is in use (as the extension last told its pages); undefined when not. */
+  'sessions.busy': (p: { sessionId: string }) => SessionBusy | undefined;
 
   // ---- documents and editors ----
   /** The shell opens a file (quick open, drop...); answered by `editor.showText`. False if it cannot be read. */
@@ -677,6 +705,11 @@ export type MainApiForRenderer = {
    * it already comes to the front. False when the folder no longer exists.
    */
   'sessions.open': (p: { folder: string; sessionId: string }) => boolean;
+  /**
+   * Deletes a session for good: its transcript and the folders Claude Code keeps next to it.
+   * False when nothing of it was found. Every window's session list hears of it.
+   */
+  'sessions.delete': (p: { sessionId: string }) => boolean;
   /** The folders the open windows show (the calling window's too). */
   'window.shownFolders': (p: void) => string[];
   /** Closes the calling window; closing the last one quits. */
@@ -784,6 +817,8 @@ export interface WebviewBootstrapData {
   readonly translations?: ExtensionTranslations;
   /** The shell's @font-face rules (the bundled fonts), for the page's own styles to use. */
   readonly fontFaces?: string;
+  /** Text of what the shell adds to the page (pages with `hints.sessionRows`). */
+  readonly labels?: WebviewLabels;
 }
 
 /** An element's box in a webview's viewport, in CSS pixels. */
@@ -855,7 +890,9 @@ export type WebviewToShellMessage =
   | { readonly ccw: string; readonly kind: 'blur' }
   /** Answer to a `find` control: `active` is 1-based, 0 when there are no matches. */
   | { readonly ccw: string; readonly kind: 'findResult'; readonly matches: number; readonly active: number }
-  | { readonly ccw: string; readonly kind: 'comments'; readonly event: CommentsHostEvent };
+  | { readonly ccw: string; readonly kind: 'comments'; readonly event: CommentsHostEvent }
+  /** The delete button of a session list's row (see `hints.sessionRows`); `title` as the row shows it. */
+  | { readonly ccw: string; readonly kind: 'deleteSession'; readonly sessionId: string; readonly title: string };
 
 export type FindDirection = 'restart' | 'next' | 'previous';
 

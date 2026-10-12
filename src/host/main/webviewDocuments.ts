@@ -8,6 +8,7 @@
 
 import type { ExtensionTranslations, ThemeData, WebviewBootstrapData, WebviewDocument } from '../../platform/protocol';
 import { WEBVIEW_CSP_SOURCE } from '../../platform/webviewUrls';
+import { t } from './messages';
 
 export class WebviewDocumentStore {
   /** Webview ids are random, so the documents of every window share one map. */
@@ -66,6 +67,7 @@ export class WebviewDocumentStore {
       // Only pages whose content the bridge knows are translated.
       translations: document.hints?.untranslated !== undefined ? this.getTranslations() : undefined,
       fontFaces: this.fontFaces || undefined,
+      labels: document.hints?.sessionRows ? { deleteSession: t('deleteSession') } : undefined,
     };
     return injectBootstrap(allowShellFonts(document.html), this.bootstrapSource, data);
   }

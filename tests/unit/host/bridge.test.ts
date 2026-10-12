@@ -100,6 +100,55 @@ describe('ClaudeWebviewBridge', () => {
   });
 });
 
+describe('ClaudeWebviewBridge and sessions', () => {
+  const statesUpdate = (fields: Record<string, unknown>): unknown => ({
+    type: 'from-extension',
+    message: { type: 'request', channelId: '', requestId: 'r1', request: { type: 'session_states_update', sessions: [], ...fields } },
+  });
+  const pageOf = (viewType: string): { webview: WebviewImpl; messages: unknown[] } => {
+    const { webview, messages } = makeWebview();
+    return { webview: Object.assign(webview, { viewType }), messages };
+  };
+
+  test('knows the sessions open here and held elsewhere from what the extension tells its pages', () => {
+    const { bridge, webview } = makeBridge(true);
+    assert.equal(bridge.sessionBusy('a'), undefined);
+    bridge.observeToWebview(webview, statesUpdate({ openSessionIds: ['a'], liveElsewhereSessions: [{ sessionId: 'b', pid: 7 }, 'c'] }));
+    assert.equal(bridge.sessionBusy('a'), 'open');
+    assert.equal(bridge.sessionBusy('b'), 'elsewhere');
+    assert.equal(bridge.sessionBusy('c'), 'elsewhere');
+    assert.equal(bridge.sessionBusy('d'), undefined);
+    // A field left out keeps its value; other messages change nothing.
+    bridge.observeToWebview(webview, statesUpdate({ liveElsewhereSessions: [] }));
+    bridge.observeToWebview(webview, { type: 'from-extension', message: { type: 'response', requestId: 'x', response: {} } });
+    assert.equal(bridge.sessionBusy('a'), 'open');
+    assert.equal(bridge.sessionBusy('b'), undefined);
+  });
+
+  test("asks the extension's session pages to list the sessions again", () => {
+    const { bridge } = makeBridge(true);
+    const list = pageOf('claudeVSCodeSessionsList');
+    const panel = pageOf('claudeVSCodePanel');
+    const other = pageOf('claudePlanPreview');
+    bridge.sessionStoreChanged([list.webview, panel.webview, other.webview]);
+    for (const { messages } of [list, panel]) {
+      assert.equal(messages.length, 1);
+      const sent = messages[0] as { type: string; message: { type: string; request: { type: string } } };
+      assert.equal(sent.type, 'from-extension');
+      assert.equal(sent.message.type, 'request');
+      assert.equal(sent.message.request.type, 'session_store_changed');
+    }
+    assert.equal(other.messages.length, 0);
+  });
+
+  test('the session list page is told where its rows and their buttons are', () => {
+    const { bridge } = makeBridge(true);
+    const rows = bridge.pageHints(pageOf('claudeVSCodeSessionsList').webview)?.sessionRows;
+    assert.equal(rows?.idPrefix, 'sessions-list-row-');
+    assert.equal(bridge.pageHints(pageOf('claudeVSCodePanel').webview)?.sessionRows, undefined);
+  });
+});
+
 describe('conversationSessionId', () => {
   test('reads the session id a conversation page saves in its state', () => {
     assert.equal(conversationSessionId({ sessionID: 'abc', sessionUpdatedAt: 1 }), 'abc');

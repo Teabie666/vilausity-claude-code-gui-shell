@@ -303,6 +303,11 @@ export class WindowContext extends Disposable {
     this.extHost?.rpc.notify('storage.didChange', { scope: 'global', key, value });
   }
 
+  /** Sessions were deleted: the extension's pages list them again. */
+  sessionStoreChanged(): void {
+    this.extHost?.rpc.notify('sessions.storeChanged', undefined);
+  }
+
   /** This window's theme: the shared one in its provider's accent. */
   get theme(): ThemeData {
     return this.host.windowTheme(this.currentProvider);

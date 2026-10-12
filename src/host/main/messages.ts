@@ -3,6 +3,8 @@
 import { defineMessages } from '../../platform/nls';
 
 export const t = defineMessages('main', {
+  /** The button the shell adds to each row of the session list (sentence case, like the page's own). */
+  deleteSession: 'Delete session',
   undo: 'Undo',
   redo: 'Redo',
   cut: 'Cut',

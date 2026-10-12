@@ -102,6 +102,15 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **快速访问**（`core/quickAccess.ts`，照 VS Code 的 quick access）：一个输入框，开头的字符决定交给谁：`>` 是命令（`features/commandPalette`），没有前缀是搜索。打开时盖在标题栏的搜索框上（跟 VS Code 开着命令中心时一样，所有快速输入都在这个位置），看起来是搜索框变大成了输入框、下面接着列表；避开两边的窗口按钮，不能拖动窗口。搜索由各模块登记的分组拼成（`registerSearchContributor`，分组的顺序可以随输入变）：对话（`features/sessionSearch`）、新建对话（`features/conversations`）、文件（`features/quickOpen`；输入像文件名或路径时排到最前，Ctrl+P、文件名、回车照样打开文件）、文件夹（`features/workspace`；没输入时还有打开文件夹、最近的文件夹、以管理员身份打开）、命令（没输入时：显示所有命令，加最近用过的两个）、"在所有文件夹中搜索"。异步的分组按 id 保留上一次的结果直到新结果回来，打字时列表不闪。命令面板照 VS Code 把最近用过的命令排在前面（在命令面板和搜索里执行的才算，存在 localStorage，各窗口共用）。快捷键：Ctrl+P / Ctrl+E 搜索，Ctrl+Shift+P / F1 命令，Ctrl+R 最近的文件夹。
 - **搜对话**：主进程读 Claude Code 的会话记录（`~/.claude/projects/<文件夹>/<会话 id>.jsonl`，`CLAUDE_CONFIG_DIR` 改了就跟着改；测试用 `VILAUS_SESSIONS_DIR` 指到别处）。这是 CLI 自己的存储格式，不是接口，所以只读、容错：不认识的行和字段跳过。只看标题（用户起的名字 > 旁路文件 `<会话 id>/custom-title.json` > 生成的标题 > 第一句话）、用户打的字和 Claude 的回复（不含工具输出、思考、IDE 和 CLI 附加的上下文），以及 Claude 读过和改过的文件。读取在主进程的 worker 线程里（`host/main/sessionSearch.ts`、`sessionSearchWorker.ts`，解析和匹配是纯函数 `sessionTranscripts.ts`），按文件大小和修改时间缓存，3 秒内的搜索直接用缓存。匹配不分大小写、整串子串匹配（中文直接能搜）：标题、文件、内容依次排，同类按时间新的在前。默认只搜当前文件夹的会话（按记录里的 `cwd`）。打开结果走主进程 `sessions.open`：找到（或打开）那个文件夹的窗口，再 `conversation.open`。
 
+## 删除会话（M5.5）
+
+插件的会话列表只能归档，删除是壳加的（对照插件 2.1.296）。
+
+- **按钮**：bridge 的页面提示 `sessionRows` 告诉页面脚本行在哪（`<button id="sessions-list-row-<会话 id>">`）、按钮组在哪、插件按钮用的类名；`host/webview/sessionRows.ts` 在每行的重命名、归档后面加一个同样样式的垃圾桶按钮（文字随引导数据的 `labels` 来，主进程按界面语言给）。点击不往上冒泡，免得行本身打开会话；消息 `deleteSession` 交给壳。
+- **能不能删**：插件给它的每个页面推 `session_states_update`，里面有本窗口打开的会话（`openSessionIds`）和别的进程占着的（`liveElsewhereSessions`：另一个窗口、VS Code、命令行，插件靠 Claude Code 记的运行中进程知道）。bridge 旁听插件发给页面的消息（`observeToWebview`）记下这两份名单，渲染进程删之前问一次（`sessions.busy`），确认后再问一次。在用的不删，提示先关掉。
+- **删什么**：主进程 `sessions.delete`（`host/main/sessionFiles.ts`）。会话 id 必须是 UUID 才会拼进路径。删 Claude Code 存的这几处：`projects/<文件夹>/<id>.jsonl` 和同名目录、`file-history/<id>`、`session-env/<id>`；输入历史 `history.jsonl` 不动（CLI 一直在往里追加）。不进回收站，确认框写明删了就找不回。目录跟搜索一样按主进程的 `CLAUDE_CONFIG_DIR` 找；某个 API 接口在自己的环境变量里改了 `CLAUDE_CONFIG_DIR` 的话，那个目录里的会话找不到（提示"找不到"）。
+- **删完**：主进程通知每个窗口的插件进程，bridge 给插件页面发插件自己的 `session_store_changed` 请求（插件在 Claude Code 目录换了时也发这个），页面重新读会话列表。
+
 ## API 接口（M4）
 
 - **数据**：`platform/providers.ts` 定义接口（类型、Base URL、鉴权方式、各档模型、请求头、超时、最大输出、关闭非必要流量、其他环境变量、强调色、来自哪个预设），以及接口 → 环境变量的纯函数（`providerEnvironment`），主进程、渲染进程和单元测试共用。内置的"Claude 订阅"不设任何变量。预设在 `features/providers/presets.ts`，按各家官方文档（2026-10-10；火山方舟、MiniMax、OpenRouter 2026-10-12），只是起点，每个带官方说明的链接。只收说 Anthropic Messages API 的接口（Claude Code 只会说这一种）：OpenAI 和 Google 的接口不是，xAI 的 Anthropic 兼容已经弃用；它们的模型可以经 OpenRouter 用。

@@ -63,6 +63,7 @@ import { ExtensionUpdater, type UpdateSettings } from './extensionUpdater';
 import { findGit } from './gitLocator';
 import { t } from './messages';
 import { ProviderStore, type SecretCipher } from './providerStore';
+import { deleteSession } from './sessionFiles';
 import { claudeProjectsDir, SessionSearch } from './sessionSearch';
 import { SettingsStore } from './settingsStore';
 import { isExternalUrl, nextZoomLevel } from './shellWindow';
@@ -133,6 +134,8 @@ export class ShellApp extends Disposable implements WindowHost {
   private readonly shellState: StateStore;
   private readonly history: WindowHistory;
   private readonly sessionSearch: SessionSearch;
+  /** Claude Code's transcripts (`~/.claude/projects`), for the search and for deleting sessions. */
+  private readonly projectsDir = claudeProjectsDir(process.env, os.homedir());
   private readonly themesDir: string;
   private currentTheme: ThemeData;
   private currentZoom: number;
@@ -170,7 +173,7 @@ export class ShellApp extends Disposable implements WindowHost {
     this.sessionSearch = this.register(
       new SessionSearch(
         path.join(env.appDir, 'sessionSearchWorker.js'),
-        claudeProjectsDir(process.env, os.homedir()),
+        this.projectsDir,
         this.logger.child('sessionSearch'),
       ),
     );
@@ -730,6 +733,14 @@ export class ShellApp extends Disposable implements WindowHost {
         }
         (await this.openWindow(folder)).openConversation({ sessionId });
         return true;
+      },
+      'sessions.delete': async ({ sessionId }) => {
+        const deleted = await deleteSession(this.projectsDir, sessionId);
+        this.logger.info(`deleted session ${sessionId}: ${deleted.paths.length} path(s)`);
+        for (const window of this.windows) {
+          window.sessionStoreChanged();
+        }
+        return deleted.transcript;
       },
       'window.shownFolders': () => this.windows.map((window) => window.folder),
       'window.close': (_params, window) => this.requestClose(window),

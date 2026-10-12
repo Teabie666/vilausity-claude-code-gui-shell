@@ -31,6 +31,8 @@ export interface WebviewMessageInterceptor {
    * also rewrite the message in place and return false to pass it on changed.
    */
   interceptFromWebview(webview: WebviewImpl, message: unknown): boolean;
+  /** Sees what the extension posts to a webview, without changing it. */
+  observeToWebview?(webview: WebviewImpl, message: unknown): void;
   /** What the shell's script in this webview should know about the page (asked once per webview). */
   pageHints?(webview: WebviewImpl): WebviewPageHints | undefined;
 }
@@ -45,6 +47,8 @@ export class WebviewImpl implements vscode.Webview {
   state: unknown = undefined;
   /** Passed to the shell's script in the page with every document. */
   pageHints: WebviewPageHints | undefined = undefined;
+  /** Sees each message the extension posts (the manager hands them to its interceptor). */
+  onPost: ((message: unknown) => void) | undefined = undefined;
   private readonly messageEmitter = new Emitter<unknown>();
   readonly onDidReceiveMessage: Event<unknown> = this.messageEmitter.event;
 
@@ -81,6 +85,7 @@ export class WebviewImpl implements vscode.Webview {
     if (this.disposed) {
       return Promise.resolve(false);
     }
+    this.onPost?.(message);
     // MessagePort delivery is ordered, so resolving right away keeps the extension's
     // send queue moving without a round trip per message.
     this.backend.postMessage(this.id, message);
@@ -459,8 +464,14 @@ export class WebviewManager implements IDisposable {
     );
     // Before the extension sets any html: every document of this webview carries them.
     webview.pageHints = this.interceptor?.pageHints?.(webview);
+    webview.onPost = (message) => this.interceptor?.observeToWebview?.(webview, message);
     this.webviews.set(webview.id, webview);
     return webview;
+  }
+
+  /** Every live webview: panels' and views'. */
+  get allWebviews(): readonly WebviewImpl[] {
+    return [...this.webviews.values()];
   }
 
   registerSerializer(viewType: string, serializer: vscode.WebviewPanelSerializer): IDisposable {

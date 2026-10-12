@@ -15,6 +15,7 @@ import type {
 import { CommentsHost } from './comments';
 import { DEFAULT_WEBVIEW_STYLES } from './defaultStyles';
 import { InPageFinder } from './find';
+import { watchSessionRows } from './sessionRows';
 import { PageTranslator } from './translate';
 
 interface VsCodeApi {
@@ -62,6 +63,13 @@ const THEME_CLASSES = [
   const meters = data.hints?.meters;
   if (meters) {
     onDomReady(() => watchMeters(meters));
+  }
+  const sessionRows = data.hints?.sessionRows;
+  const labels = data.labels;
+  if (sessionRows && labels) {
+    onDomReady(() =>
+      watchSessionRows(sessionRows, labels.deleteSession, (sessionId, title) => post({ kind: 'deleteSession', sessionId, title })),
+    );
   }
 
   let theme = data.theme;

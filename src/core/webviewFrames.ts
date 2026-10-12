@@ -152,6 +152,9 @@ export class WebviewFrames {
   private readonly commentsEmitter = new Emitter<{ webviewId: string; event: CommentsHostEvent }>();
   /** What the comment blocks in a webview report (see `setComments`). */
   readonly onDidCommentsEvent = this.commentsEmitter.event;
+  private readonly deleteSessionEmitter = new Emitter<{ sessionId: string; title: string }>();
+  /** The delete button of a session list's row was clicked (pages with `hints.sessionRows`). */
+  readonly onDidRequestSessionDelete = this.deleteSessionEmitter.event;
 
   constructor(
     private readonly connection: ExtensionHostConnection,
@@ -315,6 +318,11 @@ export class WebviewFrames {
       case 'focus':
       case 'blur':
         this.focusEmitter.fire({ webviewId, focused: data.kind === 'focus' });
+        break;
+      case 'deleteSession':
+        if (typeof data.sessionId === 'string') {
+          this.deleteSessionEmitter.fire({ sessionId: data.sessionId, title: typeof data.title === 'string' ? data.title : '' });
+        }
         break;
       default:
         this.logger.warn(`unknown message kind from webview ${webviewId}`);

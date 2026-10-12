@@ -1,12 +1,13 @@
 /**
  * The session list: the Claude Code extension's own session-list webview view, shown in
  * the sidebar in place of a file tree. Clicking a session asks the extension to open it,
- * which arrives as a conversation panel.
+ * which arrives as a conversation panel. The shell adds a delete button to each row (the
+ * extension can only archive): it asks first, then main deletes the session's files.
  */
 
 import type { ShellModule } from '../../core/module';
 import { CommandCategory } from '../../core/messages';
-import { ICommands, IExtensionHost, IKeybindings, ILayout, IWebviewFrames } from '../../core/serviceIds';
+import { ICommands, IDialogs, IExtensionHost, IKeybindings, ILayout, INative, IWebviewFrames } from '../../core/serviceIds';
 import { t } from './messages';
 
 /** View id registered by anthropic.claude-code 2.1.282 (package.json `views`). */
@@ -107,5 +108,45 @@ export const sessionsModule: ShellModule = {
       }),
     );
     subscriptions.add(keybindings.register({ key: 'ctrl+b', command: 'sessions.toggleSidebar' }));
+
+    // A session in use is not deleted: its Claude process would write it again, or fail.
+    const dialogs = services.get(IDialogs);
+    const native = services.get(INative);
+    const refuseIfBusy = async (sessionId: string, name: string): Promise<boolean> => {
+      const busy = await connection.rpc?.call('sessions.busy', { sessionId });
+      if (busy) {
+        const message = busy === 'open' ? t('deleteOpen', name) : t('deleteElsewhere', name);
+        await dialogs.showMessage({ severity: 'info', modal: true, message, items: [] });
+      }
+      return busy !== undefined;
+    };
+    const deleteSession = async (sessionId: string, title: string): Promise<void> => {
+      const name = title || t('untitled');
+      if (await refuseIfBusy(sessionId, name)) {
+        return;
+      }
+      const choice = await dialogs.showMessage({
+        severity: 'warning',
+        modal: true,
+        message: t('deleteTitle', name),
+        detail: t('deleteDetail'),
+        items: [t('delete')],
+      });
+      // It may have been opened while the question was up.
+      if (choice !== 0 || (await refuseIfBusy(sessionId, name))) {
+        return;
+      }
+      if (!(await native.call('sessions.delete', { sessionId }))) {
+        void dialogs.showMessage({ severity: 'error', modal: false, message: t('deleteNotFound', name), items: [] });
+      }
+    };
+    subscriptions.add(
+      frames.onDidRequestSessionDelete(({ sessionId, title }) => {
+        deleteSession(sessionId, title).catch((error: unknown) => {
+          logger.error(`deleting session ${sessionId} failed`, error);
+          void dialogs.showMessage({ severity: 'error', modal: false, message: t('deleteFailed', title || t('untitled')), items: [] });
+        });
+      }),
+    );
   },
 };

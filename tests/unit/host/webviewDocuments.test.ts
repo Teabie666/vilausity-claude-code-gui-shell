@@ -140,6 +140,15 @@ describe('WebviewDocumentStore', () => {
     assert.ok(!without.render('a')!.includes('fontFaces'));
   });
 
+  test('a page with session rows gets the text of the button the shell adds to them', () => {
+    const store = new WebviewDocumentStore('BOOT', () => theme);
+    const sessionRows = { row: 'button', idPrefix: 'row-', name: '.name', actions: '.actions', buttonClass: 'b', iconClass: 'i' };
+    store.set({ ...makeDoc('list', '<html><head></head></html>', []), hints: { sessionRows } });
+    store.set(makeDoc('other', '<html><head></head></html>', []));
+    assert.ok(store.render('list')!.includes('"labels":{"deleteSession":"Delete session"}'));
+    assert.ok(!store.render('other')!.includes('labels'));
+  });
+
   test('resourceRoots returns the deduplicated union of live documents', () => {
     const store = new WebviewDocumentStore('BOOT', () => theme);
     store.set(makeDoc('a', '<html></html>', ['/root1', '/root2']));

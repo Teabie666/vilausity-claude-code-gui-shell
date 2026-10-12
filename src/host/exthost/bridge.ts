@@ -13,10 +13,11 @@
  * extension's pages (the selectors in the page hints, the state they save).
  */
 
+import { randomUUID } from 'node:crypto';
 import { CHAT_PANEL_VIEW_TYPE, type WebviewImpl, type WebviewMessageInterceptor } from '../../compat/vscode/webviews';
 import type { OsBackend } from '../../compat/vscode/host';
 import type { ILogger } from '../../platform/log';
-import type { WebviewPageHints } from '../../platform/protocol';
+import type { SessionBusy, SessionRowHints, WebviewPageHints } from '../../platform/protocol';
 import { formatComments, type PendingComments } from './comments';
 
 interface WebviewRequest {
@@ -251,6 +252,20 @@ const SESSION_LIST_STYLES = `
 `;
 
 /**
+ * The session list's rows (anthropic.claude-code 2.1.296): `<button id="sessions-list-row-<session id>">`,
+ * with its rename and archive buttons in `.sessionActions_OOQiHg`. The shell adds a delete
+ * button next to them, in the same classes.
+ */
+const SESSION_ROWS: SessionRowHints = {
+  row: 'button[id^="sessions-list-row-"]',
+  idPrefix: 'sessions-list-row-',
+  name: '.sessionName_OOQiHg',
+  actions: '.sessionActions_OOQiHg',
+  buttonClass: 'actionButton_OOQiHg',
+  iconClass: 'actionIcon_OOQiHg',
+};
+
+/**
  * The session a conversation panel's page shows, from the state it saves
  * (anthropic.claude-code 2.1.282: `{ sessionID, sessionWithNoTranscript, ... }`, saved again
  * whenever the page's session changes). A new conversation gets a session id at once, but
@@ -283,6 +298,10 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   /** `open_diff` requests we are holding, by requestId. */
   private readonly heldDiffs = new Map<string, WebviewImpl>();
   private loggedInputShape = false;
+  /** Sessions open in this window's panels, and held by another process, as the extension last said. */
+  private openSessions = new Set<string>();
+  private elsewhereSessions = new Set<string>();
+  private loggedStatesShape = false;
 
   constructor(
     private readonly os: OsBackend,
@@ -366,6 +385,51 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     return true;
   }
 
+  /**
+   * The extension tells its pages which sessions are in use (anthropic.claude-code 2.1.296:
+   * `{type: 'from-extension', message: {type: 'request', request: {type: 'session_states_update',
+   * openSessionIds?, liveElsewhereSessions?, ...}}}`, the same to every page; a field left out
+   * keeps its last value). Open: in a panel of this window. Elsewhere: Claude Code holds it in
+   * another process (another window, VS Code, the CLI), which the extension learns from the
+   * records Claude Code keeps of its running sessions.
+   */
+  observeToWebview(_webview: WebviewImpl, message: unknown): void {
+    const inner = isRecord(message) && message.type === 'from-extension' ? message.message : undefined;
+    const request = isRecord(inner) && inner.type === 'request' && isRecord(inner.request) ? inner.request : undefined;
+    if (request?.type !== 'session_states_update') {
+      return;
+    }
+    if (!this.loggedStatesShape) {
+      this.loggedStatesShape = true;
+      this.logger.info(`session_states_update shape: ${describeShape(request)}`);
+    }
+    if (Array.isArray(request.openSessionIds)) {
+      this.openSessions = new Set(request.openSessionIds.flatMap(sessionIdOf));
+    }
+    if (Array.isArray(request.liveElsewhereSessions)) {
+      this.elsewhereSessions = new Set(request.liveElsewhereSessions.flatMap(sessionIdOf));
+    }
+  }
+
+  sessionBusy(sessionId: string): SessionBusy | undefined {
+    return this.openSessions.has(sessionId) ? 'open' : this.elsewhereSessions.has(sessionId) ? 'elsewhere' : undefined;
+  }
+
+  /**
+   * Sessions were deleted behind the extension's back: its pages list them again, through the
+   * request the extension itself sends when Claude Code's folder moves (`session_store_changed`,
+   * anthropic.claude-code 2.1.296; the page re-reads its list and does not answer).
+   */
+  sessionStoreChanged(webviews: Iterable<WebviewImpl>): void {
+    for (const webview of webviews) {
+      if (webview.viewType !== SESSION_LIST_VIEW_TYPE && webview.viewType !== CHAT_PANEL_VIEW_TYPE) {
+        continue;
+      }
+      const request = { type: 'request', channelId: '', requestId: randomUUID(), request: { type: 'session_store_changed' } };
+      void webview.postMessage({ type: 'from-extension', message: request });
+    }
+  }
+
   pageHints(webview: WebviewImpl): WebviewPageHints | undefined {
     switch (webview.viewType) {
       case CHAT_PANEL_VIEW_TYPE:
@@ -380,6 +444,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
           untranslated: PAGE_CONTENT,
           styles: FONT_STYLES + ACCENT_STYLES + USAGE_STYLES + SESSION_LIST_STYLES,
           meters: USAGE_METERS,
+          sessionRows: SESSION_ROWS,
         };
       case PLAN_PREVIEW_VIEW_TYPE:
         return { untranslated: PLAN_PREVIEW_CONTENT };
@@ -437,6 +502,14 @@ function respond(webview: WebviewImpl, requestId: string, response: Record<strin
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+/** A session in the extension's lists: its id, or a record with a `sessionId`. */
+function sessionIdOf(entry: unknown): string[] {
+  if (typeof entry === 'string') {
+    return [entry];
+  }
+  return isRecord(entry) && typeof entry.sessionId === 'string' ? [entry.sessionId] : [];
 }
 
 function isWebviewRequest(value: Record<string, unknown>): value is Record<string, unknown> & WebviewRequest {

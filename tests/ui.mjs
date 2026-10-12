@@ -1510,6 +1510,72 @@ await step('first run: no extension, no Git -> install from Open VSX without a r
   }
 });
 
+await step('the session list deletes a session: its row has a delete button that asks first, then the files are gone', async () => {
+  // An instance of its own, whose Claude Code folder holds one session of its workspace.
+  const own = path.join(runDir, 'delete-session');
+  const ownData = path.join(own, 'data');
+  const ownWorkspace = path.join(own, 'workspace');
+  const claudeDir = path.join(own, 'claude');
+  const id = '0f9c2b1e-4d5a-4c3b-9e8f-7a6b5c4d3e2f';
+  // Claude Code files a folder's sessions under its path with every other character a dash.
+  const project = path.join(claudeDir, 'projects', ownWorkspace.replace(/[^a-zA-Z0-9]/g, '-'));
+  const transcript = path.join(project, `${id}.jsonl`);
+  mkdirSync(ownData, { recursive: true });
+  mkdirSync(ownWorkspace, { recursive: true });
+  mkdirSync(project, { recursive: true });
+  mkdirSync(path.join(claudeDir, 'file-history', id), { recursive: true });
+  const at = (secondsAgo) => new Date(Date.now() - secondsAgo * 1000).toISOString();
+  writeFileSync(
+    transcript,
+    [
+      { type: 'user', uuid: 'u1', parentUuid: null, sessionId: id, timestamp: at(60), cwd: ownWorkspace, message: { role: 'user', content: 'Tidy the downloads folder' } },
+      { type: 'assistant', uuid: 'a1', parentUuid: 'u1', sessionId: id, timestamp: at(50), cwd: ownWorkspace, message: { role: 'assistant', content: [{ type: 'text', text: 'Done.' }] } },
+      { type: 'ai-title', aiTitle: 'Tidy the downloads', sessionId: id },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join('\n'),
+    'utf8',
+  );
+  writeFileSync(
+    path.join(ownData, 'settings.json'),
+    JSON.stringify({ 'claudeCode.hideOnboarding': true, 'claudeCode.disableLoginPrompt': true, 'vilaus.language': 'en', 'vilaus.extension.autoUpdate': false }),
+    'utf8',
+  );
+  const other = await electron.launch({
+    executablePath: electronPath,
+    args: ['.', '--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'],
+    cwd: root,
+    env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+    timeout: 60_000,
+  });
+  try {
+    const otherPage = await other.firstWindow();
+    const rowSelector = `[id="sessions-list-row-${id}"]`;
+    const list = await waitFor(async () => {
+      for (const frame of otherPage.frames()) {
+        if (frame.url().startsWith('ccw://wv') && (await frame.locator(rowSelector).count().catch(() => 0)) === 1) return frame;
+      }
+    }, 30_000, 'the session in the list');
+    const row = list.locator(rowSelector);
+    await row.hover();
+    await row.locator('.vilaus-delete-session[title="Delete session"]').click();
+    const modal = otherPage.locator('.overlay-box.modal');
+    await modal.waitFor({ timeout: 5000 });
+    if (!(await modal.innerText()).includes('"Tidy the downloads"')) throw new Error(`the question: ${await modal.innerText()}`);
+    // Cancel keeps it; Delete deletes it.
+    await modal.locator('.button', { hasText: 'Cancel' }).click();
+    await otherPage.waitForTimeout(500);
+    if (!existsSync(transcript)) throw new Error('deleted on Cancel');
+    await row.locator('.vilaus-delete-session').click();
+    await modal.locator('.button', { hasText: 'Delete' }).click();
+    await waitFor(() => !existsSync(transcript) && !existsSync(path.join(claudeDir, 'file-history', id)), 5000, 'the files to go');
+    await waitFor(async () => (await list.locator(rowSelector).count()) === 0, 10_000, 'the row to leave the list');
+  } finally {
+    await other.close();
+  }
+  return 'transcript and file history deleted, the list read again';
+});
+
 await step('administrator instance: runs next to the normal one, says so, and reads the API keys the normal one stored', async () => {
   const stored = readJson(path.join(dataDir, 'providers.json'))?.keys?.mock;
   if (!stored) throw new Error('the normal instance stored no key');
