@@ -16,8 +16,7 @@ export const t = defineMessages('window', {
   showSampleNotifications: 'Show Sample Notifications',
   sampleInfo: 'Sample information notification. One with buttons stays until a button or × is clicked.',
   sampleWarning: 'Sample warning. One without buttons closes by itself after a while.',
-  sampleError:
-    'Sample error with a longer message, to show how the text wraps across lines and how the buttons line up below it.',
+  sampleError: 'Sample error with a longer message, to show how the text wraps across lines and how the buttons line up below it.',
   sampleAction: 'Action',
   sampleLater: 'Later',
 });

@@ -5,12 +5,7 @@
 
 import type { ParamsOf, ResultOf } from '../platform/ipc';
 import { toDisposable, type IDisposable } from '../platform/lifecycle';
-import {
-  IpcChannel,
-  type MainApiForRenderer,
-  type MainEventMessage,
-  type MainEventsForRenderer,
-} from '../platform/protocol';
+import { IpcChannel, type MainApiForRenderer, type MainEventMessage, type MainEventsForRenderer } from '../platform/protocol';
 
 interface PreloadBridge {
   invoke(method: string, params: unknown): Promise<unknown>;
@@ -29,10 +24,7 @@ function isFromPreload(event: MessageEvent): boolean {
 }
 
 export class NativeApi {
-  call<M extends keyof MainApiForRenderer>(
-    method: M,
-    params: ParamsOf<MainApiForRenderer, M>,
-  ): Promise<ResultOf<MainApiForRenderer, M>> {
+  call<M extends keyof MainApiForRenderer>(method: M, params: ParamsOf<MainApiForRenderer, M>): Promise<ResultOf<MainApiForRenderer, M>> {
     return window.vilausNative.invoke(method, params) as Promise<ResultOf<MainApiForRenderer, M>>;
   }
 

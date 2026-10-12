@@ -137,12 +137,7 @@ const TITLE_FROM_PROMPT_LENGTH = 80;
  * one in its side file (`<session id>/custom-title.json`), else the generated one, else the
  * start of the first prompt: close to how the extension's session list names it.
  */
-export function indexSession(
-  sessionId: string,
-  transcript: Transcript,
-  updatedAt: number,
-  sideTitle?: string,
-): IndexedSession | undefined {
+export function indexSession(sessionId: string, transcript: Transcript, updatedAt: number, sideTitle?: string): IndexedSession | undefined {
   const firstPrompt = transcript.messages.find((message) => message.role === 'user')?.text;
   if (!transcript.cwd || (!firstPrompt && !transcript.customTitle && !transcript.aiTitle)) {
     return undefined;

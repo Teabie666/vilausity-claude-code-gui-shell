@@ -62,10 +62,14 @@ for (const [name, value] of Object.entries(process.env)) {
 
 /** Runs PowerShell; its output as UTF-8. */
 function ps(script) {
-  return execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', `[Console]::OutputEncoding = [Text.Encoding]::UTF8; ${script}`], {
-    encoding: 'utf8',
-    windowsHide: true,
-  }).trim();
+  return execFileSync(
+    powershell,
+    ['-NoProfile', '-NonInteractive', '-Command', `[Console]::OutputEncoding = [Text.Encoding]::UTF8; ${script}`],
+    {
+      encoding: 'utf8',
+      windowsHide: true,
+    },
+  ).trim();
 }
 /** A key's values (the default one as ''), or undefined when there is no such key. */
 function readKey(key) {
@@ -92,7 +96,8 @@ function shortcuts() {
 }
 const shortcutTarget = (file) => ps(`(New-Object -ComObject WScript.Shell).CreateShortcut('${file.replace(/'/g, "''")}').TargetPath`);
 /** The installed program's processes (not another copy's). */
-const runningCopies = () => ps(`@(Get-Process Vilausity -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '${exe.replace(/'/g, "''")}' }).Count`);
+const runningCopies = () =>
+  ps(`@(Get-Process Vilausity -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '${exe.replace(/'/g, "''")}' }).Count`);
 function isElevated() {
   try {
     readdirSync(path.join(system32, 'config', 'systemprofile'));
@@ -154,7 +159,13 @@ function install() {
   // NSIS takes /D= last and unquoted, spaces and all: a verbatim command line, with the
   // installer's own path quoted by hand.
   const args = ['/S', modeSwitch, ...(allUsers ? [] : [`/D=${installDir}`])];
-  const run = spawnSync(installer, args, { env, argv0: `"${installer}"`, windowsVerbatimArguments: true, timeout: 300_000, windowsHide: true });
+  const run = spawnSync(installer, args, {
+    env,
+    argv0: `"${installer}"`,
+    windowsVerbatimArguments: true,
+    timeout: 300_000,
+    windowsHide: true,
+  });
   if (run.status !== 0) throw new Error(`the installer exited with ${run.status}${run.error ? ` (${run.error.message})` : ''}`);
   if (!existsSync(exe)) throw new Error(`no ${exe}`);
 }
@@ -168,10 +179,20 @@ async function uninstall() {
 }
 
 function checkInstalled() {
-  const expectedFiles = ['Vilausity.exe', 'Uninstall Vilausity.exe', 'resources\\app.asar', 'LICENSE.txt', 'ThirdPartyNotices.txt', 'LICENSE.electron.txt', 'LICENSES.chromium.html'];
+  const expectedFiles = [
+    'Vilausity.exe',
+    'Uninstall Vilausity.exe',
+    'resources\\app.asar',
+    'LICENSE.txt',
+    'ThirdPartyNotices.txt',
+    'LICENSE.electron.txt',
+    'LICENSES.chromium.html',
+  ];
   const missing = expectedFiles.filter((file) => !existsSync(path.join(installDir, file)));
   if (missing.length > 0) throw new Error(`missing: ${missing.join(', ')}`);
-  const extra = ['resources\\default_app.asar', 'resources\\elevate.exe', 'version'].filter((file) => existsSync(path.join(installDir, file)));
+  const extra = ['resources\\default_app.asar', 'resources\\elevate.exe', 'version'].filter((file) =>
+    existsSync(path.join(installDir, file)),
+  );
   if (extra.length > 0) throw new Error(`should not be there: ${extra.join(', ')}`);
   const entry = readKey(uninstallKey);
   if (!entry) throw new Error(`no ${uninstallKey}`);
@@ -239,7 +260,8 @@ async function checkProgramRuns() {
     await waitUntil(() => page.frames().some((frame) => frame.url().startsWith('ccw://wv')), 30_000, 'the conversation');
     if (!(await app.evaluate(({ app: electronApp }) => electronApp.isPackaged))) throw new Error('not packaged');
     const administrator = existsSync(path.join(dataDir, 'admin'));
-    if (administrator !== isElevated()) throw new Error(administrator ? 'the administrator instance from a normal shell' : 'not the administrator instance, elevated');
+    if (administrator !== isElevated())
+      throw new Error(administrator ? 'the administrator instance from a normal shell' : 'not the administrator instance, elevated');
     return `${printed.split(/\r?\n/)[0]}; the window and the conversation load${administrator ? ' (the administrator instance)' : ''}`;
   } finally {
     await app.close();
@@ -256,7 +278,12 @@ async function checkRunsUnelevated() {
   const workspace = path.join(runDir, 'workspace');
   mkdirSync(workspace, { recursive: true });
   const command = `"${exe}" --user-data-dir "${dataDir}" --folder "${workspace}" --secondary-display`;
-  spawn(path.join(system32, 'runas.exe'), ['/trustlevel:0x20000', command], { env, detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  spawn(path.join(system32, 'runas.exe'), ['/trustlevel:0x20000', command], {
+    env,
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  }).unref();
   const log = () => {
     const logs = path.join(dataDir, 'logs');
     const session = existsSync(logs) ? readdirSync(logs).sort().at(-1) : undefined;
@@ -272,7 +299,9 @@ async function checkRunsUnelevated() {
     if (errors.length > 0) throw new Error(`errors in main.log:\n${errors.join('\n')}`);
     return 'the normal instance; the extension activated; no errors';
   } finally {
-    ps(`Get-Process Vilausity -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '${exe.replace(/'/g, "''")}' } | Stop-Process -Force`);
+    ps(
+      `Get-Process Vilausity -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '${exe.replace(/'/g, "''")}' } | Stop-Process -Force`,
+    );
     await waitUntil(() => runningCopies() === '0', 20_000, 'the program to quit');
   }
 }

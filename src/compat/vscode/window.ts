@@ -175,8 +175,7 @@ export function createWindowNamespace(deps: WindowDependencies): Record<string, 
       dispose: () => {},
     }),
 
-    createOutputChannel: (name: string) =>
-      asVsCodeChannel(new OutputChannelImpl(name, host.createOutputSink(name), deps.onShowOutput)),
+    createOutputChannel: (name: string) => asVsCodeChannel(new OutputChannelImpl(name, host.createOutputSink(name), deps.onShowOutput)),
 
     // ---- webviews and tabs ----
     createWebviewPanel: (
@@ -209,8 +208,7 @@ export function createWindowNamespace(deps: WindowDependencies): Record<string, 
       columnOrOptions?: vscode.ViewColumn | vscode.TextDocumentShowOptions,
       preserveFocus?: boolean,
     ) => {
-      const document =
-        documentOrUri instanceof Uri ? await documents.open(documentOrUri) : (documentOrUri as unknown as TextDocumentImpl);
+      const document = documentOrUri instanceof Uri ? await documents.open(documentOrUri) : (documentOrUri as unknown as TextDocumentImpl);
       const options: vscode.TextDocumentShowOptions =
         typeof columnOrOptions === 'object' ? columnOrOptions : { preserveFocus: preserveFocus === true };
       return editors.showTextDocument(document, options);

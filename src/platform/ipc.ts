@@ -73,9 +73,7 @@ interface PendingCall {
   readonly reject: (reason: unknown) => void;
 }
 
-export class RpcEndpoint<Local extends ApiShape, Remote extends ApiShape, TPort = unknown>
-  implements IDisposable
-{
+export class RpcEndpoint<Local extends ApiShape, Remote extends ApiShape, TPort = unknown> implements IDisposable {
   private nextId = 1;
   private readonly pending = new Map<number, PendingCall>();
   private readonly handlers = new Map<string, (params: unknown, ports: readonly TPort[]) => unknown>();
@@ -90,11 +88,7 @@ export class RpcEndpoint<Local extends ApiShape, Remote extends ApiShape, TPort 
     this.subscription = transport.listen((message, ports) => this.onMessage(message, ports));
   }
 
-  call<M extends keyof Remote & string>(
-    method: M,
-    params: ParamsOf<Remote, M>,
-    transfer?: TPort[],
-  ): Promise<ResultOf<Remote, M>> {
+  call<M extends keyof Remote & string>(method: M, params: ParamsOf<Remote, M>, transfer?: TPort[]): Promise<ResultOf<Remote, M>> {
     if (this.disposed) {
       return Promise.reject(new Error(`[${this.name}] endpoint disposed; cannot call ${method}`));
     }
@@ -109,11 +103,7 @@ export class RpcEndpoint<Local extends ApiShape, Remote extends ApiShape, TPort 
     });
   }
 
-  notify<M extends keyof Remote & string>(
-    method: M,
-    params: ParamsOf<Remote, M>,
-    transfer?: TPort[],
-  ): void {
+  notify<M extends keyof Remote & string>(method: M, params: ParamsOf<Remote, M>, transfer?: TPort[]): void {
     if (this.disposed) {
       this.logger.debug(`[${this.name}] dropped notification ${method} after dispose`);
       return;
@@ -237,11 +227,7 @@ function isWireMessage(value: unknown): value is WireRequest | WireResponse {
 }
 
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as { then?: unknown }).then === 'function'
-  );
+  return typeof value === 'object' && value !== null && typeof (value as { then?: unknown }).then === 'function';
 }
 
 function toWireError(error: unknown): WireError {

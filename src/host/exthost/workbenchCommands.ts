@@ -28,9 +28,7 @@ const LAYOUT_NO_OPS = [
 /** A file URI's path; undefined for anything else. */
 function filePath(value: unknown): string | undefined {
   const uri = value as Partial<vscode.Uri> | undefined;
-  return typeof uri === 'object' && uri !== null && uri.scheme === 'file' && typeof uri.fsPath === 'string'
-    ? uri.fsPath
-    : undefined;
+  return typeof uri === 'object' && uri !== null && uri.scheme === 'file' && typeof uri.fsPath === 'string' ? uri.fsPath : undefined;
 }
 
 export function registerWorkbenchCommands(commands: CommandRegistry, hosts: { main: MainRpc; renderer: RendererRpc }): void {

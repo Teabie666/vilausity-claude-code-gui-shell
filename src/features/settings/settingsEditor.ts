@@ -10,15 +10,7 @@ import type { ILogger } from '../../platform/log';
 import type { EditorPane } from '../../core/editors';
 import type { SettingDefinition, SettingsService, SettingsWidgetHandle } from '../../core/settings';
 import { t } from './messages';
-import {
-  controlKind,
-  deprecationOf,
-  descriptionOf,
-  groupBySection,
-  matchesQuery,
-  parseNumber,
-  sameValue,
-} from './settingItems';
+import { controlKind, deprecationOf, descriptionOf, groupBySection, matchesQuery, parseNumber, sameValue } from './settingItems';
 import { displayTitle } from './titles';
 
 /** Typing in a text field writes after this pause. */
@@ -354,7 +346,9 @@ export class SettingsEditorPane implements EditorPane {
 
   /** Scrolls a section to the top (its name, as in the table of contents). */
   revealSection(section: string): void {
-    const heading = [...this.list.querySelectorAll<HTMLElement>('.settings-section-title')].find((candidate) => candidate.textContent === section);
+    const heading = [...this.list.querySelectorAll<HTMLElement>('.settings-section-title')].find(
+      (candidate) => candidate.textContent === section,
+    );
     heading?.scrollIntoView({ block: 'start' });
   }
 

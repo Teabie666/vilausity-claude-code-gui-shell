@@ -2,14 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as path from 'node:path';
 import { parseCliArgs, parseGoto, userArguments } from '../../../src/host/main/cli';
-import {
-  CASCADE_OFFSET,
-  cascade,
-  foldersToOpen,
-  parsePlacement,
-  sameFolder,
-  WindowHistory,
-} from '../../../src/host/main/windowHistory';
+import { CASCADE_OFFSET, cascade, foldersToOpen, parsePlacement, sameFolder, WindowHistory } from '../../../src/host/main/windowHistory';
 
 function memoryStore(): { get(key: string): unknown; set(key: string, value: unknown): void; data: Map<string, unknown> } {
   const data = new Map<string, unknown>();
@@ -27,10 +20,10 @@ describe('userArguments', () => {
 
   test('development: everything after the app path, even with switches before it', () => {
     assert.deepEqual(userArguments(['electron.exe', '.', '--folder', 'x'], false), ['--folder', 'x']);
-    assert.deepEqual(
-      userArguments(['electron.exe', '--inspect=0', '--remote-debugging-port=0', '.', '--user-data-dir', 'd'], false),
-      ['--user-data-dir', 'd'],
-    );
+    assert.deepEqual(userArguments(['electron.exe', '--inspect=0', '--remote-debugging-port=0', '.', '--user-data-dir', 'd'], false), [
+      '--user-data-dir',
+      'd',
+    ]);
     assert.deepEqual(userArguments(['electron.exe', '--inspect=0'], false), []);
   });
 });
@@ -64,7 +57,14 @@ describe('parseCliArgs', () => {
 
   test('after -- (how the installer registers vilaus://) nothing is an option, not even what a link smuggles in', () => {
     // A link that broke out of its quotes in "Vilausity.exe" -- "%1".
-    const args = parseCliArgs(['--', 'vilaus://anthropic.claude-code/open', '--new-window', '--extension-dir', 'C:\\elsewhere', 'C:\\work']);
+    const args = parseCliArgs([
+      '--',
+      'vilaus://anthropic.claude-code/open',
+      '--new-window',
+      '--extension-dir',
+      'C:\\elsewhere',
+      'C:\\work',
+    ]);
     assert.equal(args.uri, 'vilaus://anthropic.claude-code/open');
     assert.equal(args.newWindow, false);
     assert.equal(args.extensionDir, undefined);
@@ -99,23 +99,18 @@ describe('foldersToOpen', () => {
   });
 
   test('without one, the windows open last time come back, in order, minus missing folders and duplicates', () => {
-    assert.deepEqual(
-      foldersToOpen({ ...base, folder: undefined, restoreAll: false, previous: ['C:\\a', 'C:\\gone', 'c:\\A', 'C:\\b'] }),
-      ['C:\\a', 'C:\\b'],
-    );
-  });
-
-  test('a relaunch restores every window whatever the command line says', () => {
-    assert.deepEqual(foldersToOpen({ ...base, folder: 'C:\\x', restoreAll: true, previous: ['C:\\a', 'C:\\b'] }), [
+    assert.deepEqual(foldersToOpen({ ...base, folder: undefined, restoreAll: false, previous: ['C:\\a', 'C:\\gone', 'c:\\A', 'C:\\b'] }), [
       'C:\\a',
       'C:\\b',
     ]);
   });
 
+  test('a relaunch restores every window whatever the command line says', () => {
+    assert.deepEqual(foldersToOpen({ ...base, folder: 'C:\\x', restoreAll: true, previous: ['C:\\a', 'C:\\b'] }), ['C:\\a', 'C:\\b']);
+  });
+
   test('nothing to restore: the fallback folder', () => {
-    assert.deepEqual(foldersToOpen({ ...base, folder: undefined, restoreAll: false, previous: ['C:\\gone'] }), [
-      'C:\\home',
-    ]);
+    assert.deepEqual(foldersToOpen({ ...base, folder: undefined, restoreAll: false, previous: ['C:\\gone'] }), ['C:\\home']);
     assert.deepEqual(foldersToOpen({ ...base, folder: undefined, restoreAll: true, previous: [] }), ['C:\\home']);
   });
 });

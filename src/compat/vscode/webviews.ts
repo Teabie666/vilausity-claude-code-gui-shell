@@ -13,12 +13,7 @@ import { generateId } from '../../platform/ids';
 import type { IDisposable } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
 import type { IconPathDto, PanelArea, WebviewPageHints } from '../../platform/protocol';
-import {
-  WEBVIEW_CSP_SOURCE,
-  WEBVIEW_ID_PREFIX,
-  resourceUrlForFsPath,
-  webviewDocumentUrl,
-} from '../../platform/webviewUrls';
+import { WEBVIEW_CSP_SOURCE, WEBVIEW_ID_PREFIX, resourceUrlForFsPath, webviewDocumentUrl } from '../../platform/webviewUrls';
 import type { CompatHost, WebviewBackend } from './host';
 import type { TabGroupsModel, TabImpl } from './tabs';
 import { TabInputWebview, ThemeIcon, ViewColumn } from './types';
@@ -139,8 +134,7 @@ export class WebviewPanelImpl implements vscode.WebviewPanel {
   private readonly disposeEmitter = new Emitter<void>();
   readonly onDidDispose: Event<void> = this.disposeEmitter.event;
   private readonly viewStateEmitter = new Emitter<vscode.WebviewPanelOnDidChangeViewStateEvent>();
-  readonly onDidChangeViewState: Event<vscode.WebviewPanelOnDidChangeViewStateEvent> =
-    this.viewStateEmitter.event;
+  readonly onDidChangeViewState: Event<vscode.WebviewPanelOnDidChangeViewStateEvent> = this.viewStateEmitter.event;
   readonly tab: TabImpl;
 
   constructor(
@@ -332,9 +326,7 @@ export function panelAreaFor(viewType: string, showOptions: vscode.ViewColumn | 
     return 'main';
   }
   const column = typeof showOptions === 'object' ? showOptions.viewColumn : showOptions;
-  return (column as number | undefined) === ViewColumn.Beside || ((column as number | undefined) ?? 0) >= ViewColumn.Two
-    ? 'side'
-    : 'main';
+  return (column as number | undefined) === ViewColumn.Beside || ((column as number | undefined) ?? 0) >= ViewColumn.Two ? 'side' : 'main';
 }
 
 export class WebviewManager implements IDisposable {
@@ -411,8 +403,8 @@ export class WebviewManager implements IDisposable {
     });
     this.views.set(viewType, view);
     this.host.webviews.createView({ viewId, webviewId, viewType });
-    void Promise.resolve(provider.resolveWebviewView(view, { state: undefined }, CancellationToken.None)).catch(
-      (error: unknown) => this.host.logger.error(`resolving view ${viewType} failed`, error),
+    void Promise.resolve(provider.resolveWebviewView(view, { state: undefined }, CancellationToken.None)).catch((error: unknown) =>
+      this.host.logger.error(`resolving view ${viewType} failed`, error),
     );
     return true;
   }
@@ -432,22 +424,12 @@ export class WebviewManager implements IDisposable {
     const area = panelAreaFor(viewType, showOptions);
     const webview = this.createWebview(viewType, options);
     const webviewId = webview.id;
-    const panel = new WebviewPanelImpl(
-      panelId,
-      viewType,
-      title,
-      area,
-      webview,
-      options,
-      this.host.webviews,
-      this.tabs,
-      (disposed) => {
-        this.panels.delete(disposed.id);
-        this.webviews.delete(disposed.webview.id);
-        this.interceptor?.didDisposeWebview?.(disposed.webview);
-        this.panelsEmitter.fire();
-      },
-    );
+    const panel = new WebviewPanelImpl(panelId, viewType, title, area, webview, options, this.host.webviews, this.tabs, (disposed) => {
+      this.panels.delete(disposed.id);
+      this.webviews.delete(disposed.webview.id);
+      this.interceptor?.didDisposeWebview?.(disposed.webview);
+      this.panelsEmitter.fire();
+    });
     this.panels.set(panelId, panel);
     this.panelsEmitter.fire();
     const preview = this.interceptor?.opensAsPreview?.(webview) === true;

@@ -9,15 +9,7 @@
 
 import { CommandCategory } from '../../core/messages';
 import type { ShellModule } from '../../core/module';
-import {
-  ICommands,
-  IDialogs,
-  IExtensionHost,
-  IKeybindings,
-  INative,
-  IQuickAccess,
-  IWorkspace,
-} from '../../core/serviceIds';
+import { ICommands, IDialogs, IExtensionHost, IKeybindings, INative, IQuickAccess, IWorkspace } from '../../core/serviceIds';
 import type { QuickAccessItem } from '../../core/quickAccess';
 import type { QuickPickItemDto } from '../../platform/protocol';
 import { IContentPane } from '../contentPane';
@@ -31,7 +23,12 @@ export function sameFolder(a: string, b: string): boolean {
 }
 
 export function folderName(folder: string): string {
-  return folder.split(/[\\/]/).filter((part) => part.length > 0).pop() ?? folder;
+  return (
+    folder
+      .split(/[\\/]/)
+      .filter((part) => part.length > 0)
+      .pop() ?? folder
+  );
 }
 
 /**
@@ -88,9 +85,7 @@ export const workspaceModule: ShellModule = {
       if (sameFolder(folder, current)) {
         return;
       }
-      const shownElsewhere = (await native.call('window.shownFolders', undefined)).some((other) =>
-        sameFolder(other, folder),
-      );
+      const shownElsewhere = (await native.call('window.shownFolders', undefined)).some((other) => sameFolder(other, folder));
       const conversations = services.tryGet(IConversations)?.count ?? 0;
       const files = services.tryGet(IContentPane)?.tabs.length ?? 0;
       if (!shownElsewhere && conversations + files > 0) {
@@ -126,18 +121,14 @@ export const workspaceModule: ShellModule = {
       ]);
       const entries = recent
         .filter((folder) => !sameFolder(folder, current))
-        .map(
-          (folder): PickEntry => ({
-            item: {
-              label: folderLabel(folder, workspace.homeFolder),
-              description: shown.some((other) => sameFolder(other, folder))
-                ? `${folder} - ${t('openElsewhere')}`
-                : folder,
-            },
-            run: () => (newWindow ? openIn(folder, true) : openHere(folder)),
-            alternate: () => openIn(folder, true),
-          }),
-        );
+        .map((folder): PickEntry => ({
+          item: {
+            label: folderLabel(folder, workspace.homeFolder),
+            description: shown.some((other) => sameFolder(other, folder)) ? `${folder} - ${t('openElsewhere')}` : folder,
+          },
+          run: () => (newWindow ? openIn(folder, true) : openHere(folder)),
+          alternate: () => openIn(folder, true),
+        }));
       return entries.length > 0 ? [{ item: { label: t('recent'), separator: true } }, ...entries] : [];
     };
 

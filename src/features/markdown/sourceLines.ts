@@ -74,15 +74,22 @@ function findLine(lines: readonly string[], needle: string, from: number, fromEn
  * The 1-based source lines that `selected` (text selected in the rendered block) came from,
  * found in the block's source; the block's first line when it cannot be told.
  */
-export function locateLines(block: SourceBlock, selected: string): { readonly start: number; readonly end: number; readonly endLength: number } {
+export function locateLines(
+  block: SourceBlock,
+  selected: string,
+): { readonly start: number; readonly end: number; readonly endLength: number } {
   const rawLines = block.raw.split('\n');
   const plain = rawLines.map(plainMarkdownLine);
-  const wanted = selected.split('\n').map(normalize).filter((line) => line !== '');
+  const wanted = selected
+    .split('\n')
+    .map(normalize)
+    .filter((line) => line !== '');
   const first = wanted.length > 0 ? findLine(plain, wanted[0]!, 0, false) : undefined;
   const startIndex = first ?? 0;
   let endIndex = startIndex;
   if (wanted.length > 1) {
-    endIndex = findLine(plain, wanted[wanted.length - 1]!, startIndex, true) ?? Math.min(rawLines.length - 1, startIndex + wanted.length - 1);
+    endIndex =
+      findLine(plain, wanted[wanted.length - 1]!, startIndex, true) ?? Math.min(rawLines.length - 1, startIndex + wanted.length - 1);
   }
   // A trailing empty line of the block (e.g. before the next one) is no part of it.
   while (endIndex > startIndex && rawLines[endIndex]!.trim() === '') {

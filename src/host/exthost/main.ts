@@ -43,11 +43,7 @@ const mainTransport: MessageTransport<MessagePortMain> = {
     return toDisposable(() => parentPort.off('message', listener));
   },
 };
-const main = new RpcEndpoint<ExtHostApiForMain, MainApiForExtHost, MessagePortMain>(
-  mainTransport,
-  'exthost<->main',
-  logger.child('rpc'),
-);
+const main = new RpcEndpoint<ExtHostApiForMain, MainApiForExtHost, MessagePortMain>(mainTransport, 'exthost<->main', logger.child('rpc'));
 
 let host: ExtensionHost | undefined;
 

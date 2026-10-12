@@ -66,7 +66,10 @@ describe('keybindings.json text', () => {
     ].join('\n');
     const edited = editKeybindingsText(
       text,
-      [{ key: 'ctrl+alt+b', command: 'sessions.toggleSidebar' }, { key: 'ctrl+b', command: '-sessions.toggleSidebar' }],
+      [
+        { key: 'ctrl+alt+b', command: 'sessions.toggleSidebar' },
+        { key: 'ctrl+b', command: '-sessions.toggleSidebar' },
+      ],
       [{ key: 'ctrl+shift+b', command: 'sessions.toggleSidebar', when: 'x' }],
     );
     assert.match(edited, /^\/\/ mine/);
@@ -116,6 +119,9 @@ describe('defaultKeybindingsText', () => {
     );
     // What it writes reads back as the same rules.
     const entries = parse(text) as { key: string; command: string }[];
-    assert.deepEqual(entries.map((entry) => entry.command), ['commandPalette.show', 'contentPane.closeEditor', 'go']);
+    assert.deepEqual(
+      entries.map((entry) => entry.command),
+      ['commandPalette.show', 'contentPane.closeEditor', 'go'],
+    );
   });
 });

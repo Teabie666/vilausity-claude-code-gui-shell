@@ -50,7 +50,12 @@ export function fontSettingDefinitions(): SettingDefinition[] {
       showDescription: true,
       schema: { type: 'string', default: '', description: t('markdownFontFamily') },
     },
-    { key: 'markdown.preview.fontSize', section, order: ORDER.markdown + 1, schema: size(t('markdownFontSize'), DEFAULT_FONTS.markdownSize) },
+    {
+      key: 'markdown.preview.fontSize',
+      section,
+      order: ORDER.markdown + 1,
+      schema: size(t('markdownFontSize'), DEFAULT_FONTS.markdownSize),
+    },
     {
       key: 'markdown.preview.lineHeight',
       section,

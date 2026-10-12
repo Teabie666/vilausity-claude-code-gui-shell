@@ -254,7 +254,10 @@ export class MarkdownPane implements EditorPane {
       return;
     }
     clearTimeout(this.renderTimer);
-    this.renderTimer = setTimeout(() => void this.render().catch((error: unknown) => this.logger.error('rendering the preview failed', error)), delay);
+    this.renderTimer = setTimeout(
+      () => void this.render().catch((error: unknown) => this.logger.error('rendering the preview failed', error)),
+      delay,
+    );
   }
 
   private async render(): Promise<void> {
@@ -384,7 +387,8 @@ export class MarkdownPane implements EditorPane {
 
   private showMenu(): void {
     const found = this.mode === 'preview' ? this.previewSelection() : undefined;
-    const toolbar = found && this.editors.selectionMenu.createToolbar(this.preview.ownerDocument, this.createContext(found.selection, found.anchor));
+    const toolbar =
+      found && this.editors.selectionMenu.createToolbar(this.preview.ownerDocument, this.createContext(found.selection, found.anchor));
     if (!found || !toolbar) {
       this.hideMenu();
       return;

@@ -31,7 +31,7 @@ describe('Memento', () => {
     assert.deepEqual(memento.keys(), ['b']);
   });
 
-  test("takes changes made elsewhere for its own scope, without writing them back", () => {
+  test('takes changes made elsewhere for its own scope, without writing them back', () => {
     const { backend, changes, writes } = setup();
     const global = new Memento('global', backend);
     const workspace = new Memento('workspace', backend);

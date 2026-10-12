@@ -162,10 +162,7 @@ describe('Selection', () => {
 describe('Disposable', () => {
   test('Disposable.from disposes every entry exactly once', () => {
     const order: string[] = [];
-    const d = Disposable.from(
-      { dispose: () => order.push('a') },
-      { dispose: () => order.push('b') },
-    );
+    const d = Disposable.from({ dispose: () => order.push('a') }, { dispose: () => order.push('b') });
     d.dispose();
     d.dispose();
     assert.deepEqual(order, ['a', 'b']);

@@ -141,11 +141,7 @@ async function send(text) {
 
 async function waitForIdle() {
   // The conversation is idle when the send button is back (no stop button) and input is enabled.
-  await waitFor(
-    async () => (await frame.locator('button[aria-label="Send message"]').count()) > 0,
-    RESPONSE_TIMEOUT,
-    'the turn to finish',
-  );
+  await waitFor(async () => (await frame.locator('button[aria-label="Send message"]').count()) > 0, RESPONSE_TIMEOUT, 'the turn to finish');
 }
 
 async function clickPermission(label) {
@@ -167,10 +163,14 @@ const readTarget = () => readFileSync(target, 'utf8').trim();
 await step('chat webview loads', async () => {
   // The session list is a webview too; the conversation is the iframe of the visible panel.
   const iframe = page.locator('#main .panel:not([hidden]) .webview-frame');
-  frame = await waitFor(async () => {
-    const candidate = (await iframe.count()) ? await (await iframe.elementHandle())?.contentFrame() : undefined;
-    return candidate?.url().startsWith('ccw://wv') ? candidate : undefined;
-  }, 30_000, 'the conversation frame');
+  frame = await waitFor(
+    async () => {
+      const candidate = (await iframe.count()) ? await (await iframe.elementHandle())?.contentFrame() : undefined;
+      return candidate?.url().startsWith('ccw://wv') ? candidate : undefined;
+    },
+    30_000,
+    'the conversation frame',
+  );
   await input().waitFor({ timeout: 30_000 });
 });
 
@@ -206,15 +206,19 @@ await step('edit approved inline is applied; while Claude asks, the logo and the
   await send('Use the Edit tool to replace the word alpha with beta in a.txt. Do nothing else.');
   await waitFor(async () => (await logoActivity()) === 'waiting', RESPONSE_TIMEOUT, 'the logo to show Claude waiting for input');
   // The session list's filter button, "Needs input · 1".
-  const needsInput = await waitFor(async () => {
-    for (const candidate of page.frames().filter((f) => f.url().startsWith('ccw://wv'))) {
-      const label = await candidate
-        .evaluate(() => document.querySelector('[data-vilaus-needs-input]')?.getAttribute('data-vilaus-needs-input'))
-        .catch(() => undefined);
-      if (label) return label;
-    }
-    return undefined;
-  }, 10_000, 'the session list to show "Needs input"');
+  const needsInput = await waitFor(
+    async () => {
+      for (const candidate of page.frames().filter((f) => f.url().startsWith('ccw://wv'))) {
+        const label = await candidate
+          .evaluate(() => document.querySelector('[data-vilaus-needs-input]')?.getAttribute('data-vilaus-needs-input'))
+          .catch(() => undefined);
+        if (label) return label;
+      }
+      return undefined;
+    },
+    10_000,
+    'the session list to show "Needs input"',
+  );
   await clickPermission('Yes');
   await waitFor(() => readTarget() === 'beta', RESPONSE_TIMEOUT, 'a.txt to become "beta"');
   await waitForIdle();
@@ -278,7 +282,10 @@ await step('insert_at_mention puts plain text into the input', async () => {
   const text = 'vilaus-insert-check';
   await frame.evaluate((t) => {
     window.postMessage(
-      { type: 'from-extension', message: { type: 'request', channelId: '', requestId: '', request: { type: 'insert_at_mention', text: t } } },
+      {
+        type: 'from-extension',
+        message: { type: 'request', channelId: '', requestId: '', request: { type: 'insert_at_mention', text: t } },
+      },
       '*',
     );
   }, text);
@@ -302,11 +309,14 @@ async function press(shortcut) {
   const parts = shortcut.split('+');
   const keyCode = parts.pop();
   const modifiers = parts.map((m) => m.toLowerCase());
-  await app.evaluate(({ BrowserWindow }, { keyCode, modifiers }) => {
-    const window = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().startsWith('ccw://app/'));
-    window.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers });
-    window.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers });
-  }, { keyCode, modifiers });
+  await app.evaluate(
+    ({ BrowserWindow }, { keyCode, modifiers }) => {
+      const window = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().startsWith('ccw://app/'));
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers });
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers });
+    },
+    { keyCode, modifiers },
+  );
 }
 
 /** The user messages of this run's sessions that carry a comments block. */
@@ -338,7 +348,10 @@ await step('two comments show above the input, go out with the next message, and
   await page.locator('.quick-input-filter').press('Enter');
   const line = (text) => page.locator('#content-pane .content-editor:not([hidden]) .view-line', { hasText: text }).first();
   await waitFor(async () => (await line('bananas').count()) > 0, 10_000, 'fruit.txt in Monaco');
-  for (const [word, comment] of [['apples', 'kiwi-note'], ['bananas', 'mango-note']]) {
+  for (const [word, comment] of [
+    ['apples', 'kiwi-note'],
+    ['bananas', 'mango-note'],
+  ]) {
     await line(word).click();
     await press('Home');
     await press('Shift+End');
@@ -381,10 +394,14 @@ await step('a comment not sent yet stays with its session: the tab closes, Ctrl+
   await press('Control+Shift+T');
   await waitFor(async () => (await tabs.count()) === count, 20_000, 'the conversation to reopen');
   const iframe = page.locator('#main .panel:not([hidden]) .webview-frame');
-  frame = await waitFor(async () => {
-    const candidate = (await iframe.count()) ? await (await iframe.elementHandle())?.contentFrame() : undefined;
-    return candidate && (await candidate.locator('.vilaus-comments .vilaus-comment').count()) === 1 ? candidate : undefined;
-  }, 30_000, 'the comment back above the reopened conversation input');
+  frame = await waitFor(
+    async () => {
+      const candidate = (await iframe.count()) ? await (await iframe.elementHandle())?.contentFrame() : undefined;
+      return candidate && (await candidate.locator('.vilaus-comments .vilaus-comment').count()) === 1 ? candidate : undefined;
+    },
+    30_000,
+    'the comment back above the reopened conversation input',
+  );
   const text = await blocks().first().locator('.vilaus-comment-text').innerText();
   if (text !== 'papaya-note') throw new Error(`the block says ${JSON.stringify(text)}`);
   // Not for the plan below.
@@ -430,7 +447,13 @@ await step('in plan mode, the plan preview opens as a content pane tab', async (
 await page.screenshot({ path: path.join(runDir, 'final.png') });
 await app.close();
 
-const unimplemented = path.join(dataDir, 'logs', readdirSync(path.join(dataDir, 'logs')).sort().at(-1), 'window1', 'shim-unimplemented.log');
+const unimplemented = path.join(
+  dataDir,
+  'logs',
+  readdirSync(path.join(dataDir, 'logs')).sort().at(-1),
+  'window1',
+  'shim-unimplemented.log',
+);
 if (existsSync(unimplemented)) {
   const lines = readFileSync(unimplemented, 'utf8').trim();
   console.log(`\nunimplemented API used:\n${lines || '(none)'}`);

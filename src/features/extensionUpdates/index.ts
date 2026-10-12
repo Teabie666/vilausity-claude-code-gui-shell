@@ -150,9 +150,11 @@ export const extensionUpdatesModule: ShellModule = {
       }
       return result;
     };
-    const logged = <T>(action: () => Promise<T>) => (): void => {
-      action().catch((error: unknown) => logger.error('extension action failed', error));
-    };
+    const logged =
+      <T>(action: () => Promise<T>) =>
+      (): void => {
+        action().catch((error: unknown) => logger.error('extension action failed', error));
+      };
 
     subscriptions.add(
       settings.registerWidget({
@@ -160,7 +162,12 @@ export const extensionUpdatesModule: ShellModule = {
         section,
         keywords: t('keywords'),
         create: (container) => {
-          const view = new VersionView(container, { relaunch, check: logged(check), installFile: logged(installFile), rollBack: logged(rollBack) });
+          const view = new VersionView(container, {
+            relaunch,
+            check: logged(check),
+            installFile: logged(installFile),
+            rollBack: logged(rollBack),
+          });
           const render = (): void => view.render(status, note);
           render();
           return changed.event(render);
@@ -315,7 +322,6 @@ class VersionView {
       button.disabled = !idle || !status.updatesApply;
     }
     this.rollBackButton.disabled = !idle || !status.updatesApply || !target;
-    this.statusText.textContent =
-      activityText(activity) ?? note ?? (status.lastCheck ? (resultText(status.lastCheck) ?? '') : '');
+    this.statusText.textContent = activityText(activity) ?? note ?? (status.lastCheck ? (resultText(status.lastCheck) ?? '') : '');
   }
 }

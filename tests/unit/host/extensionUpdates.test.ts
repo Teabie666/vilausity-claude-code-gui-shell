@@ -35,7 +35,10 @@ describe('extension update decisions', () => {
     // The first managed copy: nothing to keep.
     assert.deepEqual(switchToPending({ pending: '1.0.0' }, installed), { current: '1.0.0' });
     // Pending but gone from disk: dropped.
-    assert.deepEqual(switchToPending({ current: '1.0.0', pending: '1.0.1' }, () => false), { current: '1.0.0' });
+    assert.deepEqual(
+      switchToPending({ current: '1.0.0', pending: '1.0.1' }, () => false),
+      { current: '1.0.0' },
+    );
   });
 
   test('rolling back makes the target pending and skips the current version', () => {
@@ -47,11 +50,14 @@ describe('extension update decisions', () => {
       skipped: '1.0.1',
     });
     // Then at the next start the two swap places.
-    assert.deepEqual(switchToPending({ current: '1.0.1', previous: '1.0.0', pending: '1.0.0', skipped: '1.0.1' }, () => true), {
-      current: '1.0.0',
-      previous: '1.0.1',
-      skipped: '1.0.1',
-    });
+    assert.deepEqual(
+      switchToPending({ current: '1.0.1', previous: '1.0.0', pending: '1.0.0', skipped: '1.0.1' }, () => true),
+      {
+        current: '1.0.0',
+        previous: '1.0.1',
+        skipped: '1.0.1',
+      },
+    );
   });
 
   test('what to install', () => {
@@ -274,7 +280,10 @@ describe('installing the extension', () => {
     const { updater } = start();
     await updater.check(false);
     start();
-    const names = fs.readdirSync(dir).filter((name) => name.startsWith('anthropic.claude-code-')).sort();
+    const names = fs
+      .readdirSync(dir)
+      .filter((name) => name.startsWith('anthropic.claude-code-'))
+      .sort();
     assert.deepEqual(names, ['anthropic.claude-code-2.0.2', 'anthropic.claude-code-2.0.3']);
   });
 
@@ -367,7 +376,7 @@ describe("going back to another editor's copy", () => {
   before(() => server.start());
   after(() => server.stop());
 
-  test("the first update backs up the copy another editor had, as the version to go back to", async () => {
+  test('the first update backs up the copy another editor had, as the version to go back to', async () => {
     dir = path.join(root, 'backup-first');
     const vscodium = makeFolder('2.0.0');
     server.publish('2.1.0');

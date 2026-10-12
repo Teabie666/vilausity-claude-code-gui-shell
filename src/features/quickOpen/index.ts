@@ -8,15 +8,7 @@
 import { URI } from 'vscode-uri';
 import type { ShellModule } from '../../core/module';
 import { native } from '../../core/native';
-import {
-  ICommands,
-  IDialogs,
-  IExtensionHost,
-  IKeybindings,
-  ILayout,
-  IQuickAccess,
-  IWorkspace,
-} from '../../core/serviceIds';
+import { ICommands, IDialogs, IExtensionHost, IKeybindings, ILayout, IQuickAccess, IWorkspace } from '../../core/serviceIds';
 import { folderLabel } from '../workspace';
 import { matchRanges, scorePath } from './fuzzy';
 import { t } from './messages';

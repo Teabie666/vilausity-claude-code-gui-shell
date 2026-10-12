@@ -80,8 +80,7 @@ export const setupModule: ShellModule = {
       later: () => page.dispose(),
     });
     page.add(view);
-    const render = (): void =>
-      view.render(status, connection.isConnected, note, settings.get(OPEN_VSX_URL_SETTING, DEFAULT_OPEN_VSX_URL));
+    const render = (): void => view.render(status, connection.isConnected, note, settings.get(OPEN_VSX_URL_SETTING, DEFAULT_OPEN_VSX_URL));
     page.add(changed.event(render));
     page.add(
       native.on('extensionStatus', (next) => {

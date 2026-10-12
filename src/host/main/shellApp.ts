@@ -21,13 +21,7 @@ import {
 import type { ParamsOf, ResultOf } from '../../platform/ipc';
 import { Disposable, toDisposable } from '../../platform/lifecycle';
 import type { ILogger, LogLevel } from '../../platform/log';
-import {
-  LANGUAGE_SETTING,
-  parseLanguageSetting,
-  resolveUiLanguage,
-  setUiLanguage,
-  type UiLanguage,
-} from '../../platform/nls';
+import { LANGUAGE_SETTING, parseLanguageSetting, resolveUiLanguage, setUiLanguage, type UiLanguage } from '../../platform/nls';
 import { TRANSLATE_EXTENSION_UI_SETTING, translateExtensionUi } from '../../platform/extensionStrings';
 import {
   IpcChannel,
@@ -75,14 +69,7 @@ import { StateStore } from './stateStore';
 import { DEFAULT_THEME_ID, FONT_SETTING_KEYS, listThemeSummaries, loadTheme, readFontFaces, withFontVariables } from './themes';
 import { WebviewDocumentStore } from './webviewDocuments';
 import { WindowContext, type WindowHost } from './windowContext';
-import {
-  cascade,
-  foldersToOpen,
-  parsePlacement,
-  sameFolder,
-  WindowHistory,
-  type WindowPlacement,
-} from './windowHistory';
+import { cascade, foldersToOpen, parsePlacement, sameFolder, WindowHistory, type WindowPlacement } from './windowHistory';
 
 /** The VS Code version we report to the extension. It gates features on this number. */
 export const VSCODE_COMPAT_VERSION = '1.121.0';
@@ -189,15 +176,9 @@ export class ShellApp extends Disposable implements WindowHost {
       this.globalState.set(LEGACY_WINDOW_STATE_KEY, undefined);
     }
     this.currentZoom = this.history.zoomLevel() ?? 0;
-    this.providers = this.register(
-      new ProviderStore(env.paths.providersFile, electronCipher, this.logger.child('providers')),
-    );
+    this.providers = this.register(new ProviderStore(env.paths.providersFile, electronCipher, this.logger.child('providers')));
     this.sessionSearch = this.register(
-      new SessionSearch(
-        path.join(env.appDir, 'sessionSearchWorker.js'),
-        this.projectsDir,
-        this.logger.child('sessionSearch'),
-      ),
+      new SessionSearch(path.join(env.appDir, 'sessionSearchWorker.js'), this.projectsDir, this.logger.child('sessionSearch')),
     );
     this.extensionStore = new ExtensionStore(
       env.paths.extensionsDir,
@@ -484,13 +465,7 @@ export class ShellApp extends Disposable implements WindowHost {
       language: this.language,
       machineId: this.machineId(),
       sessionId: crypto.randomUUID(),
-      shell: path.join(
-        process.env.SystemRoot ?? 'C:\\Windows',
-        'System32',
-        'WindowsPowerShell',
-        'v1.0',
-        'powershell.exe',
-      ),
+      shell: path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
     };
   }
 

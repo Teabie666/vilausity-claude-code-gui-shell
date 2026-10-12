@@ -3,12 +3,7 @@
  * with shell-drawn UI in VS Code's visual language (theme colors and corners).
  */
 
-import type {
-  InputBoxRequest,
-  MessageRequest,
-  QuickPickItemDto,
-  QuickPickRequest,
-} from '../platform/protocol';
+import type { InputBoxRequest, MessageRequest, QuickPickItemDto, QuickPickRequest } from '../platform/protocol';
 import { t } from './messages';
 
 const TOAST_TIMEOUT_MS = 10_000;
@@ -54,9 +49,7 @@ export class Dialogs {
       list.setAttribute('role', 'listbox');
       box.append(input, list);
 
-      const picked = new Set<number>(
-        request.items.flatMap((item, index) => (item.picked ? [index] : [])),
-      );
+      const picked = new Set<number>(request.items.flatMap((item, index) => (item.picked ? [index] : [])));
       let visible: number[] = [];
       let cursor = 0;
 
@@ -300,10 +293,7 @@ export class Dialogs {
    * A box at the top of the window over a backdrop; Escape or a backdrop click resolves
    * `cancelValue`. Quick access draws its picker in one too.
    */
-  openOverlay<T>(
-    resolve: (value: T) => void,
-    cancelValue: T,
-  ): { box: HTMLElement; finish: (value: T) => void } {
+  openOverlay<T>(resolve: (value: T) => void, cancelValue: T): { box: HTMLElement; finish: (value: T) => void } {
     const backdrop = document.createElement('div');
     backdrop.className = 'overlay-backdrop';
     const box = document.createElement('div');

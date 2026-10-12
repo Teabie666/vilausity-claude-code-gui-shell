@@ -4,17 +4,10 @@
  * and malformed ones are skipped instead of failing the whole read.
  */
 
-import type {
-  CommandContribution,
-  ExtensionContributions,
-  MenuItemContribution,
-  SettingContribution,
-} from '../../platform/protocol';
+import type { CommandContribution, ExtensionContributions, MenuItemContribution, SettingContribution } from '../../platform/protocol';
 
 function asRecord(value: unknown): Readonly<Record<string, unknown>> | undefined {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function asArray(value: unknown): readonly unknown[] {
@@ -68,10 +61,7 @@ const SCHEMA_TEXTS = ['description', 'markdownDescription', 'deprecationMessage'
 const SCHEMA_TEXT_LISTS = ['enumDescriptions', 'markdownEnumDescriptions', 'enumItemLabels'];
 
 /** The contributions with their settings' texts (descriptions, value labels) passed through `translate`. */
-export function translateContributions(
-  contributions: ExtensionContributions,
-  translate: (text: string) => string,
-): ExtensionContributions {
+export function translateContributions(contributions: ExtensionContributions, translate: (text: string) => string): ExtensionContributions {
   const configuration = contributions.configuration.map((setting) => {
     const schema: Record<string, unknown> = { ...setting.schema };
     for (const field of SCHEMA_TEXTS) {

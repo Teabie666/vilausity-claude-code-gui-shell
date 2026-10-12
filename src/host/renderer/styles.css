@@ -2356,7 +2356,10 @@ body.resizing {
 }
 
 .quick-input-item.focused .quick-input-highlight {
-  color: var(--vscode-quickInputList-focusHighlightForeground, var(--vscode-list-focusHighlightForeground, var(--vscode-list-highlightForeground)));
+  color: var(
+    --vscode-quickInputList-focusHighlightForeground,
+    var(--vscode-list-focusHighlightForeground, var(--vscode-list-highlightForeground))
+  );
 }
 
 .quick-input-separator {

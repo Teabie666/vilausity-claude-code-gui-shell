@@ -6,7 +6,10 @@ export function basename(path: string): string {
 
 /** For comparing paths: lower case, `\` separators, no `/` before a drive letter. */
 function comparablePath(path: string): string {
-  return path.replace(/^\/(?=[A-Za-z]:)/, '').replace(/\//g, '\\').toLowerCase();
+  return path
+    .replace(/^\/(?=[A-Za-z]:)/, '')
+    .replace(/\//g, '\\')
+    .toLowerCase();
 }
 
 /**

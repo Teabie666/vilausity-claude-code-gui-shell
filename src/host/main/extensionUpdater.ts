@@ -16,13 +16,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { Emitter, type Event } from '../../platform/event';
-import {
-  compareVersions,
-  parseOpenVsxRelease,
-  releaseUrl,
-  shouldInstall,
-  type OpenVsxRelease,
-} from '../../platform/extensionUpdates';
+import { compareVersions, parseOpenVsxRelease, releaseUrl, shouldInstall, type OpenVsxRelease } from '../../platform/extensionUpdates';
 import { Disposable } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
 import type { ExtensionActivity, ExtensionInstallResult, ExtensionStatus } from '../../platform/protocol';

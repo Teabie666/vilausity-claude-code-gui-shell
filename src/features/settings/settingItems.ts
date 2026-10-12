@@ -95,7 +95,10 @@ export function matchesQuery(
 }
 
 /** Parses a number field: the value, or why it is not acceptable (`minimum` / `maximum` / an integer). */
-export function parseNumber(schema: SettingSchema, text: string): { value: number } | { error: 'notNumber' | 'tooSmall' | 'tooLarge' | 'notInteger' } {
+export function parseNumber(
+  schema: SettingSchema,
+  text: string,
+): { value: number } | { error: 'notNumber' | 'tooSmall' | 'tooLarge' | 'notInteger' } {
   const trimmed = text.trim();
   const value = Number(trimmed);
   if (trimmed === '' || !Number.isFinite(value)) {

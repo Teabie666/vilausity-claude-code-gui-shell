@@ -63,10 +63,7 @@ export function defineMessages<K extends string>(namespace: string, english: Rea
  * the ids that should be translated (the packs are checked against it); at runtime an id
  * without a translation keeps the caller's own text, so new data still shows up.
  */
-export function defineNames(
-  namespace: string,
-  english: Readonly<Record<string, string>>,
-): (id: string, fallback: string) => string {
+export function defineNames(namespace: string, english: Readonly<Record<string, string>>): (id: string, fallback: string) => string {
   register(namespace, english);
   return (id, fallback) => translations[`${namespace}.${id}`] || fallback;
 }

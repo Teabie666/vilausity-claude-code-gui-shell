@@ -259,7 +259,12 @@ export class EditorService {
    * The `vscode.diff` command: a diff tab whose right side is editable when its document is.
    * The tab enters `tabGroups` before this resolves; the extension polls for it right after.
    */
-  async openDiff(left: TextDocumentImpl, right: TextDocumentImpl, title: string, options: vscode.TextDocumentShowOptions = {}): Promise<void> {
+  async openDiff(
+    left: TextDocumentImpl,
+    right: TextDocumentImpl,
+    title: string,
+    options: vscode.TextDocumentShowOptions = {},
+  ): Promise<void> {
     // VS Code reuses an open diff of the same pair; the extension closes such tabs itself
     // first, but stay safe: one tab per pair.
     for (const [tabId, existing] of [...this.diffTabs]) {
@@ -270,9 +275,7 @@ export class EditorService {
     const tabId = generateId('tab');
     const original = new TextEditorImpl(generateId('editor'), left, this.backend, this.documents);
     const modified = new TextEditorImpl(generateId('editor'), right, this.backend, this.documents);
-    const tab = this.tabs.add('side', title, new TabInputTextDiff(left.uri as Uri, right.uri as Uri), () =>
-      this.closeFromExtension(tabId),
-    );
+    const tab = this.tabs.add('side', title, new TabInputTextDiff(left.uri as Uri, right.uri as Uri), () => this.closeFromExtension(tabId));
     this.diffTabs.set(tabId, { tab, original, modified });
     this.tabIds.set(tab, tabId);
     this.editors.set(original.id, original);

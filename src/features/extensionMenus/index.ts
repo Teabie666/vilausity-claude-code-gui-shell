@@ -94,7 +94,11 @@ export const extensionMenusModule: ShellModule = {
           return;
         }
         // Only what this webview's menu offers right now (the when clause is checked again).
-        if (!itemsFor(viewType).flat().some((item) => item.command === id)) {
+        if (
+          !itemsFor(viewType)
+            .flat()
+            .some((item) => item.command === id)
+        ) {
           logger.warn(`ignoring context menu command ${id}: not in the menu of webview ${webviewId}`);
           return;
         }

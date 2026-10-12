@@ -129,7 +129,11 @@ export class DiffEditorPane implements EditorPane {
 
   revealSelection(uri: string, range: RangeDto): boolean {
     const side =
-      uri === this.data.modified.uri ? this.editor.getModifiedEditor() : uri === this.data.original.uri ? this.editor.getOriginalEditor() : undefined;
+      uri === this.data.modified.uri
+        ? this.editor.getModifiedEditor()
+        : uri === this.data.original.uri
+          ? this.editor.getOriginalEditor()
+          : undefined;
     if (!side) {
       return false;
     }

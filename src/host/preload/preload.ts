@@ -17,8 +17,7 @@ ipcRenderer.on(IpcChannel.Event, (_event, name: unknown, payload: unknown) => {
 });
 
 contextBridge.exposeInMainWorld('vilausNative', {
-  invoke: (method: string, params: unknown): Promise<unknown> =>
-    ipcRenderer.invoke(IpcChannel.Rpc, method, params),
+  invoke: (method: string, params: unknown): Promise<unknown> => ipcRenderer.invoke(IpcChannel.Rpc, method, params),
   platform: process.platform,
   /** The disk path of a file dropped onto the window ('' for non-file items). */
   pathForFile: (file: File): string => webUtils.getPathForFile(file),

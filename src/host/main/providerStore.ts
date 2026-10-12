@@ -52,9 +52,7 @@ export class ProviderStore extends Disposable {
     this.providers = parsed
       .filter(
         (provider, index): provider is ProviderConfig =>
-          provider !== undefined &&
-          provider.type !== 'subscription' &&
-          parsed.findIndex((other) => other?.id === provider.id) === index,
+          provider !== undefined && provider.type !== 'subscription' && parsed.findIndex((other) => other?.id === provider.id) === index,
       )
       .map(withoutLegacyColor);
     const keys = file?.keys;

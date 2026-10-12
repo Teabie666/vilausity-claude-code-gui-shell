@@ -214,10 +214,7 @@ function isPositionLike(value: unknown): value is PositionLike {
 
 function isRangeLike(value: unknown): value is RangeLike {
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    isPositionLike((value as RangeLike).start) &&
-    isPositionLike((value as RangeLike).end)
+    typeof value === 'object' && value !== null && isPositionLike((value as RangeLike).start) && isPositionLike((value as RangeLike).end)
   );
 }
 
@@ -291,10 +288,7 @@ export class Position implements vscode.Position {
 
   translate(lineDelta?: number, characterDelta?: number): Position;
   translate(change: { lineDelta?: number; characterDelta?: number }): Position;
-  translate(
-    lineDeltaOrChange?: number | { lineDelta?: number; characterDelta?: number },
-    characterDelta: number = 0,
-  ): Position {
+  translate(lineDeltaOrChange?: number | { lineDelta?: number; characterDelta?: number }, characterDelta: number = 0): Position {
     let lineDelta: number;
     if (typeof lineDeltaOrChange === 'undefined') {
       lineDelta = 0;
@@ -302,8 +296,7 @@ export class Position implements vscode.Position {
       lineDelta = lineDeltaOrChange;
     } else {
       lineDelta = typeof lineDeltaOrChange.lineDelta === 'number' ? lineDeltaOrChange.lineDelta : 0;
-      characterDelta =
-        typeof lineDeltaOrChange.characterDelta === 'number' ? lineDeltaOrChange.characterDelta : 0;
+      characterDelta = typeof lineDeltaOrChange.characterDelta === 'number' ? lineDeltaOrChange.characterDelta : 0;
     }
     if (lineDelta === 0 && characterDelta === 0) {
       return this;
@@ -313,10 +306,7 @@ export class Position implements vscode.Position {
 
   with(line?: number, character?: number): Position;
   with(change: { line?: number; character?: number }): Position;
-  with(
-    lineOrChange?: number | { line?: number; character?: number },
-    character: number = this.character,
-  ): Position {
+  with(lineOrChange?: number | { line?: number; character?: number }, character: number = this.character): Position {
     let line: number;
     if (typeof lineOrChange === 'undefined') {
       line = this.line;
@@ -426,10 +416,7 @@ export class Range implements vscode.Range {
 
   with(start?: PositionLike, end?: PositionLike): Range;
   with(change: { start?: PositionLike; end?: PositionLike }): Range;
-  with(
-    startOrChange?: PositionLike | { start?: PositionLike; end?: PositionLike },
-    end: PositionLike = this.end,
-  ): Range {
+  with(startOrChange?: PositionLike | { start?: PositionLike; end?: PositionLike }, end: PositionLike = this.end): Range {
     let start: PositionLike;
     if (!startOrChange) {
       start = this.start;
@@ -493,8 +480,7 @@ export class Location implements vscode.Location {
 
   constructor(uri: Uri, rangeOrPosition: Range | Position) {
     this.uri = uri;
-    this.range =
-      rangeOrPosition instanceof Range ? rangeOrPosition : new Range(rangeOrPosition, rangeOrPosition);
+    this.range = rangeOrPosition instanceof Range ? rangeOrPosition : new Range(rangeOrPosition, rangeOrPosition);
   }
 }
 
@@ -693,9 +679,7 @@ export class WorkspaceEdit {
       return true;
     }
     return this.fileOperations.some((op) =>
-      op.kind === 'rename'
-        ? op.oldUri.toString() === key || op.newUri.toString() === key
-        : op.uri.toString() === key,
+      op.kind === 'rename' ? op.oldUri.toString() === key || op.newUri.toString() === key : op.uri.toString() === key,
     );
   }
 
@@ -871,10 +855,7 @@ export class NotebookCellOutputItem implements vscode.NotebookCellOutputItem {
   }
 
   static json(value: unknown, mime?: string): NotebookCellOutputItem {
-    return new NotebookCellOutputItem(
-      new TextEncoder().encode(JSON.stringify(value, undefined, '\t')),
-      mime ?? 'text/x-json',
-    );
+    return new NotebookCellOutputItem(new TextEncoder().encode(JSON.stringify(value, undefined, '\t')), mime ?? 'text/x-json');
   }
 
   static stdout(value: string): NotebookCellOutputItem {
@@ -888,10 +869,7 @@ export class NotebookCellOutputItem implements vscode.NotebookCellOutputItem {
   static error(value: Error): NotebookCellOutputItem {
     // Error's own properties are not enumerable, so pick them explicitly (as VS Code does).
     const json = { name: value.name, message: value.message, stack: value.stack };
-    return new NotebookCellOutputItem(
-      new TextEncoder().encode(JSON.stringify(json)),
-      'application/vnd.code.notebook.error',
-    );
+    return new NotebookCellOutputItem(new TextEncoder().encode(JSON.stringify(json)), 'application/vnd.code.notebook.error');
   }
 
   mime: string;

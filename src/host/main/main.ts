@@ -87,8 +87,8 @@ function main(): void {
   // folder (or the running one takes it), and this start has nothing more to do.
   if (args.admin && !paths.elevated) {
     const appPath = app.isPackaged ? undefined : app.getAppPath();
-    void startElevated(process.execPath, administratorInstanceArgs(args.folder ?? process.cwd(), appPath, args.userDataDir)).finally(
-      () => app.exit(0),
+    void startElevated(process.execPath, administratorInstanceArgs(args.folder ?? process.cwd(), appPath, args.userDataDir)).finally(() =>
+      app.exit(0),
     );
     return;
   }

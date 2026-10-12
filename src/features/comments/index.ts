@@ -8,16 +8,7 @@
 import type { EditorSelectionContext } from '../../core/editors';
 import { MenuId } from '../../core/menus';
 import type { ShellModule } from '../../core/module';
-import {
-  ICommands,
-  IContextKeys,
-  IDialogs,
-  IExtensionHost,
-  IKeybindings,
-  ILayout,
-  IMenus,
-  IWebviewFrames,
-} from '../../core/serviceIds';
+import { ICommands, IContextKeys, IDialogs, IExtensionHost, IKeybindings, ILayout, IMenus, IWebviewFrames } from '../../core/serviceIds';
 import { IContentPane } from '../contentPane';
 import { IConversations } from '../conversations';
 import { CommentsController } from './comments';
@@ -25,7 +16,9 @@ import { t } from './messages';
 
 function isSelectionContext(value: unknown): value is EditorSelectionContext {
   const context = value as Partial<EditorSelectionContext> | null;
-  return typeof context === 'object' && context !== null && typeof context.showWidget === 'function' && typeof context.selection === 'object';
+  return (
+    typeof context === 'object' && context !== null && typeof context.showWidget === 'function' && typeof context.selection === 'object'
+  );
 }
 
 export const commentsModule: ShellModule = {

@@ -32,7 +32,11 @@ export function keybindingsJsonSchema(commands: readonly CommandInfo[]): Record<
         command: {
           anyOf: [
             { type: 'string', enum: sorted.map((info) => info.id), enumDescriptions: sorted.map(describe) },
-            { type: 'string', enum: sorted.map((info) => `-${info.id}`), enumDescriptions: sorted.map((info) => t('schemaRemoval', describe(info) || info.id)) },
+            {
+              type: 'string',
+              enum: sorted.map((info) => `-${info.id}`),
+              enumDescriptions: sorted.map((info) => t('schemaRemoval', describe(info) || info.id)),
+            },
             { type: 'string' },
           ],
           description: t('schemaCommand'),

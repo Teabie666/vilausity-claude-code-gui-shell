@@ -180,16 +180,17 @@ export class QuickAccess {
       if (!navigated || !focused || !items.includes(focused)) {
         focused = items[0];
       }
-      list.replaceChildren(...rows.map((row) => (row.item ? this.renderItem(row.item, row.item === focused, choose) : separator(row.label ?? ''))));
+      list.replaceChildren(
+        ...rows.map((row) => (row.item ? this.renderItem(row.item, row.item === focused, choose) : separator(row.label ?? ''))),
+      );
       list.querySelector('.quick-input-item.focused')?.scrollIntoView({ block: 'nearest' });
     };
 
     const update = (): void => {
       const value = input.value;
       const nextPrefix =
-        [...this.providers.keys()]
-          .filter((candidate) => candidate && value.startsWith(candidate))
-          .sort((a, b) => b.length - a.length)[0] ?? '';
+        [...this.providers.keys()].filter((candidate) => candidate && value.startsWith(candidate)).sort((a, b) => b.length - a.length)[0] ??
+        '';
       const provider = this.providers.get(nextPrefix)!;
       input.placeholder = provider.placeholder();
       const switched = nextPrefix !== prefix;
@@ -294,11 +295,7 @@ export class QuickAccess {
     this.setValue(initialValue);
   }
 
-  private renderItem(
-    item: QuickAccessItem,
-    focused: boolean,
-    choose: (item: QuickAccessItem, alternate: boolean) => void,
-  ): HTMLElement {
+  private renderItem(item: QuickAccessItem, focused: boolean, choose: (item: QuickAccessItem, alternate: boolean) => void): HTMLElement {
     const row = document.createElement('div');
     row.className = 'quick-input-item';
     row.setAttribute('role', 'option');

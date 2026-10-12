@@ -58,7 +58,12 @@ describe("File Explorer's menu", () => {
 
   test('the administrator instance gets the folder, after the app folder in development', () => {
     assert.deepEqual(administratorInstanceArgs('D:\\', undefined, undefined), ['D:\\']);
-    assert.deepEqual(administratorInstanceArgs('C:\\w', 'C:\\dev app', 'C:\\data'), ['C:\\dev app', 'C:\\w', '--user-data-dir', 'C:\\data']);
+    assert.deepEqual(administratorInstanceArgs('C:\\w', 'C:\\dev app', 'C:\\data'), [
+      'C:\\dev app',
+      'C:\\w',
+      '--user-data-dir',
+      'C:\\data',
+    ]);
   });
 
   test('written to the registry and removed again (under a test key)', { skip: process.platform !== 'win32' }, async () => {

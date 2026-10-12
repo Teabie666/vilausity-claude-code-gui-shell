@@ -23,8 +23,21 @@ const ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 256];
 // cursor) and two speed lines trailing it.
 const LEAN = Math.tan((18 * Math.PI) / 180);
 const SQUASH = 0.1;
-const rect = (x, y, w, h) => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
-const V = [[3, 7], [9.25, 7], [16, 29.95], [22.75, 7], [29, 7], [19, 41], [13, 41]];
+const rect = (x, y, w, h) => [
+  [x, y],
+  [x + w, y],
+  [x + w, y + h],
+  [x, y + h],
+];
+const V = [
+  [3, 7],
+  [9.25, 7],
+  [16, 29.95],
+  [22.75, 7],
+  [29, 7],
+  [19, 41],
+  [13, 41],
+];
 const CURSOR = rect(32, 35, 13, 6);
 /** The V's left outer edge; the speed lines end 2.5 units short of it. */
 const edge = (y) => 3 + 0.294 * (y - 7);
@@ -180,23 +193,28 @@ try {
   writeFileSync(path.join(out, 'icon.ico'), ico(images));
 
   // Drawn on a canvas, which hands its pixels back (a screenshot would be a PNG to decode).
-  const pixels = await page.evaluate(async ({ svg, width, height, background, markSize }) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext('2d');
-    context.fillStyle = background;
-    context.fillRect(0, 0, width, height);
-    const image = new Image();
-    image.src = `data:image/svg+xml;base64,${btoa(svg)}`;
-    await image.decode();
-    // A little above the middle, where the eye expects it beside the pages' headings.
-    context.drawImage(image, (width - markSize) / 2, (height - markSize) / 2 - 24, markSize, markSize);
-    return Array.from(context.getImageData(0, 0, width, height).data);
-  }, { svg: icon, ...SIDEBAR });
+  const pixels = await page.evaluate(
+    async ({ svg, width, height, background, markSize }) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      context.fillStyle = background;
+      context.fillRect(0, 0, width, height);
+      const image = new Image();
+      image.src = `data:image/svg+xml;base64,${btoa(svg)}`;
+      await image.decode();
+      // A little above the middle, where the eye expects it beside the pages' headings.
+      context.drawImage(image, (width - markSize) / 2, (height - markSize) / 2 - 24, markSize, markSize);
+      return Array.from(context.getImageData(0, 0, width, height).data);
+    },
+    { svg: icon, ...SIDEBAR },
+  );
   mkdirSync(path.join(root, 'build'), { recursive: true });
   writeFileSync(path.join(root, 'build/installerSidebar.bmp'), bmp(SIDEBAR.width, SIDEBAR.height, pixels));
-  console.log(`resources/icon: icon.svg, mark.svg, icon.ico (${ICO_SIZES.join(', ')}); src/platform/logoMark.ts; build/installerSidebar.bmp`);
+  console.log(
+    `resources/icon: icon.svg, mark.svg, icon.ico (${ICO_SIZES.join(', ')}); src/platform/logoMark.ts; build/installerSidebar.bmp`,
+  );
 } finally {
   await browser.close();
 }

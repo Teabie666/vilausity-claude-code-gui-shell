@@ -19,10 +19,18 @@ export function editorSettingDefinitions(): SettingDefinition[] {
   const diff = t('sectionDiffEditor');
   let order = 0;
   const editor = (key: string, schema: SettingDefinition['schema']): SettingDefinition => ({ key, schema, section: text, order: order++ });
-  const diffEditor = (key: string, schema: SettingDefinition['schema']): SettingDefinition => ({ key, schema, section: diff, order: order++ });
+  const diffEditor = (key: string, schema: SettingDefinition['schema']): SettingDefinition => ({
+    key,
+    schema,
+    section: diff,
+    order: order++,
+  });
   // The rest of Monaco's diff options under VS Code's names: settings.json only, like the
   // editor options from `monacoOptionDefinitions` (Monaco keeps no schemas for these).
-  const diffOption = (key: string, schema: SettingDefinition['schema']): SettingDefinition => ({ ...diffEditor(key, schema), hidden: true });
+  const diffOption = (key: string, schema: SettingDefinition['schema']): SettingDefinition => ({
+    ...diffEditor(key, schema),
+    hidden: true,
+  });
   // Shown with their description: the title alone does not say how the value is read.
   const described = (definition: SettingDefinition): SettingDefinition => ({ ...definition, showDescription: true });
   // With every other font (features/fonts), after the UI's and the conversation's.
@@ -58,7 +66,12 @@ export function editorSettingDefinitions(): SettingDefinition[] {
       description: t('wordWrap'),
     }),
     described(editor('editor.wordWrapColumn', { type: 'number', default: 80, minimum: 1, description: t('wordWrapColumnSetting') })),
-    editor('editor.lineNumbers', { type: 'string', default: 'on', enum: ['off', 'on', 'relative', 'interval'], description: t('lineNumbers') }),
+    editor('editor.lineNumbers', {
+      type: 'string',
+      default: 'on',
+      enum: ['off', 'on', 'relative', 'interval'],
+      description: t('lineNumbers'),
+    }),
     editor('editor.minimap.enabled', { type: 'boolean', default: true, description: t('minimap') }),
     editor('editor.renderWhitespace', {
       type: 'string',
@@ -78,7 +91,9 @@ export function editorSettingDefinitions(): SettingDefinition[] {
     described(diffEditor('diffEditor.fontFamily', { type: 'string', default: '', description: t('diffFontFamily') })),
     described(diffEditor('diffEditor.fontSize', { type: 'number', default: 0, minimum: 0, maximum: 100, description: t('diffFontSize') })),
     diffEditor('diffEditor.renderSideBySide', { type: 'boolean', default: true, description: t('renderSideBySide') }),
-    described(diffEditor('diffEditor.useInlineViewWhenSpaceIsLimited', { type: 'boolean', default: true, description: t('inlineWhenNarrow') })),
+    described(
+      diffEditor('diffEditor.useInlineViewWhenSpaceIsLimited', { type: 'boolean', default: true, description: t('inlineWhenNarrow') }),
+    ),
     diffEditor('diffEditor.ignoreTrimWhitespace', { type: 'boolean', default: true, description: t('ignoreTrimWhitespace') }),
     diffEditor('diffEditor.wordWrap', {
       type: 'string',
@@ -86,7 +101,12 @@ export function editorSettingDefinitions(): SettingDefinition[] {
       enum: ['off', 'on', 'inherit'],
       description: t('diffWordWrap'),
     }),
-    diffOption('diffEditor.renderSideBySideInlineBreakpoint', { type: 'number', default: 900, minimum: 0, description: t('diffInlineBreakpoint') }),
+    diffOption('diffEditor.renderSideBySideInlineBreakpoint', {
+      type: 'number',
+      default: 900,
+      minimum: 0,
+      description: t('diffInlineBreakpoint'),
+    }),
     diffOption('diffEditor.maxComputationTime', { type: 'number', default: 5000, minimum: 0, description: t('diffMaxComputationTime') }),
     diffOption('diffEditor.maxFileSize', { type: 'number', default: 50, minimum: 0, description: t('diffMaxFileSize') }),
     diffOption('diffEditor.renderIndicators', { type: 'boolean', default: true, description: t('diffRenderIndicators') }),
@@ -119,7 +139,11 @@ export function editorSettingDefinitions(): SettingDefinition[] {
       description: t('hideUnchangedContextLineCount'),
     }),
     diffOption('diffEditor.experimental.showMoves', { type: 'boolean', default: false, description: t('diffShowMoves') }),
-    diffOption('diffEditor.experimental.showEmptyDecorations', { type: 'boolean', default: true, description: t('diffShowEmptyDecorations') }),
+    diffOption('diffEditor.experimental.showEmptyDecorations', {
+      type: 'boolean',
+      default: true,
+      description: t('diffShowEmptyDecorations'),
+    }),
     diffOption('diffEditor.experimental.useTrueInlineView', { type: 'boolean', default: false, description: t('diffTrueInlineView') }),
   ];
 }
@@ -188,7 +212,12 @@ export function mergeOptions(base: Record<string, unknown>, extra: Record<string
   for (const [key, value] of Object.entries(extra)) {
     const current = merged[key];
     const bothObjects =
-      typeof value === 'object' && value !== null && !Array.isArray(value) && typeof current === 'object' && current !== null && !Array.isArray(current);
+      typeof value === 'object' &&
+      value !== null &&
+      !Array.isArray(value) &&
+      typeof current === 'object' &&
+      current !== null &&
+      !Array.isArray(current);
     merged[key] = bothObjects ? mergeOptions(current as Record<string, unknown>, value as Record<string, unknown>) : value;
   }
   return merged;
@@ -238,7 +267,10 @@ export function diffEditorOptions(settings: SettingsService): Record<string, unk
     ignoreTrimWhitespace: settings.get('diffEditor.ignoreTrimWhitespace', true),
     diffWordWrap: settings.get('diffEditor.wordWrap', 'inherit'),
   };
-  const options = mergeOptions(common, nestedOptions(declaredValues(settings), 'diffEditor.', { wordWrap: 'diffWordWrap' }, DIFF_FONT_KEYS));
+  const options = mergeOptions(
+    common,
+    nestedOptions(declaredValues(settings), 'diffEditor.', { wordWrap: 'diffWordWrap' }, DIFF_FONT_KEYS),
+  );
   const fontFamily = settings.get('diffEditor.fontFamily', '');
   const fontSize = settings.get('diffEditor.fontSize', 0);
   if (typeof fontFamily === 'string' && fontFamily.trim()) {

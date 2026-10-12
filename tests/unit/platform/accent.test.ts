@@ -1,7 +1,16 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { contrast, ensureContrast, formatColor, logoColor, luminance, parseColor, withAccent, type Rgba } from '../../../src/platform/accent';
+import {
+  contrast,
+  ensureContrast,
+  formatColor,
+  logoColor,
+  luminance,
+  parseColor,
+  withAccent,
+  type Rgba,
+} from '../../../src/platform/accent';
 import { LOGO_COLOR } from '../../../src/platform/logoMark';
 import {
   CLAUDE_ACCENT,
@@ -150,7 +159,7 @@ describe('provider accents', () => {
     assert.equal(providerAccentColor({ id: 'b', name: 'B', type: 'bedrock' }), CLAUDE_ACCENT);
   });
 
-  test("colors earlier versions stored without a pick are dropped; picked ones stay", () => {
+  test('colors earlier versions stored without a pick are dropped; picked ones stay', () => {
     assert.equal(withoutLegacyColor(compatible({ preset: 'kimi', color: '#0ea5a4' })).color, undefined);
     assert.equal(withoutLegacyColor(compatible({ preset: 'kimi', color: '#123456' })).color, '#123456');
     assert.equal(withoutLegacyColor(compatible({ color: '#8a8a8a' })).color, undefined);
@@ -163,7 +172,10 @@ describe('provider accents', () => {
       ids.filter((id) => id !== 'custom' && !PRESET_ACCENTS[id]),
       [],
     );
-    assert.deepEqual(Object.keys(PRESET_ACCENTS).filter((id) => !ids.includes(id)), []);
+    assert.deepEqual(
+      Object.keys(PRESET_ACCENTS).filter((id) => !ids.includes(id)),
+      [],
+    );
     for (const preset of PROVIDER_PRESETS) {
       assert.equal(preset.config.color, undefined, `${preset.id} stores a color`);
     }

@@ -136,7 +136,10 @@ class AnchoredWidget {
       this.position
         ? {
             position: this.position,
-            preference: [this.monaco.editor.ContentWidgetPositionPreference.BELOW, this.monaco.editor.ContentWidgetPositionPreference.ABOVE],
+            preference: [
+              this.monaco.editor.ContentWidgetPositionPreference.BELOW,
+              this.monaco.editor.ContentWidgetPositionPreference.ABOVE,
+            ],
           }
         : null,
   };
@@ -178,10 +181,14 @@ export class MonacoSelectionWidget implements IDisposable {
         this.hideToolbar();
         this.mouseSelecting = true;
         // The button may come up outside the editor while dragging.
-        doc.addEventListener('mouseup', () => {
-          this.mouseSelecting = false;
-          this.showToolbar();
-        }, { once: true, capture: true });
+        doc.addEventListener(
+          'mouseup',
+          () => {
+            this.mouseSelecting = false;
+            this.showToolbar();
+          },
+          { once: true, capture: true },
+        );
       }),
     );
     this.disposables.add(

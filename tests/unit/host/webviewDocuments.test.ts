@@ -21,9 +21,7 @@ describe('findNonce', () => {
   test('prefers the CSP nonce over a script tag nonce and returns undefined when there is none', () => {
     assert.equal(findNonce(`<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-abc123'">`), 'abc123');
     assert.equal(
-      findNonce(
-        `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-csp'"><script nonce="scriptNonce"></script>`,
-      ),
+      findNonce(`<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-csp'"><script nonce="scriptNonce"></script>`),
       'csp',
     );
     assert.equal(findNonce(`<script nonce="scriptNonce"></script>`), 'scriptNonce');
@@ -132,7 +130,12 @@ describe('WebviewDocumentStore', () => {
   });
 
   test("passes the shell's @font-face rules to every page", () => {
-    const store = new WebviewDocumentStore('BOOT', () => theme, () => undefined, "@font-face { font-family: 'Noto Sans SC'; }");
+    const store = new WebviewDocumentStore(
+      'BOOT',
+      () => theme,
+      () => undefined,
+      "@font-face { font-family: 'Noto Sans SC'; }",
+    );
     store.set(makeDoc('a', '<html><head></head></html>', []));
     assert.ok(store.render('a')!.includes(`"fontFaces":"@font-face { font-family: 'Noto Sans SC'; }"`));
     const without = new WebviewDocumentStore('BOOT', () => theme);
@@ -145,7 +148,11 @@ describe('WebviewDocumentStore', () => {
     const sessionRows = { row: 'button', idPrefix: 'row-', name: '.name', actions: '.actions', buttonClass: 'b', iconClass: 'i' };
     store.set({ ...makeDoc('list', '<html><head></head></html>', []), hints: { sessionRows } });
     store.set(makeDoc('other', '<html><head></head></html>', []));
-    assert.ok(store.render('list')!.includes('"labels":{"deleteSession":"Delete session","resetsAt":"Resets {0}","needsInput":"Needs input · {0}","locale":"en"}'));
+    assert.ok(
+      store
+        .render('list')!
+        .includes('"labels":{"deleteSession":"Delete session","resetsAt":"Resets {0}","needsInput":"Needs input · {0}","locale":"en"}'),
+    );
     assert.ok(!store.render('other')!.includes('labels'));
   });
 

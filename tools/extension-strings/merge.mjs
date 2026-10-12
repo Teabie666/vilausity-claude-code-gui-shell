@@ -50,7 +50,11 @@ for (const [key, value] of Object.entries(translations)) {
 }
 
 const keep = (entries, listed) =>
-  Object.fromEntries(Object.entries(entries).filter(([key]) => key in listed).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  Object.fromEntries(
+    Object.entries(entries)
+      .filter(([key]) => key in listed)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  );
 const next = {
   extensionVersion: list.extensionVersion,
   strings: keep(strings, list.strings),

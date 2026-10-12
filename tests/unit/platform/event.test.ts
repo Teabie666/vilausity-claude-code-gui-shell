@@ -41,7 +41,13 @@ describe('Emitter', () => {
     const emitter = new Emitter<void>();
     const disposables: IDisposable[] = [];
     let count = 0;
-    emitter.event(() => { count++; }, undefined, disposables);
+    emitter.event(
+      () => {
+        count++;
+      },
+      undefined,
+      disposables,
+    );
     assert.equal(disposables.length, 1);
     emitter.fire(undefined);
     assert.equal(count, 1);
@@ -54,7 +60,13 @@ describe('Emitter', () => {
     const emitter = new Emitter<void>();
     const store = new DisposableStore();
     let count = 0;
-    emitter.event(() => { count++; }, undefined, store);
+    emitter.event(
+      () => {
+        count++;
+      },
+      undefined,
+      store,
+    );
     emitter.fire(undefined);
     assert.equal(count, 1);
     store.dispose();
@@ -66,8 +78,12 @@ describe('Emitter', () => {
     const reported: unknown[] = [];
     const emitter = new Emitter<void>({ onListenerError: (e) => reported.push(e) });
     const seen: number[] = [];
-    emitter.event(() => { throw new Error('first boom'); });
-    emitter.event(() => { seen.push(2); });
+    emitter.event(() => {
+      throw new Error('first boom');
+    });
+    emitter.event(() => {
+      seen.push(2);
+    });
     emitter.fire(undefined);
     assert.deepEqual(seen, [2]);
     assert.equal(reported.length, 1);
@@ -79,7 +95,9 @@ describe('Emitter', () => {
     const previous = setUnexpectedErrorHandler((e) => reported.push(e));
     try {
       const emitter = new Emitter<void>();
-      emitter.event(() => { throw new Error('global boom'); });
+      emitter.event(() => {
+        throw new Error('global boom');
+      });
       emitter.fire(undefined);
       assert.equal(reported.length, 1);
       assert.match((reported[0] as Error).message, /global boom/);
@@ -91,11 +109,15 @@ describe('Emitter', () => {
   test('a disposed emitter no longer fires and rejects later listeners', () => {
     const emitter = new Emitter<number>();
     let count = 0;
-    emitter.event(() => { count++; });
+    emitter.event(() => {
+      count++;
+    });
     emitter.dispose();
     emitter.fire(1);
     assert.equal(count, 0);
-    const sub = emitter.event(() => { count++; });
+    const sub = emitter.event(() => {
+      count++;
+    });
     emitter.fire(1);
     assert.equal(count, 0);
     sub.dispose();
@@ -133,7 +155,11 @@ describe('Event', () => {
     const firesOnSubscribe: Event<number> = (listener, thisArgs) => {
       listener.call(thisArgs, 1);
       listener.call(thisArgs, 2);
-      return { dispose: () => { disposed++; } };
+      return {
+        dispose: () => {
+          disposed++;
+        },
+      };
     };
     const seen: number[] = [];
     Event.once(firesOnSubscribe)((n) => seen.push(n));

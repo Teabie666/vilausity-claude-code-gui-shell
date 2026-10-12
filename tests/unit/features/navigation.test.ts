@@ -21,7 +21,10 @@ describe('NavigationHistory', () => {
     history.push('c');
     history.push('c');
     assert.equal(history.current, 'c');
-    assert.equal(history.back(() => true), 'b');
+    assert.equal(
+      history.back(() => true),
+      'b',
+    );
   });
 
   test('back and forward walk the entries; past either end they return undefined without moving', () => {
@@ -29,13 +32,31 @@ describe('NavigationHistory', () => {
     history.push('a');
     history.push('b');
     history.push('c');
-    assert.equal(history.back(() => true), 'b');
-    assert.equal(history.back(() => true), 'a');
-    assert.equal(history.back(() => true), undefined);
+    assert.equal(
+      history.back(() => true),
+      'b',
+    );
+    assert.equal(
+      history.back(() => true),
+      'a',
+    );
+    assert.equal(
+      history.back(() => true),
+      undefined,
+    );
     assert.equal(history.current, 'a');
-    assert.equal(history.forward(() => true), 'b');
-    assert.equal(history.forward(() => true), 'c');
-    assert.equal(history.forward(() => true), undefined);
+    assert.equal(
+      history.forward(() => true),
+      'b',
+    );
+    assert.equal(
+      history.forward(() => true),
+      'c',
+    );
+    assert.equal(
+      history.forward(() => true),
+      undefined,
+    );
   });
 
   test('back skips entries usable rejects and stops at the nearest accepted one', () => {
@@ -43,7 +64,10 @@ describe('NavigationHistory', () => {
     history.push('a');
     history.push('b');
     history.push('c');
-    assert.equal(history.back((entry) => entry !== 'b'), 'a');
+    assert.equal(
+      history.back((entry) => entry !== 'b'),
+      'a',
+    );
     assert.equal(history.current, 'a');
   });
 
@@ -52,7 +76,10 @@ describe('NavigationHistory', () => {
     history.push('a');
     history.push('b');
     history.push('c');
-    assert.equal(history.back(() => false), undefined);
+    assert.equal(
+      history.back(() => false),
+      undefined,
+    );
     assert.equal(history.current, 'c');
   });
 
@@ -61,11 +88,23 @@ describe('NavigationHistory', () => {
     history.push('a');
     history.push('b');
     history.push('c');
-    assert.equal(history.back(() => true), 'b');
+    assert.equal(
+      history.back(() => true),
+      'b',
+    );
     history.push('d');
-    assert.equal(history.forward(() => true), undefined);
-    assert.equal(history.back(() => true), 'b');
-    assert.equal(history.back(() => true), 'a');
+    assert.equal(
+      history.forward(() => true),
+      undefined,
+    );
+    assert.equal(
+      history.back(() => true),
+      'b',
+    );
+    assert.equal(
+      history.back(() => true),
+      'a',
+    );
   });
 
   test('pushing the entry reached by back changes nothing and forward still reaches the old tail', () => {
@@ -73,9 +112,15 @@ describe('NavigationHistory', () => {
     history.push('a');
     history.push('b');
     history.push('c');
-    assert.equal(history.back(() => true), 'b');
+    assert.equal(
+      history.back(() => true),
+      'b',
+    );
     history.push('b');
-    assert.equal(history.forward(() => true), 'c');
+    assert.equal(
+      history.forward(() => true),
+      'c',
+    );
   });
 
   test('the limit drops the oldest entry as new ones are pushed', () => {
@@ -84,9 +129,18 @@ describe('NavigationHistory', () => {
     history.push('b');
     history.push('c');
     history.push('d');
-    assert.equal(history.back(() => true), 'c');
-    assert.equal(history.back(() => true), 'b');
-    assert.equal(history.back(() => true), undefined);
+    assert.equal(
+      history.back(() => true),
+      'c',
+    );
+    assert.equal(
+      history.back(() => true),
+      'b',
+    );
+    assert.equal(
+      history.back(() => true),
+      undefined,
+    );
   });
 
   describe('remove', () => {
@@ -97,7 +151,10 @@ describe('NavigationHistory', () => {
       history.push('c');
       history.remove((entry) => entry === 'a');
       assert.equal(history.current, 'c');
-      assert.equal(history.back(() => true), 'b');
+      assert.equal(
+        history.back(() => true),
+        'b',
+      );
     });
 
     test('removing the current entry falls back to the entry before it', () => {
@@ -117,8 +174,14 @@ describe('NavigationHistory', () => {
       history.push('c');
       history.remove((entry) => entry === 'b');
       assert.equal(history.current, 'c');
-      assert.equal(history.back(() => true), 'a');
-      assert.equal(history.back(() => true), undefined);
+      assert.equal(
+        history.back(() => true),
+        'a',
+      );
+      assert.equal(
+        history.back(() => true),
+        undefined,
+      );
     });
 
     test('removing everything leaves an empty history that still works after a push', () => {
@@ -128,8 +191,14 @@ describe('NavigationHistory', () => {
       history.push('c');
       history.remove(() => true);
       assert.equal(history.current, undefined);
-      assert.equal(history.back(() => true), undefined);
-      assert.equal(history.forward(() => true), undefined);
+      assert.equal(
+        history.back(() => true),
+        undefined,
+      );
+      assert.equal(
+        history.forward(() => true),
+        undefined,
+      );
       history.push('x');
       assert.equal(history.current, 'x');
     });
@@ -140,16 +209,28 @@ describe('NavigationHistory', () => {
     history.push('a');
     history.push('b');
     history.push('c');
-    assert.equal(history.previous((entry) => entry === 'a'), 'a');
+    assert.equal(
+      history.previous((entry) => entry === 'a'),
+      'a',
+    );
     assert.equal(history.current, 'c');
-    assert.equal(history.back(() => true), 'b');
+    assert.equal(
+      history.back(() => true),
+      'b',
+    );
   });
 
   test('previous includes the current entry and returns undefined when nothing is usable', () => {
     const history = new NavigationHistory<string>(same);
     history.push('a');
     history.push('b');
-    assert.equal(history.previous(() => true), 'b');
-    assert.equal(history.previous(() => false), undefined);
+    assert.equal(
+      history.previous(() => true),
+      'b',
+    );
+    assert.equal(
+      history.previous(() => false),
+      undefined,
+    );
   });
 });

@@ -24,7 +24,10 @@ describe('commentsView', () => {
 
   test('orders blocks newest first', () => {
     const view = commentsView([comment('c1'), comment('c2'), comment('c3')])!;
-    assert.deepEqual(view.blocks.map((b) => b.id), ['c3', 'c2', 'c1']);
+    assert.deepEqual(
+      view.blocks.map((b) => b.id),
+      ['c3', 'c2', 'c1'],
+    );
   });
 
   test('collapses only when there are more than COLLAPSE_ABOVE comments', () => {

@@ -196,10 +196,7 @@ export class WindowContext extends Disposable {
     const position = { line: (target.line ?? 1) - 1, character: (target.column ?? 1) - 1 };
     const selection = target.line ? { start: position, end: position } : undefined;
     this.whenInitialized((extHost) =>
-      this.request(
-        extHost.rpc.call('documents.show', { uri: URI.file(target.path).toString(), selection }),
-        `opening ${target.path}`,
-      ),
+      this.request(extHost.rpc.call('documents.show', { uri: URI.file(target.path).toString(), selection }), `opening ${target.path}`),
     );
   }
 
@@ -429,10 +426,7 @@ export class WindowContext extends Disposable {
       this.logger.info('restarting extension host');
       await this.stopExtHost();
     }
-    const extHost = await ExtHostProcess.start(
-      path.join(this.host.env.appDir, 'exthost.js'),
-      this.logger.child('exthost-process'),
-    );
+    const extHost = await ExtHostProcess.start(path.join(this.host.env.appDir, 'exthost.js'), this.logger.child('exthost-process'));
     if (this.shutdownPromise) {
       // The window closed while the process was starting.
       await extHost.shutdown();

@@ -76,7 +76,7 @@ describe("safeStorage's key, shared", () => {
     assert.equal(shareSafeStorageKey(admin, normal, true, NullLogger), false);
   });
 
-  test("a fresh administrator profile gets one; the normal instance keeps its own", () => {
+  test('a fresh administrator profile gets one; the normal instance keeps its own', () => {
     const normal = profile('b-normal', { os_crypt: { encrypted_key: 'NORMAL' } });
     const admin = profile('b-admin');
     assert.equal(shareSafeStorageKey(admin, normal, true, NullLogger), true);

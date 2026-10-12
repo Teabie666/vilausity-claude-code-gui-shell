@@ -167,7 +167,10 @@ describe('SessionIndex', () => {
       writeFileSync(path.join(project, 'notes.txt'), 'not a transcript');
       const index = new SessionIndex(dir);
       const first = await index.search({ query: '', folder: 'c:\\work\\shop', limit: 10 });
-      assert.deepEqual(first.map((result) => result.title), ['One']);
+      assert.deepEqual(
+        first.map((result) => result.title),
+        ['One'],
+      );
       assert.deepEqual(await index.search({ query: '', folder: 'C:\\elsewhere', limit: 10 }), []);
 
       writeFileSync(file, [user('First question'), line({ type: 'custom-title', customTitle: 'Renamed' })].join('\n'));

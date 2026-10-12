@@ -5,39 +5,55 @@
 
 /** Keywords after which a `/` starts a regular expression. */
 const REGEX_AFTER_WORD = new Set([
-  'return', 'typeof', 'case', 'do', 'else', 'in', 'of', 'new', 'delete', 'void', 'throw', 'instanceof', 'yield', 'await',
+  'return',
+  'typeof',
+  'case',
+  'do',
+  'else',
+  'in',
+  'of',
+  'new',
+  'delete',
+  'void',
+  'throw',
+  'instanceof',
+  'yield',
+  'await',
 ]);
 const IDENTIFIER_START = /[A-Za-z_$\u0080-￿]/;
 const IDENTIFIER_PART = /[\w$\u0080-￿]/;
 
 /** The value of a string literal's source between its quotes. */
 export function cook(raw) {
-  return raw.replace(/\\(u\{([0-9a-fA-F]+)\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|\r\n|[\s\S])/g, (match, escape, codePoint, unicode, hex) => {
-    if (codePoint) return String.fromCodePoint(Number.parseInt(codePoint, 16));
-    if (unicode) return String.fromCharCode(Number.parseInt(unicode, 16));
-    if (hex) return String.fromCharCode(Number.parseInt(hex, 16));
-    switch (escape) {
-      case 'n':
-        return '\n';
-      case 't':
-        return '\t';
-      case 'r':
-        return '\r';
-      case 'b':
-        return '\b';
-      case 'f':
-        return '\f';
-      case 'v':
-        return '\v';
-      case '0':
-        return '\0';
-      case '\n':
-      case '\r\n':
-        return '';
-      default:
-        return escape;
-    }
-  });
+  return raw.replace(
+    /\\(u\{([0-9a-fA-F]+)\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|\r\n|[\s\S])/g,
+    (match, escape, codePoint, unicode, hex) => {
+      if (codePoint) return String.fromCodePoint(Number.parseInt(codePoint, 16));
+      if (unicode) return String.fromCharCode(Number.parseInt(unicode, 16));
+      if (hex) return String.fromCharCode(Number.parseInt(hex, 16));
+      switch (escape) {
+        case 'n':
+          return '\n';
+        case 't':
+          return '\t';
+        case 'r':
+          return '\r';
+        case 'b':
+          return '\b';
+        case 'f':
+          return '\f';
+        case 'v':
+          return '\v';
+        case '0':
+          return '\0';
+        case '\n':
+        case '\r\n':
+          return '';
+        default:
+          return escape;
+      }
+    },
+  );
 }
 
 /**

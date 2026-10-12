@@ -31,7 +31,8 @@ export const t = defineMessages('keybindings', {
   writeFailed: 'keybindings.json could not be changed. See the log for details.',
   // The schema of keybindings.json (hovers and completion in the editor).
   schemaKey: 'The keys, e.g. ctrl+shift+p: ctrl, shift, alt and win, then one key.',
-  schemaCommand: 'The command to run. With a "-" in front: removes the default keybindings of that command (those with this key, or all of them when the key is empty).',
+  schemaCommand:
+    'The command to run. With a "-" in front: removes the default keybindings of that command (those with this key, or all of them when the key is empty).',
   /** `{0}`: the command's title. */
   schemaRemoval: 'Removes the default keybinding of {0}',
   schemaWhen: 'When the keybinding applies, e.g. editorTextFocus.',

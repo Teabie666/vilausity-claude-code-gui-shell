@@ -9,15 +9,7 @@
 import { URI } from 'vscode-uri';
 import { CommandCategory } from '../../core/messages';
 import type { ShellModule } from '../../core/module';
-import {
-  ICommands,
-  IDialogs,
-  IEditors,
-  IExtensionHost,
-  IKeybindings,
-  ILayout,
-  ISettings,
-} from '../../core/serviceIds';
+import { ICommands, IDialogs, IEditors, IExtensionHost, IKeybindings, ILayout, ISettings } from '../../core/serviceIds';
 import { DisposableStore } from '../../platform/lifecycle';
 import { IContentPane } from '../contentPane';
 import { ITextEditors, TEXT_INPUT } from '../editor';
@@ -180,9 +172,7 @@ export const settingsModule: ShellModule = {
     // Between the app's name and the API provider.
     subscriptions.add(services.get(ILayout).addTitleBarItem('left', gear, 11));
 
-    subscriptions.add(
-      commands.register('settings.open', openUi, { title: t('openSettings'), category: CommandCategory.preferences }),
-    );
+    subscriptions.add(commands.register('settings.open', openUi, { title: t('openSettings'), category: CommandCategory.preferences }));
     subscriptions.add(
       commands.register('settings.openJson', () => openJsonLogged(), {
         title: t('openSettingsJson'),

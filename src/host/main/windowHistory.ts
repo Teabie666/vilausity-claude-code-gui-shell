@@ -110,14 +110,9 @@ export class WindowHistory {
 
   rememberFolderProvider(folder: string, id: string): void {
     const providers = this.store.get(FOLDER_PROVIDERS_KEY);
-    const entries = Object.entries(isRecord(providers) ? providers : {}).filter(
-      ([key]) => key !== normalizeForCompare(folder),
-    );
+    const entries = Object.entries(isRecord(providers) ? providers : {}).filter(([key]) => key !== normalizeForCompare(folder));
     // Most recent last; the oldest go first when there are too many.
-    this.store.set(
-      FOLDER_PROVIDERS_KEY,
-      Object.fromEntries([...entries, [normalizeForCompare(folder), id]].slice(-MAX_PLACEMENTS)),
-    );
+    this.store.set(FOLDER_PROVIDERS_KEY, Object.fromEntries([...entries, [normalizeForCompare(folder), id]].slice(-MAX_PLACEMENTS)));
   }
 
   zoomLevel(): number | undefined {
@@ -198,10 +193,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isBounds(value: unknown): value is Bounds {
-  return (
-    isRecord(value) &&
-    ['x', 'y', 'width', 'height'].every((key) => typeof value[key] === 'number' && Number.isFinite(value[key]))
-  );
+  return isRecord(value) && ['x', 'y', 'width', 'height'].every((key) => typeof value[key] === 'number' && Number.isFinite(value[key]));
 }
 
 function stringList(value: unknown): string[] {

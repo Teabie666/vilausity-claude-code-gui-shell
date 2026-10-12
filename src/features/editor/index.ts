@@ -59,7 +59,6 @@ function tabInputId(tabId: string): string {
   return `tab:${tabId}`;
 }
 
-
 /** A read-only editor on generated text (`TextEditorService.createViewer`). */
 export interface TextViewer {
   setText(text: string): void;
@@ -605,7 +604,10 @@ export const editorModule: ShellModule = {
       }),
       commands.register(
         'editor.find',
-        () => (editors.focusedCodeEditor() ?? editors.activePane?.editor ?? editors.activeDiff?.editor.getModifiedEditor())?.getAction('actions.find')?.run(),
+        () =>
+          (editors.focusedCodeEditor() ?? editors.activePane?.editor ?? editors.activeDiff?.editor.getModifiedEditor())
+            ?.getAction('actions.find')
+            ?.run(),
         // The palette takes the focus from the editor: only a keybinding finds.
         { title: t('findCommand'), palette: false },
       ),

@@ -52,7 +52,9 @@ export const explorerMenuModule: ShellModule = {
               box.disabled = false;
             }
           };
-          native.call('explorerMenu.get', undefined).then(show, (error: unknown) => logger.error('reading the File Explorer menu failed', error));
+          native
+            .call('explorerMenu.get', undefined)
+            .then(show, (error: unknown) => logger.error('reading the File Explorer menu failed', error));
           box.addEventListener('change', () => {
             box.disabled = true;
             native.call('explorerMenu.set', { enabled: box.checked }).then(show, (error: unknown) => {

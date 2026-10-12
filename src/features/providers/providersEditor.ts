@@ -67,17 +67,16 @@ export function typeLabel(type: ProviderType): string {
 }
 
 /** Adds a provider from a preset, with an id of its own; resolves to it. */
-export async function addFromPreset(
-  presetId: string,
-  model: ProvidersModel,
-  native: NativeApi,
-): Promise<ProviderSummary | undefined> {
+export async function addFromPreset(presetId: string, model: ProvidersModel, native: NativeApi): Promise<ProviderSummary | undefined> {
   const preset = presetById(presetId);
   if (!preset) {
     return undefined;
   }
   const name = preset.name();
-  const id = providerIdFor(preset.id, model.state.providers.map((provider) => provider.id));
+  const id = providerIdFor(
+    preset.id,
+    model.state.providers.map((provider) => provider.id),
+  );
   return native.call('providers.save', { provider: { ...preset.config, id, name, preset: preset.id } });
 }
 
@@ -344,7 +343,11 @@ export class ProvidersEditorPane implements EditorPane {
 
     const id = this.description(t('id', provider.id));
     this.form.append(
-      this.row(t('name'), this.input(draft.name, (value) => ((draft.name = value), changed())), id),
+      this.row(
+        t('name'),
+        this.input(draft.name, (value) => ((draft.name = value), changed())),
+        id,
+      ),
       this.row(
         t('type'),
         this.dropdown(
@@ -366,11 +369,15 @@ export class ProvidersEditorPane implements EditorPane {
       this.form.append(
         this.row(
           t('baseUrl'),
-          this.input(draft.baseUrl, (value) => {
-            draft.baseUrl = value;
-            hint.hidden = !URL_PLACEHOLDER.test(value);
-            changed();
-          }, 'ANTHROPIC_BASE_URL'),
+          this.input(
+            draft.baseUrl,
+            (value) => {
+              draft.baseUrl = value;
+              hint.hidden = !URL_PLACEHOLDER.test(value);
+              changed();
+            },
+            'ANTHROPIC_BASE_URL',
+          ),
           hint,
         ),
         this.row(
@@ -409,7 +416,10 @@ export class ProvidersEditorPane implements EditorPane {
         draft.headers = value;
         changed();
       }),
-      this.row(t('timeout'), this.input(draft.timeoutMs, (value) => ((draft.timeoutMs = value), changed()), 'API_TIMEOUT_MS')),
+      this.row(
+        t('timeout'),
+        this.input(draft.timeoutMs, (value) => ((draft.timeoutMs = value), changed()), 'API_TIMEOUT_MS'),
+      ),
       this.row(
         t('maxOutput'),
         this.input(draft.maxOutputTokens, (value) => ((draft.maxOutputTokens = value), changed()), 'CLAUDE_CODE_MAX_OUTPUT_TOKENS'),
@@ -534,7 +544,9 @@ export class ProvidersEditorPane implements EditorPane {
       baseUrl: usesKey ? draft.baseUrl.trim() || undefined : undefined,
       auth: usesKey ? draft.auth : undefined,
       models: Object.fromEntries(
-        Object.entries(draft.models).filter(([, value]) => value.trim() !== '').map(([key, value]) => [key, value.trim()]),
+        Object.entries(draft.models)
+          .filter(([, value]) => value.trim() !== '')
+          .map(([key, value]) => [key, value.trim()]),
       ),
       headers: headers.values,
       timeoutMs: positiveInteger(draft.timeoutMs),
@@ -542,7 +554,8 @@ export class ProvidersEditorPane implements EditorPane {
       disableNonessentialTraffic: draft.disableNonessentialTraffic || undefined,
       env: env.values,
       // The vendor's own color is no pick: the provider keeps following its vendor.
-      color: draft.color && draft.color !== providerAccentColor({ ...provider, type: draft.type, color: undefined }) ? draft.color : undefined,
+      color:
+        draft.color && draft.color !== providerAccentColor({ ...provider, type: draft.type, color: undefined }) ? draft.color : undefined,
       preset: provider.preset,
     };
     const saved = await this.call(() => this.context.native.call('providers.save', { provider: config }));
@@ -707,4 +720,3 @@ export class ProvidersEditorPane implements EditorPane {
     return button;
   }
 }
-

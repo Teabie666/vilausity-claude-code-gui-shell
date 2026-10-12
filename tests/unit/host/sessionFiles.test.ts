@@ -4,7 +4,14 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { deleteSession, isSessionId, processRuns, sessionPaths, sessionProcesses, waitForSessionEnd } from '../../../src/host/main/sessionFiles';
+import {
+  deleteSession,
+  isSessionId,
+  processRuns,
+  sessionPaths,
+  sessionProcesses,
+  waitForSessionEnd,
+} from '../../../src/host/main/sessionFiles';
 
 const ID = '0f9c2b1e-4d5a-4c3b-9e8f-7a6b5c4d3e2f';
 const OTHER = '11111111-2222-4333-8444-555555555555';

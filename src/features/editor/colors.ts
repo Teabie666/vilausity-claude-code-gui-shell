@@ -13,7 +13,10 @@ export function toHexColor(value: string): string | undefined {
   if (!match) {
     return undefined;
   }
-  const hex = (n: number): string => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, '0');
+  const hex = (n: number): string =>
+    Math.round(Math.max(0, Math.min(255, n)))
+      .toString(16)
+      .padStart(2, '0');
   const [r, g, b] = [match[1], match[2], match[3]].map(Number) as [number, number, number];
   const alpha = match[4] === undefined ? '' : hex(Number(match[4]) * 255);
   return `#${hex(r)}${hex(g)}${hex(b)}${alpha === 'ff' ? '' : alpha}`;

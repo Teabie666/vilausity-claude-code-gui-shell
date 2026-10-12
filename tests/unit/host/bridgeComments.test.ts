@@ -103,7 +103,10 @@ describe('ClaudeWebviewBridge comment attachment', () => {
 
     assert.equal(bridge.interceptFromWebview(webview, message), false);
     assert.deepEqual(message.message.message.content, content);
-    assert.deepEqual(store.list('w1').map((c) => c.id), ['c1']);
+    assert.deepEqual(
+      store.list('w1').map((c) => c.id),
+      ['c1'],
+    );
   });
 
   test('converts string content into a text block plus the comments block', () => {
@@ -137,7 +140,10 @@ describe('ClaudeWebviewBridge comment attachment', () => {
 
     assert.equal(bridge.interceptFromWebview(webview, message), false);
     assert.equal(message.message.message.content, content);
-    assert.deepEqual(store.list('w1').map((c) => c.id), ['c1']);
+    assert.deepEqual(
+      store.list('w1').map((c) => c.id),
+      ['c1'],
+    );
   });
 
   test("clears only the sending webview's comments", () => {
@@ -150,7 +156,10 @@ describe('ClaudeWebviewBridge comment attachment', () => {
 
     bridge.interceptFromWebview(webview, message);
     assert.deepEqual(store.list('w1'), []);
-    assert.deepEqual(store.list('w2').map((c) => c.id), ['c2']);
+    assert.deepEqual(
+      store.list('w2').map((c) => c.id),
+      ['c2'],
+    );
   });
 
   test('pageHints anchors comments only for conversation panels', () => {

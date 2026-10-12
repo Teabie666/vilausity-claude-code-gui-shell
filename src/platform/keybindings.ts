@@ -147,7 +147,9 @@ export function parseKeybindingEntries(value: unknown): KeybindingEntry[] {
 
 /** The same entry of keybindings.json (as written there). */
 export function sameKeybindingEntry(a: KeybindingEntry, b: KeybindingEntry): boolean {
-  return a.key === b.key && a.command === b.command && (a.when ?? '') === (b.when ?? '') && JSON.stringify(a.args) === JSON.stringify(b.args);
+  return (
+    a.key === b.key && a.command === b.command && (a.when ?? '') === (b.when ?? '') && JSON.stringify(a.args) === JSON.stringify(b.args)
+  );
 }
 
 /** Keys whose label is not just the name capitalized; VS Code's labels. */

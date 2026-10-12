@@ -89,7 +89,9 @@ export const commandPaletteModule: ShellModule = {
         },
       }),
     );
-    subscriptions.add(commands.register('commandPalette.show', () => quickAccess.show('>'), { title: t('showAllCommands'), palette: false }));
+    subscriptions.add(
+      commands.register('commandPalette.show', () => quickAccess.show('>'), { title: t('showAllCommands'), palette: false }),
+    );
     subscriptions.add(keybindings.register({ key: 'ctrl+shift+p', command: 'commandPalette.show' }));
     subscriptions.add(keybindings.register({ key: 'f1', command: 'commandPalette.show' }));
 
@@ -108,7 +110,9 @@ export const commandPaletteModule: ShellModule = {
             keybinding: keybindings.labelFor('commandPalette.show'),
             accept: () => quickAccess.show('>'),
           };
-          const latest = listed().recent.slice(0, RECENT_IN_SEARCH).map((command) => ({ ...item(command), icon: 'chevron-right' }));
+          const latest = listed()
+            .recent.slice(0, RECENT_IN_SEARCH)
+            .map((command) => ({ ...item(command), icon: 'chevron-right' }));
           return { label: t('commands'), items: [showAll, ...latest] };
         },
       }),

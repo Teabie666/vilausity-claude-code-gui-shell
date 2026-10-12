@@ -30,11 +30,7 @@ interface RegistryEntry {
 }
 
 /** `otherEditors: false` stops after the managed copy (tests of the first run). */
-export function locateClaudeExtension(
-  explicitDir?: string,
-  managed?: LocatedExtension,
-  otherEditors = true,
-): LocatedExtension | undefined {
+export function locateClaudeExtension(explicitDir?: string, managed?: LocatedExtension, otherEditors = true): LocatedExtension | undefined {
   if (explicitDir) {
     const version = readVersion(explicitDir);
     return version ? { path: explicitDir, version, source: '--extension-dir', kind: 'cli' } : undefined;
@@ -101,10 +97,7 @@ function fromDirectoryScan(extensionsDir: string): LocatedExtension | undefined 
 }
 
 function readVersion(dir: string): string | undefined {
-  const pkg = readJsonFile<{ version?: unknown; main?: unknown } | undefined>(
-    path.join(dir, 'package.json'),
-    undefined,
-  );
+  const pkg = readJsonFile<{ version?: unknown; main?: unknown } | undefined>(path.join(dir, 'package.json'), undefined);
   if (!pkg || typeof pkg.version !== 'string' || typeof pkg.main !== 'string') {
     return undefined;
   }

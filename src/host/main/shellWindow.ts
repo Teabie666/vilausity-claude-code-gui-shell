@@ -48,12 +48,7 @@ export function nextZoomLevel(current: number, delta: number): number {
   return delta === 0 ? 0 : Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, current + delta * ZOOM_STEP));
 }
 
-const ALLOWED_PERMISSIONS = new Set([
-  'clipboard-read',
-  'clipboard-sanitized-write',
-  'notifications',
-  'fullscreen',
-]);
+const ALLOWED_PERMISSIONS = new Set(['clipboard-read', 'clipboard-sanitized-write', 'notifications', 'fullscreen']);
 
 export interface ShellWindowOptions {
   readonly theme: ThemeData;

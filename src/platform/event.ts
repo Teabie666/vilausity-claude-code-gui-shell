@@ -8,11 +8,7 @@ import { DisposableStore, toDisposable, type IDisposable } from './lifecycle';
 export type Listener<T> = (e: T) => unknown;
 
 export interface Event<T> {
-  (
-    listener: Listener<T>,
-    thisArgs?: unknown,
-    disposables?: IDisposable[] | DisposableStore,
-  ): IDisposable;
+  (listener: Listener<T>, thisArgs?: unknown, disposables?: IDisposable[] | DisposableStore): IDisposable;
 }
 
 export interface EmitterOptions {

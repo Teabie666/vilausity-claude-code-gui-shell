@@ -6,16 +6,7 @@
 
 import { CommandCategory } from '../../core/messages';
 import type { ShellModule } from '../../core/module';
-import {
-  ICommands,
-  IContextKeys,
-  IEditors,
-  IExtensionHost,
-  IKeybindings,
-  ILayout,
-  IPanels,
-  IWebviewFrames,
-} from '../../core/serviceIds';
+import { ICommands, IContextKeys, IEditors, IExtensionHost, IKeybindings, ILayout, IPanels, IWebviewFrames } from '../../core/serviceIds';
 import { createServiceId } from '../../core/services';
 import { ContentPane } from './contentPane';
 import { t } from './messages';

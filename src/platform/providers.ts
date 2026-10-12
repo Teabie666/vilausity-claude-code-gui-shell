@@ -249,8 +249,7 @@ export function parseProviderConfig(value: unknown): ProviderConfig | undefined 
   if (!type) {
     return undefined;
   }
-  const text = (field: unknown): string | undefined =>
-    typeof field === 'string' && field.trim() !== '' ? field.trim() : undefined;
+  const text = (field: unknown): string | undefined => (typeof field === 'string' && field.trim() !== '' ? field.trim() : undefined);
   const count = (field: unknown): number | undefined =>
     typeof field === 'number' && Number.isInteger(field) && field > 0 ? field : undefined;
   const models = isRecord(value.models) ? value.models : {};
@@ -283,9 +282,7 @@ function stringMap(value: unknown, validName: (name: string) => boolean): Record
   if (!isRecord(value)) {
     return undefined;
   }
-  const entries = Object.entries(value).filter(
-    (entry): entry is [string, string] => validName(entry[0]) && typeof entry[1] === 'string',
-  );
+  const entries = Object.entries(value).filter((entry): entry is [string, string] => validName(entry[0]) && typeof entry[1] === 'string');
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 

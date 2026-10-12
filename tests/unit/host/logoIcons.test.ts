@@ -8,15 +8,7 @@ import * as zlib from 'node:zlib';
 import { contrast, parseColor, type Rgba } from '../../../src/platform/accent';
 import { NullLogger } from '../../../src/platform/log';
 import { ICON_CANVAS, ICON_POLYGONS, ICON_SIZES, LOGO_COLOR } from '../../../src/platform/logoMark';
-import {
-  drawIcon,
-  encodeIco,
-  encodePng,
-  logoIco,
-  LogoIcons,
-  rasterize,
-  systemIconColor,
-} from '../../../src/host/main/logoIcons';
+import { drawIcon, encodeIco, encodePng, logoIco, LogoIcons, rasterize, systemIconColor } from '../../../src/host/main/logoIcons';
 
 const ORANGE: Rgba = parseColor(LOGO_COLOR)!;
 
@@ -42,7 +34,10 @@ describe('drawing the logo', () => {
     const shifted = rasterize([[0.5, 0, 1.5, 0, 1.5, 1, 0.5, 1]], 4, 4);
     assert.deepEqual([...shifted.slice(0, 4)], [0.5, 0.5, 0, 0]);
     // Drawn at twice the size, the same square covers four pixels.
-    assert.equal(rasterize([[1, 1, 2, 1, 2, 2, 1, 2]], 4, 8).reduce((sum, value) => sum + value, 0), 4);
+    assert.equal(
+      rasterize([[1, 1, 2, 1, 2, 2, 1, 2]], 4, 8).reduce((sum, value) => sum + value, 0),
+      4,
+    );
   });
 
   test('the icon covers as much as its polygons, at every size', () => {
@@ -72,7 +67,7 @@ describe('icon files', () => {
     const png = encodePng(pixels, 2, 2);
     assert.deepEqual([...png.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     const chunks: { type: string; data: Buffer }[] = [];
-    for (let offset = 8; offset < png.length; ) {
+    for (let offset = 8; offset < png.length;) {
       const length = png.readUInt32BE(offset);
       const type = png.toString('latin1', offset + 4, offset + 8);
       const data = png.subarray(offset + 8, offset + 8 + length);
@@ -143,7 +138,10 @@ describe('icon files', () => {
       assert.equal(fs.readFileSync(blue, 'utf8'), 'drawn before');
       assert.notEqual(icons.file('#8ab4f8'), blue);
       assert.equal(icons.file('nonsense'), undefined);
-      assert.deepEqual(fs.readdirSync(path.join(dir, 'icons')).filter((name) => name.endsWith('.tmp')), []);
+      assert.deepEqual(
+        fs.readdirSync(path.join(dir, 'icons')).filter((name) => name.endsWith('.tmp')),
+        [],
+      );
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

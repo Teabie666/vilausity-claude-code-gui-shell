@@ -26,12 +26,21 @@ describe('findGit', () => {
   test('CLAUDE_CODE_GIT_BASH_PATH counts when the file is there', () => {
     const bash = 'D:\\PortableGit\\bin\\bash.exe';
     assert.equal(findGit({ CLAUDE_CODE_GIT_BASH_PATH: bash }, only(bash)), bash);
-    assert.equal(findGit({ CLAUDE_CODE_GIT_BASH_PATH: bash }, () => false), undefined);
+    assert.equal(
+      findGit({ CLAUDE_CODE_GIT_BASH_PATH: bash }, () => false),
+      undefined,
+    );
   });
 
   test('missing', () => {
-    assert.equal(findGit({ PATH: 'C:\\a', ProgramFiles: 'C:\\Program Files' }, () => false), undefined);
-    assert.equal(findGit({}, () => false), undefined);
+    assert.equal(
+      findGit({ PATH: 'C:\\a', ProgramFiles: 'C:\\Program Files' }, () => false),
+      undefined,
+    );
+    assert.equal(
+      findGit({}, () => false),
+      undefined,
+    );
   });
 });
 

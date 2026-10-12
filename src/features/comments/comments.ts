@@ -65,7 +65,9 @@ export class CommentsController implements IDisposable {
         }
       }),
     );
-    this.disposables.add(frames.onDidCommentsEvent(({ webviewId, event }) => this.onHostEvent(webviewId, event, this.frameOrigin(webviewId))));
+    this.disposables.add(
+      frames.onDidCommentsEvent(({ webviewId, event }) => this.onHostEvent(webviewId, event, this.frameOrigin(webviewId))),
+    );
     this.disposables.add(frames.onDidDispose(({ webviewId }) => this.forget(webviewId)));
     this.disposables.add(conversations.onDidChangeActive(() => this.changeEmitter.fire()));
   }

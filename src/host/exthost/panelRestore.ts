@@ -37,10 +37,7 @@ export class PanelRestore implements IDisposable {
     private readonly comments: ConversationComments,
     private readonly logger: ILogger,
   ) {
-    this.subscriptions = [
-      webviews.onDidChangePanels(() => this.scheduleSave()),
-      comments.onDidChange(() => this.scheduleSave()),
-    ];
+    this.subscriptions = [webviews.onDidChangePanels(() => this.scheduleSave()), comments.onDidChange(() => this.scheduleSave())];
   }
 
   /**

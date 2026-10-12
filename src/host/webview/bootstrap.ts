@@ -5,13 +5,7 @@
  * routing of link clicks and keyboard shortcuts to the shell.
  */
 
-import type {
-  KeyEventDto,
-  ShellToWebviewControl,
-  ThemeData,
-  WebviewBootstrapData,
-  WebviewToShellMessage,
-} from '../../platform/protocol';
+import type { KeyEventDto, ShellToWebviewControl, ThemeData, WebviewBootstrapData, WebviewToShellMessage } from '../../platform/protocol';
 import { CommentsHost } from './comments';
 import { DEFAULT_WEBVIEW_STYLES } from './defaultStyles';
 import { InPageFinder } from './find';
@@ -33,18 +27,9 @@ declare global {
   }
 }
 
-type OutgoingMessage = WebviewToShellMessage extends infer M
-  ? M extends { ccw: string }
-    ? Omit<M, 'ccw'>
-    : never
-  : never;
+type OutgoingMessage = WebviewToShellMessage extends infer M ? (M extends { ccw: string } ? Omit<M, 'ccw'> : never) : never;
 
-const THEME_CLASSES = [
-  'vscode-light',
-  'vscode-dark',
-  'vscode-high-contrast',
-  'vscode-high-contrast-light',
-];
+const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'vscode-high-contrast-light'];
 
 (function bootstrap(): void {
   const data = window.__ccwBootstrap;
@@ -370,8 +355,7 @@ function handleClick(event: MouseEvent, post: (message: OutgoingMessage) => void
   }
   if (anchor.hash && rawHref === anchor.hash) {
     const fragment = anchor.hash.slice(1);
-    const target =
-      document.getElementById(fragment) ?? document.getElementById(decodeURIComponent(fragment));
+    const target = document.getElementById(fragment) ?? document.getElementById(decodeURIComponent(fragment));
     target?.scrollIntoView();
     return;
   }

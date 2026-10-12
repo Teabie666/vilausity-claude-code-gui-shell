@@ -100,9 +100,7 @@ export class SettingsStore extends Disposable {
   private reload(): void {
     const next = this.readFromDisk();
     const keys = new Set([...Object.keys(this.values), ...Object.keys(next)]);
-    const changed = [...keys].filter(
-      (key) => JSON.stringify(this.values[key]) !== JSON.stringify(next[key]),
-    );
+    const changed = [...keys].filter((key) => JSON.stringify(this.values[key]) !== JSON.stringify(next[key]));
     this.values = next;
     if (changed.length > 0) {
       this.changeEmitter.fire({ keys: changed });
@@ -121,8 +119,6 @@ export class SettingsStore extends Disposable {
     if (errors.length > 0) {
       this.logger.warn(`settings.json has ${errors.length} syntax error(s); using what parsed`);
     }
-    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
   }
 }

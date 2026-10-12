@@ -125,9 +125,7 @@ export function injectBootstrap(html: string, bootstrapSource: string, data: Web
   const nonceAttr = nonce ? ` nonce="${nonce}"` : '';
   // An inline script ends at the first "</script", wherever it appears.
   const safeSource = bootstrapSource.replace(/<\/script/gi, '<\\/script');
-  const script =
-    `<script${nonceAttr}>window.__ccwBootstrap=${serializeForScript(data)};\n` +
-    `${safeSource}</script>`;
+  const script = `<script${nonceAttr}>window.__ccwBootstrap=${serializeForScript(data)};\n` + `${safeSource}</script>`;
   const head = /<head(\s[^>]*)?>/i.exec(html);
   if (head) {
     const at = head.index + head[0].length;

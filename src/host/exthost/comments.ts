@@ -146,10 +146,7 @@ export class ConversationComments implements PendingComments, IDisposable {
         this.store.set(SESSION_KEY + sessionId, sanitizeComments(comments));
       }
     }
-    this.subscriptions = [
-      this.store.onDidChange((key) => this.storeChanged(key)),
-      panels.onDidChangePanels(() => this.followAll()),
-    ];
+    this.subscriptions = [this.store.onDidChange((key) => this.storeChanged(key)), panels.onDidChangePanels(() => this.followAll())];
     this.followAll();
   }
 
@@ -315,7 +312,5 @@ export function registerCommentRequests(renderer: RendererRpc, comments: Convers
   });
   renderer.handle('comments.update', ({ webviewId, id, text }) => comments.update(webviewId, id, text));
   renderer.handle('comments.remove', ({ webviewId, ids }) => comments.remove(webviewId, ids));
-  return comments.onDidChange((webviewId) =>
-    renderer.notify('comments.didChange', { webviewId, comments: comments.list(webviewId) }),
-  );
+  return comments.onDidChange((webviewId) => renderer.notify('comments.didChange', { webviewId, comments: comments.list(webviewId) }));
 }

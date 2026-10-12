@@ -92,16 +92,15 @@ export class ExtensionHost {
       return this.services?.webviews.resolveView(viewType) ?? false;
     });
 
-    const packageJson = JSON.parse(fs.readFileSync(path.join(init.extensionPath, 'package.json'), 'utf8')) as Record<
-      string,
-      unknown
-    >;
+    const packageJson = JSON.parse(fs.readFileSync(path.join(init.extensionPath, 'package.json'), 'utf8')) as Record<string, unknown>;
     const extensionId = `${String(packageJson.publisher)}.${String(packageJson.name)}`.toLowerCase();
     this.extensionId = extensionId;
     this.extensionName = typeof packageJson.displayName === 'string' ? packageJson.displayName : extensionId;
     this.openAtStart = init.openConversation;
     // Its settings' descriptions in the display language (the settings editor shows them).
-    renderer.handle('extension.contributions', () => translateContributions(readContributions(packageJson), (text) => this.compat?.uiText(text) ?? text));
+    renderer.handle('extension.contributions', () =>
+      translateContributions(readContributions(packageJson), (text) => this.compat?.uiText(text) ?? text),
+    );
 
     const compat = createCompatHost({
       init,
@@ -199,9 +198,7 @@ export class ExtensionHost {
   async showDocument(params: { uri: string; selection?: RangeDto }): Promise<boolean> {
     await this.rendererReady;
     const services = this.services;
-    return services
-      ? showDocument(services, { ...params, preserveFocus: false, preview: false }, this.logger.child('editors'))
-      : false;
+    return services ? showDocument(services, { ...params, preserveFocus: false, preview: false }, this.logger.child('editors')) : false;
   }
 
   /** A `vilaus://<extension id>/...` link, for the URI handlers the extension registered; asks the user first. */

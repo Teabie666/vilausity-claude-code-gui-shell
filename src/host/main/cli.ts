@@ -107,8 +107,7 @@ export function parseCliArgs(argv: readonly string[], cwd = process.cwd()): CliA
       version: { type: 'boolean', short: 'v' },
     },
   });
-  const str = (value: unknown): string | undefined =>
-    typeof value === 'string' && value.length > 0 ? value : undefined;
+  const str = (value: unknown): string | undefined => (typeof value === 'string' && value.length > 0 ? value : undefined);
   const resolvePath = (p: string | undefined): string | undefined => (p ? path.resolve(cwd, driveRoot(p)) : undefined);
   const positional = positionals.find((p) => !p.startsWith('-'));
   const uri = positional && /^vilaus:/i.test(positional) ? positional : undefined;

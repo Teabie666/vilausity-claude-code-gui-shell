@@ -50,11 +50,35 @@ if (!extension) {
 const MAX_LENGTH = 100;
 /** Properties whose value the UI shows as text. */
 const TEXT_PROPERTIES = new Set([
-  'children', 'title', 'placeholder', 'data-placeholder', 'label', 'description', 'tooltip', 'closeTooltip',
-  'confirmLabel', 'cancelLabel', 'emptyText', 'emptyMessage', 'message', 'text', 'header', 'heading', 'subtitle',
-  'detail', 'caption', 'hint', 'buttonText', 'actionLabel', 'submitLabel', 'primaryLabel', 'secondaryLabel',
+  'children',
+  'title',
+  'placeholder',
+  'data-placeholder',
+  'label',
+  'description',
+  'tooltip',
+  'closeTooltip',
+  'confirmLabel',
+  'cancelLabel',
+  'emptyText',
+  'emptyMessage',
+  'message',
+  'text',
+  'header',
+  'heading',
+  'subtitle',
+  'detail',
+  'caption',
+  'hint',
+  'buttonText',
+  'actionLabel',
+  'submitLabel',
+  'primaryLabel',
+  'secondaryLabel',
   // vscode.window.showInputBox / showQuickPick options
-  'placeHolder', 'prompt', 'validationMessage',
+  'placeHolder',
+  'prompt',
+  'validationMessage',
   // the extension's icon buttons show their ariaLabel as the tooltip too
   'ariaLabel',
 ]);
@@ -62,8 +86,14 @@ const TEXT_PROPERTIES = new Set([
 const ARIA_PROPERTIES = new Set(['aria-label', 'aria-description']);
 /** Calls in extension.js whose texts the shell shows. */
 const UI_CALLS = new Set([
-  'showInformationMessage', 'showWarningMessage', 'showErrorMessage', 'showQuickPick', 'showInputBox', 'createQuickPick',
-  'createInputBox', 'withProgress',
+  'showInformationMessage',
+  'showWarningMessage',
+  'showErrorMessage',
+  'showQuickPick',
+  'showInputBox',
+  'createQuickPick',
+  'createInputBox',
+  'withProgress',
 ]);
 /** Calls whose texts are logs or internal errors. */
 const LOG_CALLS = new Set(['log', 'warn', 'error', 'info', 'debug', 'trace', 'Error', 'TypeError', 'RangeError', 'logEvent', 'logError']);

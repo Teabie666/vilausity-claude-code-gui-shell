@@ -408,9 +408,7 @@ export function conversationSessionId(state: unknown): string | undefined {
     return undefined;
   }
   const sessionId = state.sessionID;
-  return typeof sessionId === 'string' && sessionId.length > 0 && state.sessionWithNoTranscript !== sessionId
-    ? sessionId
-    : undefined;
+  return typeof sessionId === 'string' && sessionId.length > 0 && state.sessionWithNoTranscript !== sessionId ? sessionId : undefined;
 }
 
 export interface BridgeOptions {
@@ -740,7 +738,11 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     }
     const inner = user.message;
     const content: unknown[] | undefined =
-      typeof inner.content === 'string' ? [{ type: 'text', text: inner.content }] : Array.isArray(inner.content) ? inner.content : undefined;
+      typeof inner.content === 'string'
+        ? [{ type: 'text', text: inner.content }]
+        : Array.isArray(inner.content)
+          ? inner.content
+          : undefined;
     if (!content) {
       this.logger.warn(`io_message content is ${describeShape(inner.content)}; comments not attached`);
       return;
@@ -782,10 +784,7 @@ function sessionIdOf(entry: unknown): string[] {
 
 function isWebviewRequest(value: Record<string, unknown>): value is Record<string, unknown> & WebviewRequest {
   return (
-    value.type === 'request' &&
-    typeof value.requestId === 'string' &&
-    isRecord(value.request) &&
-    typeof value.request.type === 'string'
+    value.type === 'request' && typeof value.requestId === 'string' && isRecord(value.request) && typeof value.request.type === 'string'
   );
 }
 

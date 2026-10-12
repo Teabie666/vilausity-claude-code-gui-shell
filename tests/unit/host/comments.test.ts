@@ -82,7 +82,10 @@ describe('CommentStore', () => {
     const store = new CommentStore();
     store.add('w1', comment('c1'));
     store.add('w1', comment('c1'));
-    assert.deepEqual(store.list('w1').map((c) => c.id), ['c1']);
+    assert.deepEqual(
+      store.list('w1').map((c) => c.id),
+      ['c1'],
+    );
   });
 
   test('update fires a change only when the text actually differs', () => {
@@ -103,7 +106,10 @@ describe('CommentStore', () => {
     const changed = track(store);
     store.remove('w1', ['c2']);
     assert.deepEqual(changed, ['w1']);
-    assert.deepEqual(store.list('w1').map((c) => c.id), ['c1']);
+    assert.deepEqual(
+      store.list('w1').map((c) => c.id),
+      ['c1'],
+    );
     store.remove('w1', ['c2']);
     assert.deepEqual(changed, ['w1']);
   });
@@ -114,7 +120,10 @@ describe('CommentStore', () => {
     const changed = track(store);
     store.set('w1', [comment('c2'), comment('c3')]);
     assert.deepEqual(changed, ['w1']);
-    assert.deepEqual(store.list('w1').map((c) => c.id), ['c2', 'c3']);
+    assert.deepEqual(
+      store.list('w1').map((c) => c.id),
+      ['c2', 'c3'],
+    );
     store.set('w1', []);
     assert.deepEqual(changed, ['w1', 'w1']);
     assert.deepEqual(store.list('w1'), []);
@@ -124,7 +133,10 @@ describe('CommentStore', () => {
     const store = new CommentStore();
     store.add('w1', comment('c1'));
     store.add('w1', comment('c2'));
-    assert.deepEqual(store.take('w1').map((c) => c.id), ['c1', 'c2']);
+    assert.deepEqual(
+      store.take('w1').map((c) => c.id),
+      ['c1', 'c2'],
+    );
     assert.deepEqual(store.list('w1'), []);
   });
 
@@ -133,7 +145,10 @@ describe('CommentStore', () => {
     store.add('w1', comment('c1'));
     const changed = track(store);
     assert.equal(store.add('w1', comment('c1'), comment('c2'), comment('c2'), comment('c3')), true);
-    assert.deepEqual(store.list('w1').map((c) => c.id), ['c1', 'c2', 'c3']);
+    assert.deepEqual(
+      store.list('w1').map((c) => c.id),
+      ['c1', 'c2', 'c3'],
+    );
     assert.deepEqual(changed, ['w1']);
     assert.equal(store.add('w1', comment('c2')), false);
     assert.equal(store.add('w1'), false);
@@ -212,18 +227,13 @@ describe('formatComments', () => {
     ];
     assert.equal(
       formatComments(comments, ['C:\\work\\proj']),
-      'Comments on selected text:\n\n' +
-        '[Re: "first line" — src/a.ts:12] use a Map\n\n' +
-        '[Re: "second" — src/b.ts:12-15] note',
+      'Comments on selected text:\n\n' + '[Re: "first line" — src/a.ts:12] use a Map\n\n' + '[Re: "second" — src/b.ts:12-15] note',
     );
   });
 
   test('cuts a quote longer than 200 characters to 200 with an ellipsis', () => {
     const c = comment('c1', { quote: 'x'.repeat(250) });
-    assert.equal(
-      formatComments([c], ['C:\\work\\proj']),
-      `Comments on selected text:\n\n[Re: "${'x'.repeat(199)}…" — c1.ts:1] note c1`,
-    );
+    assert.equal(formatComments([c], ['C:\\work\\proj']), `Comments on selected text:\n\n[Re: "${'x'.repeat(199)}…" — c1.ts:1] note c1`);
   });
 });
 
@@ -246,7 +256,10 @@ describe('ConversationComments', () => {
     const { panels, comments, writes, ids } = setup();
     panels.open('w1');
     comments.add('w1', comment('c1'));
-    assert.deepEqual(comments.unsessioned('w1').map((c) => c.id), ['c1']);
+    assert.deepEqual(
+      comments.unsessioned('w1').map((c) => c.id),
+      ['c1'],
+    );
     assert.deepEqual(writes, []);
     const changed = track(comments);
     panels.showSession('w1', 'S1');
@@ -277,7 +290,10 @@ describe('ConversationComments', () => {
     assert.deepEqual(ids('w2'), []);
     comments.add('w2', comment('c2'));
     assert.deepEqual(writes.at(-1), { S1: [comment('c1')], S2: [comment('c2')] });
-    assert.deepEqual(comments.take('w1').map((c) => c.id), ['c1']);
+    assert.deepEqual(
+      comments.take('w1').map((c) => c.id),
+      ['c1'],
+    );
     assert.deepEqual(writes.at(-1), { S2: [comment('c2')] });
   });
 
@@ -319,11 +335,17 @@ describe('ConversationComments', () => {
     // A restored panel gets its state assigned without an event.
     panels.open('w1').webview.state = 'S1';
     comments.restore('w1', [comment('c1')]);
-    assert.deepEqual(comments.list('w1').map((c) => c.id), ['c1']);
+    assert.deepEqual(
+      comments.list('w1').map((c) => c.id),
+      ['c1'],
+    );
     assert.deepEqual(comments.unsessioned('w1'), []);
     assert.deepEqual(writes.at(-1), { S1: [comment('c1')] });
     panels.open('w2');
     comments.restore('w2', [comment('c2')]);
-    assert.deepEqual(comments.unsessioned('w2').map((c) => c.id), ['c2']);
+    assert.deepEqual(
+      comments.unsessioned('w2').map((c) => c.id),
+      ['c2'],
+    );
   });
 });

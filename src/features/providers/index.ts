@@ -141,9 +141,7 @@ export const providersModule: ShellModule = {
         { title: t('switchProvider'), category: t('category') },
       ),
     );
-    subscriptions.add(
-      commands.register('providers.manage', () => openEditor(), { title: t('manage'), category: t('category') }),
-    );
+    subscriptions.add(commands.register('providers.manage', () => openEditor(), { title: t('manage'), category: t('category') }));
     subscriptions.add(
       commands.register(
         'providers.add',

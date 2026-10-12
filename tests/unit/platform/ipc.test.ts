@@ -40,7 +40,11 @@ function createTransportPair(): TransportPair {
     },
     listen(handler) {
       leftHandler = handler;
-      return { dispose: () => { leftHandler = undefined; } };
+      return {
+        dispose: () => {
+          leftHandler = undefined;
+        },
+      };
     },
   };
 
@@ -51,7 +55,11 @@ function createTransportPair(): TransportPair {
     },
     listen(handler) {
       rightHandler = handler;
-      return { dispose: () => { rightHandler = undefined; } };
+      return {
+        dispose: () => {
+          rightHandler = undefined;
+        },
+      };
     },
   };
 
@@ -138,10 +146,7 @@ describe('RpcEndpoint', () => {
     const callee = new RpcEndpoint<TestApi, TestApi>(pair.right, 'callee');
     callee.handle('add', ({ a, b }) => a + b);
 
-    assert.throws(
-      () => callee.handle('add', ({ a, b }) => a * b),
-      /registered twice/,
-    );
+    assert.throws(() => callee.handle('add', ({ a, b }) => a * b), /registered twice/);
   });
 
   test('the disposable returned by handle unregisters the handler', async () => {

@@ -27,7 +27,8 @@ export const t = defineMessages('editor', {
   fontFamily: 'Controls the font family.',
   fontSize: 'Controls the font size in pixels.',
   fontWeight: 'Controls the font weight.',
-  lineHeight: 'Controls the line height. Use 0 to compute it from the font size; values from 1 to 8 are a multiplier of the font size, larger ones are pixels.',
+  lineHeight:
+    'Controls the line height. Use 0 to compute it from the font size; values from 1 to 8 are a multiplier of the font size, larger ones are pixels.',
   fontLigatures: 'Enables font ligatures.',
   tabSize: 'The number of spaces a tab is equal to. Detect Indentation overrides it with what the file uses.',
   insertSpaces: 'Insert spaces when pressing Tab. Detect Indentation overrides it with what the file uses.',

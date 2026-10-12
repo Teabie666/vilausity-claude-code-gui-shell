@@ -60,8 +60,7 @@ export function isVersion(value: unknown): value is string {
 
 export function parseManagedExtensions(value: unknown): ManagedExtensions {
   const record = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
-  const pick = (key: keyof ManagedExtensions): { [key: string]: string } =>
-    isVersion(record[key]) ? { [key]: record[key] } : {};
+  const pick = (key: keyof ManagedExtensions): { [key: string]: string } => (isVersion(record[key]) ? { [key]: record[key] } : {});
   return {
     ...pick('current'),
     ...pick('previous'),

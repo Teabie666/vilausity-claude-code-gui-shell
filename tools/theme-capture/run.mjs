@@ -37,11 +37,7 @@ if (!existsSync(vscodium)) {
 
 rmSync(runDir, { recursive: true, force: true });
 mkdirSync(workspace, { recursive: true });
-writeFileSync(
-  path.join(extensionDir, 'capture-config.json'),
-  JSON.stringify({ workspace, out: outFile, themes: THEMES }, null, 2),
-  'utf8',
-);
+writeFileSync(path.join(extensionDir, 'capture-config.json'), JSON.stringify({ workspace, out: outFile, themes: THEMES }, null, 2), 'utf8');
 
 // A VS Code-family parent leaks ELECTRON_RUN_AS_NODE / VSCODE_* (VSCODE_PORTABLE included).
 const env = { ...process.env };

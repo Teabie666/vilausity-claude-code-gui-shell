@@ -205,7 +205,12 @@ export class TextModels {
       const to = model.getPositionAt(end);
       model.pushEditOperations(
         [],
-        [{ range: { startLineNumber: from.lineNumber, startColumn: from.column, endLineNumber: to.lineNumber, endColumn: to.column }, text: replacement }],
+        [
+          {
+            range: { startLineNumber: from.lineNumber, startColumn: from.column, endLineNumber: to.lineNumber, endColumn: to.column },
+            text: replacement,
+          },
+        ],
         () => null,
       );
     }

@@ -19,10 +19,7 @@ export class StateStore {
     private readonly logger: ILogger,
   ) {
     const loaded = readJsonFile<unknown>(filePath, {});
-    this.values =
-      loaded !== null && typeof loaded === 'object' && !Array.isArray(loaded)
-        ? (loaded as Record<string, unknown>)
-        : {};
+    this.values = loaded !== null && typeof loaded === 'object' && !Array.isArray(loaded) ? (loaded as Record<string, unknown>) : {};
   }
 
   get snapshot(): Readonly<Record<string, unknown>> {

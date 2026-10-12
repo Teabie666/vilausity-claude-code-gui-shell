@@ -10,7 +10,9 @@ describe('CancellationTokenSource', () => {
     assert.equal(token.isCancellationRequested, false);
 
     let fired = 0;
-    token.onCancellationRequested(() => { fired++; });
+    token.onCancellationRequested(() => {
+      fired++;
+    });
 
     source.cancel();
     assert.equal(token.isCancellationRequested, true);
@@ -32,7 +34,9 @@ describe('CancellationTokenSource', () => {
     const source = new CancellationTokenSource();
     const token = source.token;
     let fired = 0;
-    token.onCancellationRequested(() => { fired++; });
+    token.onCancellationRequested(() => {
+      fired++;
+    });
 
     source.dispose(true);
     assert.equal(token.isCancellationRequested, true);
@@ -44,7 +48,9 @@ describe('CancellationTokenSource', () => {
     const token = source.token;
     source.cancel();
     let fired = 0;
-    token.onCancellationRequested(() => { fired++; });
+    token.onCancellationRequested(() => {
+      fired++;
+    });
     assert.equal(fired, 0);
     await new Promise((resolve) => setTimeout(resolve, 10));
     assert.equal(fired, 1);
@@ -61,7 +67,9 @@ describe('CancellationTokenSource', () => {
 describe('CancellationToken', () => {
   test('CancellationToken.None never fires', async () => {
     let fired = false;
-    const sub = CancellationToken.None.onCancellationRequested(() => { fired = true; });
+    const sub = CancellationToken.None.onCancellationRequested(() => {
+      fired = true;
+    });
     await new Promise((resolve) => setTimeout(resolve, 10));
     assert.equal(fired, false);
     sub.dispose();
@@ -69,7 +77,9 @@ describe('CancellationToken', () => {
 
   test('CancellationToken.Cancelled fires its listener asynchronously', async () => {
     let fired = false;
-    const sub = CancellationToken.Cancelled.onCancellationRequested(() => { fired = true; });
+    const sub = CancellationToken.Cancelled.onCancellationRequested(() => {
+      fired = true;
+    });
     assert.equal(fired, false);
     await new Promise((resolve) => setTimeout(resolve, 10));
     assert.equal(fired, true);

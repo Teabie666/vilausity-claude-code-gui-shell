@@ -179,7 +179,10 @@ function writeNotices(results) {
       if (files.length === 0) {
         throw new Error(`${dir} has no license file; add its license to ThirdPartyNotices by hand`);
       }
-      const read = (name) => readFileSync(path.join(root, dir, name), 'utf8').replace(/\r\n/g, '\n').trim();
+      const read = (name) =>
+        readFileSync(path.join(root, dir, name), 'utf8')
+          .replace(/\r\n/g, '\n')
+          .trim();
       return {
         title: `${manifest.name} ${manifest.version}, license: ${manifest.license ?? 'see below'}`,
         url: manifest.homepage ?? repositoryUrl(manifest.repository),

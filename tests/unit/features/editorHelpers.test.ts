@@ -112,18 +112,29 @@ describe('editor settings as Monaco options', () => {
     const options = editorOptions(settings);
     assert.deepEqual(options.rulers, [80]);
     assert.deepEqual(options.minimap, { enabled: true, side: 'left' });
-    assert.deepEqual(['readOnly', 'fontSize', 'tabSize'].filter((name) => name in options), []);
+    assert.deepEqual(
+      ['readOnly', 'fontSize', 'tabSize'].filter((name) => name in options),
+      [],
+    );
   });
 
   test("diffEditorOptions uses Monaco's names, and its own font only when set", () => {
     const settings = fakeSettings(
-      { 'diffEditor.wordWrap': 'on', 'diffEditor.hideUnchangedRegions.enabled': true, 'diffEditor.fontSize': 0, 'diffEditor.originalEditable': true },
+      {
+        'diffEditor.wordWrap': 'on',
+        'diffEditor.hideUnchangedRegions.enabled': true,
+        'diffEditor.fontSize': 0,
+        'diffEditor.originalEditable': true,
+      },
       ['diffEditor.wordWrap', 'diffEditor.hideUnchangedRegions.enabled', 'diffEditor.fontSize'],
     );
     const options = diffEditorOptions(settings);
     assert.equal(options.diffWordWrap, 'on');
     assert.deepEqual(options.hideUnchangedRegions, { enabled: true });
-    assert.deepEqual(['wordWrap', 'fontSize', 'originalEditable'].filter((name) => name in options), []);
+    assert.deepEqual(
+      ['wordWrap', 'fontSize', 'originalEditable'].filter((name) => name in options),
+      [],
+    );
   });
 
   test("monacoOptionDefinitions reads Monaco's schemas: one setting, or a map of full keys", () => {

@@ -29,9 +29,7 @@ describe('readContributions', () => {
       { command: 'ext.rename', title: 'Ext: Rename', category: 'Ext' },
       { command: 'ext.plain', title: 'Plain', category: undefined },
     ]);
-    assert.deepEqual(result.menus['webview/context'], [
-      { command: 'ext.rename', when: "webviewId == 'panel'", group: 'navigation@1' },
-    ]);
+    assert.deepEqual(result.menus['webview/context'], [{ command: 'ext.rename', when: "webviewId == 'panel'", group: 'navigation@1' }]);
     assert.deepEqual(result.menus.commandPalette, [{ command: 'ext.rename', when: 'false', group: undefined }]);
     assert.deepEqual(result.menus.notAnArray, []);
   });

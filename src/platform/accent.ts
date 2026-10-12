@@ -72,14 +72,21 @@ export function parseColor(value: string | undefined): Rgba | undefined {
   match = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/.exec(text);
   if (match) {
     const channel = (part: string): number => Math.max(0, Math.min(255, Number(part)));
-    return { r: channel(match[1]!), g: channel(match[2]!), b: channel(match[3]!), a: match[4] ? Math.max(0, Math.min(1, Number(match[4]))) : 1 };
+    return {
+      r: channel(match[1]!),
+      g: channel(match[2]!),
+      b: channel(match[3]!),
+      a: match[4] ? Math.max(0, Math.min(1, Number(match[4]))) : 1,
+    };
   }
   return undefined;
 }
 
 export function formatColor(color: Rgba): string {
   const hex = (channel: number): string => Math.round(channel).toString(16).padStart(2, '0');
-  return color.a >= 1 ? `#${hex(color.r)}${hex(color.g)}${hex(color.b)}` : `rgba(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)}, ${Number(color.a.toFixed(3))})`;
+  return color.a >= 1
+    ? `#${hex(color.r)}${hex(color.g)}${hex(color.b)}`
+    : `rgba(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)}, ${Number(color.a.toFixed(3))})`;
 }
 
 /** WCAG relative luminance. */
@@ -268,7 +275,8 @@ export function withAccent(theme: ThemeData, accent: string | undefined): ThemeD
 
   // A fill the background can see; darker if needed, so that white text reads on it.
   const forWhite = ensureContrast(line, WHITE, 4.5);
-  const [fill, fillText] = contrast(forWhite, editor) >= 3 ? [forWhite, WHITE] : [line, contrast(BLACK, line) >= contrast(WHITE, line) ? BLACK : WHITE];
+  const [fill, fillText] =
+    contrast(forWhite, editor) >= 3 ? [forWhite, WHITE] : [line, contrast(BLACK, line) >= contrast(WHITE, line) ? BLACK : WHITE];
   const hover = luminance(fill) < 0.03 ? mix(WHITE, fill, 0.1) : mix(BLACK, fill, 0.1);
   overrides['vilaus-accent-line'] = formatColor(line);
   overrides['vilaus-accent-fill'] = formatColor(fill);

@@ -84,7 +84,10 @@ describe('KeybindingService', () => {
     keybindings.register({ key: 'ctrl+e', command: 'a' });
     assert.equal(keybindings.labelFor('a'), 'Ctrl+B');
     assert.equal(keybindings.tooltip('Toggle', 'a'), 'Toggle (Ctrl+B)');
-    keybindings.setUserEntries([{ key: 'ctrl+b', command: 'b', args: 7 }, { key: 'alt+a', command: 'a' }]);
+    keybindings.setUserEntries([
+      { key: 'ctrl+b', command: 'b', args: 7 },
+      { key: 'alt+a', command: 'a' },
+    ]);
     assert.equal(await keybindings.dispatch('ctrl+b'), true);
     assert.deepEqual(ran, ['b:7']);
     assert.equal(keybindings.labelFor('a'), 'Alt+A');

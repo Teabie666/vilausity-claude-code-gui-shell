@@ -84,12 +84,8 @@ export function createWorkspaceNamespace(deps: WorkspaceDependencies): Record<st
       const registration = fileSystem.registerContentProvider(scheme, provider);
       return new Disposable(() => registration.dispose());
     },
-    findFiles: (
-      include: vscode.GlobPattern,
-      exclude?: vscode.GlobPattern | null,
-      maxResults?: number,
-      token?: vscode.CancellationToken,
-    ) => fileSystem.findFiles(include, exclude, defaultExcludes(), maxResults, token),
+    findFiles: (include: vscode.GlobPattern, exclude?: vscode.GlobPattern | null, maxResults?: number, token?: vscode.CancellationToken) =>
+      fileSystem.findFiles(include, exclude, defaultExcludes(), maxResults, token),
     createFileSystemWatcher: () => ({
       ignoreCreateEvents: false,
       ignoreChangeEvents: false,
@@ -100,9 +96,7 @@ export function createWorkspaceNamespace(deps: WorkspaceDependencies): Record<st
       dispose: () => {},
     }),
 
-    openTextDocument: async (
-      arg?: vscode.Uri | string | { language?: string; content?: string },
-    ) => {
+    openTextDocument: async (arg?: vscode.Uri | string | { language?: string; content?: string }) => {
       if (typeof arg === 'string') {
         return documents.open(Uri.file(arg));
       }

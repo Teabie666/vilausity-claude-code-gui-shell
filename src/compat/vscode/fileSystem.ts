@@ -159,8 +159,7 @@ export class FileSystemService {
     if (!base) {
       return [];
     }
-    const excludePatterns =
-      exclude === null ? [] : exclude === undefined ? [...defaultExcludes] : [this.resolvePattern(exclude).pattern];
+    const excludePatterns = exclude === null ? [] : exclude === undefined ? [...defaultExcludes] : [this.resolvePattern(exclude).pattern];
     const limit = maxResults ?? Number.POSITIVE_INFINITY;
     const deadline = Date.now() + FIND_FILES_TIME_BUDGET_MS;
     const results: vscode.Uri[] = [];

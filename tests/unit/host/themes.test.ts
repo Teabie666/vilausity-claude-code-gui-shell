@@ -45,7 +45,11 @@ describe('withFontVariables', () => {
   });
 
   test('a code font of its own, and nonsense sizes fall back', () => {
-    const vars = withFontVariables(theme, { 'chat.editor.fontFamily': 'Consolas', 'chat.editor.fontSize': -3, 'chat.fontSize': '16' }).variables;
+    const vars = withFontVariables(theme, {
+      'chat.editor.fontFamily': 'Consolas',
+      'chat.editor.fontSize': -3,
+      'chat.fontSize': '16',
+    }).variables;
     assert.equal(vars['vilaus-chat-code-font-family'], 'Consolas');
     assert.equal(vars['vilaus-chat-code-font-size'], '13px');
     assert.equal(vars['vilaus-chat-font-size'], '14px');

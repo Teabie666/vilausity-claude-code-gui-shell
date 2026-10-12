@@ -153,7 +153,5 @@ export class ConfigurationService implements IDisposable {
 
 /** VS Code semantics: a change to `a.b` affects `a`, `a.b` and `a.b.c`. */
 export function affects(changedKeys: readonly string[], section: string): boolean {
-  return changedKeys.some(
-    (key) => key === section || key.startsWith(`${section}.`) || section.startsWith(`${key}.`),
-  );
+  return changedKeys.some((key) => key === section || key.startsWith(`${section}.`) || section.startsWith(`${key}.`));
 }

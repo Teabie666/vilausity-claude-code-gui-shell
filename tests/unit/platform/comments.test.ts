@@ -84,14 +84,8 @@ describe('isComment', () => {
   });
 
   test('rejects a range with negative or fractional positions', () => {
-    assert.equal(
-      isComment({ ...valid, range: { start: { line: -1, character: 0 }, end: { line: 1, character: 0 } } }),
-      false,
-    );
-    assert.equal(
-      isComment({ ...valid, range: { start: { line: 0, character: 0.5 }, end: { line: 1, character: 0 } } }),
-      false,
-    );
+    assert.equal(isComment({ ...valid, range: { start: { line: -1, character: 0 }, end: { line: 1, character: 0 } } }), false);
+    assert.equal(isComment({ ...valid, range: { start: { line: 0, character: 0.5 }, end: { line: 1, character: 0 } } }), false);
   });
 
   test('rejects null, arrays and strings', () => {

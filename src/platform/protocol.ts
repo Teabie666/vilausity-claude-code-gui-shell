@@ -23,11 +23,7 @@ import type { ProviderConfig, ProviderSummary } from './providers';
 
 export type StorageScope = 'global' | 'workspace';
 
-export type ThemeKind =
-  | 'vscode-dark'
-  | 'vscode-light'
-  | 'vscode-high-contrast'
-  | 'vscode-high-contrast-light';
+export type ThemeKind = 'vscode-dark' | 'vscode-light' | 'vscode-high-contrast' | 'vscode-high-contrast-light';
 
 export interface ThemeData {
   /** Stable id, e.g. `dark-modern`. */
@@ -643,12 +639,7 @@ export type ExtHostApiForRenderer = {
   'documents.show': (p: { uri: string; preserveFocus: boolean; preview: boolean; selection?: RangeDto }) => boolean;
   /** Workspace files for quick open, relative to the first folder with `/` separators. */
   'documents.listFiles': (p: { maxResults: number }) => string[];
-  'document.didChange': (p: {
-    uri: string;
-    changes: readonly TextChangeDto[];
-    isUndoing: boolean;
-    isRedoing: boolean;
-  }) => void;
+  'document.didChange': (p: { uri: string; changes: readonly TextChangeDto[]; isUndoing: boolean; isRedoing: boolean }) => void;
   'document.didChangeDirty': (p: { uri: string; isDirty: boolean }) => void;
   /** Saves the attached document (fires will-save and did-save). False when it cannot be saved. */
   'document.save': (p: { uri: string }) => boolean;

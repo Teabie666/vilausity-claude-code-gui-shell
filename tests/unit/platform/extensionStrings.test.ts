@@ -1,21 +1,12 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  ExtensionTranslator,
-  normalizeText,
-  templateKey,
-  textKey,
-  translateExtensionUi,
-} from '../../../src/platform/extensionStrings';
+import { ExtensionTranslator, normalizeText, templateKey, textKey, translateExtensionUi } from '../../../src/platform/extensionStrings';
 import type { ExtensionTranslations, TemplateTranslation } from '../../../src/platform/protocol';
 import zhCnTable from '../../../src/nls/zh-cn.extension.json';
 
 /** A table built from English, the way the tools build it (only keys reach the table). */
-function table(
-  strings: Record<string, string>,
-  templates: Record<string, TemplateTranslation> = {},
-): ExtensionTranslations {
+function table(strings: Record<string, string>, templates: Record<string, TemplateTranslation> = {}): ExtensionTranslations {
   return {
     extensionVersion: '0.0.0',
     strings: Object.fromEntries(Object.entries(strings).map(([english, text]) => [textKey(normalizeText(english)), text])),
@@ -93,10 +84,13 @@ describe('ExtensionTranslator', () => {
 
   test('the template with more text around the variable wins', () => {
     const translator = new ExtensionTranslator(
-      table({}, {
-        '{0} ago': { type: 'any', text: '{0}之前' },
-        '{0} days ago': { type: 'number', text: '{0} 天前' },
-      }),
+      table(
+        {},
+        {
+          '{0} ago': { type: 'any', text: '{0}之前' },
+          '{0} days ago': { type: 'number', text: '{0} 天前' },
+        },
+      ),
     );
     assert.equal(translator.translate('3 days ago'), '3 天前');
     assert.equal(translator.translate('a while ago'), 'a while之前');

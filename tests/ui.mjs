@@ -124,16 +124,19 @@ async function press(shortcut, target = 'main') {
   const keyCode = parts.pop();
   const modifiers = parts.map((m) => m.toLowerCase());
   const title = target === 'aux' ? undefined : windowTitle(target === 'main' ? workspace : target);
-  await app.evaluate(({ BrowserWindow }, { keyCode, modifiers, title }) => {
-    // Shell windows show ccw://app; a tab's own window is a blank page the shell fills.
-    const window = BrowserWindow.getAllWindows().find((w) =>
-      title
-        ? w.webContents.getURL().startsWith('ccw://app/') && (w.getTitle() === title || w.getTitle().endsWith(` - ${title}`))
-        : w.webContents.getURL() === 'about:blank',
-    );
-    window.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers });
-    window.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers });
-  }, { keyCode, modifiers, title });
+  await app.evaluate(
+    ({ BrowserWindow }, { keyCode, modifiers, title }) => {
+      // Shell windows show ccw://app; a tab's own window is a blank page the shell fills.
+      const window = BrowserWindow.getAllWindows().find((w) =>
+        title
+          ? w.webContents.getURL().startsWith('ccw://app/') && (w.getTitle() === title || w.getTitle().endsWith(` - ${title}`))
+          : w.webContents.getURL() === 'about:blank',
+      );
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers });
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers });
+    },
+    { keyCode, modifiers, title },
+  );
 }
 
 /**
@@ -141,10 +144,9 @@ async function press(shortcut, target = 'main') {
  * (net::ERR_UNSAFE_PORT), and the system hands those out now and then (3659 once did).
  */
 const CHROMIUM_UNSAFE_PORTS = new Set([
-  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111,
-  113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548,
-  554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566,
-  6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080,
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117,
+  119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636,
+  989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080,
 ]);
 async function listenOnSafePort(server) {
   for (;;) {
@@ -240,9 +242,7 @@ await step('the search box finds conversations by title, words and files; > list
   ]) {
     await filter.fill(query);
     await waitFor(
-      async () =>
-        (await row.count()) === 1 &&
-        (detail === undefined || (await row.locator('.quick-input-detail').innerText()) === detail),
+      async () => (await row.count()) === 1 && (detail === undefined || (await row.locator('.quick-input-detail').innerText()) === detail),
       5000,
       `the conversation found by "${query}"`,
     );
@@ -260,19 +260,27 @@ await step('the search box finds conversations by title, words and files; > list
 await step('Ctrl+F finds text in the active conversation', async () => {
   // A just-opened conversation renders its welcome content a moment later (the session list
   // may show the word first, so look in the active conversation).
-  await waitFor(async () => {
-    const handle = await page.locator('#main .panel:not([hidden]) .webview-frame').elementHandle();
-    const frame = await handle?.contentFrame();
-    return frame ? frame.evaluate(() => document.body.innerText.includes('Claude')).catch(() => false) : false;
-  }, 10_000, 'conversation content');
+  await waitFor(
+    async () => {
+      const handle = await page.locator('#main .panel:not([hidden]) .webview-frame').elementHandle();
+      const frame = await handle?.contentFrame();
+      return frame ? frame.evaluate(() => document.body.innerText.includes('Claude')).catch(() => false) : false;
+    },
+    10_000,
+    'conversation content',
+  );
   await press('Control+F');
   const input = page.locator('.find-input');
   await input.waitFor({ timeout: 5000 });
   await input.fill('Claude');
-  const count = await waitFor(async () => {
-    const text = await page.locator('.find-count').innerText();
-    return /^\d+ of \d+$/.test(text) ? text : undefined;
-  }, 5000, 'a match count');
+  const count = await waitFor(
+    async () => {
+      const text = await page.locator('.find-count').innerText();
+      return /^\d+ of \d+$/.test(text) ? text : undefined;
+    },
+    5000,
+    'a match count',
+  );
   await input.press('Enter');
   await waitFor(async () => (await page.locator('.find-count').innerText()).startsWith('2 of'), 3000, 'Enter to move to match 2');
   await input.press('Escape');
@@ -340,54 +348,72 @@ async function openContextMenu(locator) {
 /** The extension's webview/context items, as an English UI shows them (sorted by title). */
 const conversationMenu = ['Add Session Tab to Group', 'Mark Session as Unread', 'Rename Session Tab'];
 
-await step('right-click in a conversation offers the extension menu; Rename Session Tab runs', () => withRecordedMenus(async () => {
-  const labels = await openContextMenu(activeConversation());
-  if (labels.filter((label) => conversationMenu.includes(label)).join('|') !== conversationMenu.join('|')) {
-    throw new Error(`menu was: ${labels.join(' | ')}`);
-  }
+await step('right-click in a conversation offers the extension menu; Rename Session Tab runs', () =>
+  withRecordedMenus(async () => {
+    const labels = await openContextMenu(activeConversation());
+    if (labels.filter((label) => conversationMenu.includes(label)).join('|') !== conversationMenu.join('|')) {
+      throw new Error(`menu was: ${labels.join(' | ')}`);
+    }
 
-  await clickRecordedMenuItem('Rename Session Tab');
-  const outcome = await waitFor(async () => {
-    if (await page.locator('.quick-input-filter').count()) return 'input box';
-    const toast = page.locator('.toast-message');
-    return (await toast.count()) ? `message "${await toast.first().innerText()}"` : undefined;
-  }, 10_000, 'the rename command to answer');
-  if (outcome === 'input box') {
-    // The extension's validateInput refuses an empty name; the shell asks again with its message.
-    await page.locator('.quick-input-filter').fill('');
-    await page.locator('.quick-input-filter').press('Enter');
-    const message = await waitFor(async () => {
-      const validation = page.locator('.quick-input-validation');
-      return (await validation.count()) ? validation.innerText() : undefined;
-    }, 5000, 'the validation message');
+    await clickRecordedMenuItem('Rename Session Tab');
+    const outcome = await waitFor(
+      async () => {
+        if (await page.locator('.quick-input-filter').count()) return 'input box';
+        const toast = page.locator('.toast-message');
+        return (await toast.count()) ? `message "${await toast.first().innerText()}"` : undefined;
+      },
+      10_000,
+      'the rename command to answer',
+    );
+    if (outcome === 'input box') {
+      // The extension's validateInput refuses an empty name; the shell asks again with its message.
+      await page.locator('.quick-input-filter').fill('');
+      await page.locator('.quick-input-filter').press('Enter');
+      const message = await waitFor(
+        async () => {
+          const validation = page.locator('.quick-input-validation');
+          return (await validation.count()) ? validation.innerText() : undefined;
+        },
+        5000,
+        'the validation message',
+      );
+      await page.locator('.quick-input-filter').press('Escape');
+      await waitFor(async () => (await page.locator('.quick-input-filter').count()) === 0, 3000, 'the input box to close');
+      return `${labels.length} menu entries; rename asked for a name, empty refused ("${message}"), cancelled`;
+    }
+    await page.locator('.toast-close').first().click();
+    return `${labels.length} menu entries; rename answered with ${outcome}`;
+  }),
+);
+
+await step('Add Session Tab to Group from the conversation menu shows the group picker', () =>
+  withRecordedMenus(async () => {
+    await openContextMenu(activeConversation());
+    await clickRecordedMenuItem('Add Session Tab to Group');
+    const items = await waitFor(
+      async () => {
+        const rows = page.locator('.quick-input-item');
+        return (await rows.count()) ? rows.allInnerTexts() : undefined;
+      },
+      10_000,
+      'the group picker',
+    );
     await page.locator('.quick-input-filter').press('Escape');
-    await waitFor(async () => (await page.locator('.quick-input-filter').count()) === 0, 3000, 'the input box to close');
-    return `${labels.length} menu entries; rename asked for a name, empty refused ("${message}"), cancelled`;
-  }
-  await page.locator('.toast-close').first().click();
-  return `${labels.length} menu entries; rename answered with ${outcome}`;
-}));
+    await waitFor(async () => (await page.locator('.quick-input-filter').count()) === 0, 3000, 'the picker to close');
+    if (!items.some((item) => item.startsWith('New group'))) throw new Error(`picker had: ${items.join(' | ')}`);
+    return `picker: ${items.join(' | ')}`;
+  }),
+);
 
-await step('Add Session Tab to Group from the conversation menu shows the group picker', () => withRecordedMenus(async () => {
-  await openContextMenu(activeConversation());
-  await clickRecordedMenuItem('Add Session Tab to Group');
-  const items = await waitFor(async () => {
-    const rows = page.locator('.quick-input-item');
-    return (await rows.count()) ? rows.allInnerTexts() : undefined;
-  }, 10_000, 'the group picker');
-  await page.locator('.quick-input-filter').press('Escape');
-  await waitFor(async () => (await page.locator('.quick-input-filter').count()) === 0, 3000, 'the picker to close');
-  if (!items.some((item) => item.startsWith('New group'))) throw new Error(`picker had: ${items.join(' | ')}`);
-  return `picker: ${items.join(' | ')}`;
-}));
-
-await step('right-click in the session list does not offer the conversation menu', () => withRecordedMenus(async () => {
-  await rightClick(page.locator('#sidebar .webview-frame'));
-  await page.waitForTimeout(1000);
-  const labels = (await recordedMenu()) ?? [];
-  if (labels.some((label) => conversationMenu.includes(label))) throw new Error(`menu was: ${labels.join(' | ')}`);
-  return labels.length ? `menu: ${labels.join(' | ')}` : 'no menu';
-}));
+await step('right-click in the session list does not offer the conversation menu', () =>
+  withRecordedMenus(async () => {
+    await rightClick(page.locator('#sidebar .webview-frame'));
+    await page.waitForTimeout(1000);
+    const labels = (await recordedMenu()) ?? [];
+    if (labels.some((label) => conversationMenu.includes(label))) throw new Error(`menu was: ${labels.join(' | ')}`);
+    return labels.length ? `menu: ${labels.join(' | ')}` : 'no menu';
+  }),
+);
 
 // ---- content pane and editor ------------------------------------------------------------
 
@@ -410,24 +436,32 @@ await step('Ctrl+P opens a file in the content pane, highlighted', async () => {
   await waitFor(async () => (await contentTabs().count()) === 1, 15_000, 'a content tab');
   await waitFor(async () => (await editorText()).includes('answer'), 15_000, 'the file text in Monaco');
   // Tokens get colors once the grammar has loaded.
-  const colors = await waitFor(async () => {
-    const found = await page.evaluate(() => {
-      const spans = document.querySelectorAll('#content-pane .view-line span span');
-      return [...new Set([...spans].map((span) => getComputedStyle(span).color))];
-    });
-    return found.length >= 3 ? found : undefined;
-  }, 15_000, 'syntax colors');
+  const colors = await waitFor(
+    async () => {
+      const found = await page.evaluate(() => {
+        const spans = document.querySelectorAll('#content-pane .view-line span span');
+        return [...new Set([...spans].map((span) => getComputedStyle(span).color))];
+      });
+      return found.length >= 3 ? found : undefined;
+    },
+    15_000,
+    'syntax colors',
+  );
   await page.screenshot({ path: path.join(runDir, 'editor.png') });
   return `${colors.length} token colors`;
 });
 
 await step('the conversation sees the open file (selection sync)', async () => {
-  const seen = await waitFor(async () => {
-    for (const frame of webviewFrames()) {
-      if (await frame.evaluate(() => document.body.innerText.includes('sample.ts')).catch(() => false)) return true;
-    }
-    return false;
-  }, 10_000, 'sample.ts in the chat');
+  const seen = await waitFor(
+    async () => {
+      for (const frame of webviewFrames()) {
+        if (await frame.evaluate(() => document.body.innerText.includes('sample.ts')).catch(() => false)) return true;
+      }
+      return false;
+    },
+    10_000,
+    'sample.ts in the chat',
+  );
   return seen ? 'chat mentions sample.ts' : '';
 });
 
@@ -500,7 +534,11 @@ await step('a Markdown file opens as a preview, with highlighted code and a loca
   await page.locator('.quick-input-filter').press('Enter');
   const heading = page.locator('#content-pane .markdown-preview:not([hidden]) h1');
   await waitFor(async () => (await heading.count()) === 1 && (await heading.innerText()) === 'Plan notes', 10_000, 'the rendered heading');
-  await waitFor(async () => (await page.locator('#content-pane .markdown-preview pre.shiki').count()) === 1, 10_000, 'a highlighted code block');
+  await waitFor(
+    async () => (await page.locator('#content-pane .markdown-preview pre.shiki').count()) === 1,
+    10_000,
+    'a highlighted code block',
+  );
   await waitFor(
     () => page.locator('#content-pane .markdown-preview img').evaluate((img) => img.complete && img.naturalWidth > 0),
     5000,
@@ -599,8 +637,16 @@ await step('a comment block edits in place, shows its text in the editor, and de
 
   // The older block points into sample.ts, a tab behind notes.md.
   await blocks.last().locator('[data-action="reveal"]').click();
-  await waitFor(async () => (await page.locator('#content-pane .content-tab.active .tab-label').innerText()) === 'sample.ts', 5000, 'sample.ts to come forward');
-  await waitFor(async () => (await page.locator('#content-pane .content-editor:not([hidden]) .selected-text').count()) > 0, 5000, 'the commented text selected');
+  await waitFor(
+    async () => (await page.locator('#content-pane .content-tab.active .tab-label').innerText()) === 'sample.ts',
+    5000,
+    'sample.ts to come forward',
+  );
+  await waitFor(
+    async () => (await page.locator('#content-pane .content-editor:not([hidden]) .selected-text').count()) > 0,
+    5000,
+    'the commented text selected',
+  );
 
   await blocks.first().hover();
   await blocks.first().locator('[data-action="remove"]').click();
@@ -685,12 +731,22 @@ await step('a tab moves into its own window, edits and saves there, and moves ba
   await page.locator('#content-pane .icon-pop-out').click();
   const aux = await opened;
   const auxText = async () => (await aux.locator('.aux-body .view-lines').innerText()).replace(/ /g, ' ');
-  await waitFor(async () => (await aux.locator('.aux-body .view-lines').count()) > 0 && (await auxText()).includes('answer'), 10_000, 'the editor in the new window');
+  await waitFor(
+    async () => (await aux.locator('.aux-body .view-lines').count()) > 0 && (await auxText()).includes('answer'),
+    10_000,
+    'the editor in the new window',
+  );
   // Monaco's generated styles (token colors) must reach the new window.
-  const colors = await waitFor(async () => {
-    const count = await aux.evaluate(() => new Set([...document.querySelectorAll('.view-line span span')].map((s) => getComputedStyle(s).color)).size);
-    return count >= 3 ? count : undefined;
-  }, 10_000, 'syntax colors in the new window');
+  const colors = await waitFor(
+    async () => {
+      const count = await aux.evaluate(
+        () => new Set([...document.querySelectorAll('.view-line span span')].map((s) => getComputedStyle(s).color)).size,
+      );
+      return count >= 3 ? count : undefined;
+    },
+    10_000,
+    'syntax colors in the new window',
+  );
   if ((await contentTabs().count()) !== 0) throw new Error('the tab stayed in the pane');
   await aux.screenshot({ path: path.join(runDir, 'aux-window.png') });
 
@@ -716,7 +772,11 @@ await step("closing a tab's own window closes the tab", async () => {
   await aux.locator('.aux-body .monaco-editor').waitFor({ timeout: 10_000 });
   const closed = aux.waitForEvent('close');
   // Like the window's close button: the page may object (unsaved changes), then closes itself.
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.webContents.getURL() === 'about:blank')?.close());
+  await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()
+      .find((w) => w.webContents.getURL() === 'about:blank')
+      ?.close(),
+  );
   await closed;
   await waitFor(async () => (await contentTabs().count()) === 0, 5000, 'the tab to be gone');
 });
@@ -784,11 +844,15 @@ await step('Ctrl+, opens the settings panel; Editor: Font Size applies to the ed
   await page.locator('.quick-input-filter').fill('sample.ts');
   await waitFor(async () => (await page.locator('.quick-input-item').count()) > 0, 10_000, 'sample.ts in the list');
   await page.locator('.quick-input-filter').press('Enter');
-  const fontSize = await waitFor(async () => {
-    const lines = page.locator('#content-pane .content-editor:not([hidden]) .view-lines');
-    const size = (await lines.count()) ? await lines.evaluate((element) => getComputedStyle(element).fontSize) : '';
-    return size === '20px' ? size : undefined;
-  }, 10_000, 'the editor at 20px');
+  const fontSize = await waitFor(
+    async () => {
+      const lines = page.locator('#content-pane .content-editor:not([hidden]) .view-lines');
+      const size = (await lines.count()) ? await lines.evaluate((element) => getComputedStyle(element).fontSize) : '';
+      return size === '20px' ? size : undefined;
+    },
+    10_000,
+    'the editor at 20px',
+  );
 
   // The settings panel stayed open over the editor.
   await settingRow('editor.fontSize').hover();
@@ -804,7 +868,11 @@ await step('settings.json opens in the editor beside the default settings, valid
   await press('Control+,');
   await page.locator('.settings-dialog .settings-open-json').click();
   await waitFor(async () => (await page.locator('.settings-dialog').count()) === 0, 5000, 'the settings panel to step aside');
-  await waitFor(async () => (await page.locator('#content-pane .content-tab.active .tab-label').innerText()) === 'settings.json', 10_000, 'the settings.json tab');
+  await waitFor(
+    async () => (await page.locator('#content-pane .content-tab.active .tab-label').innerText()) === 'settings.json',
+    10_000,
+    'the settings.json tab',
+  );
   // The JSON language service runs in its worker; its warning shows as a squiggle.
   await waitFor(
     async () => (await page.locator('#content-pane .content-editor:not([hidden]) :is(.squiggly-warning, .squiggly-error)').count()) > 0,
@@ -814,7 +882,11 @@ await step('settings.json opens in the editor beside the default settings, valid
   // Beside the defaults, read only, as VS Code can show it; they hide and show again.
   const shown = (selector) => page.locator(`#content-pane .content-editor:not([hidden]) ${selector}`);
   await waitFor(async () => (await shown('.defaults-split-header').count()) === 2, 10_000, 'settings.json beside the defaults');
-  await waitFor(async () => (await shown('.defaults-split-side .view-lines').innerText()).includes('{'), 15_000, 'the defaults on the left');
+  await waitFor(
+    async () => (await shown('.defaults-split-side .view-lines').innerText()).includes('{'),
+    15_000,
+    'the defaults on the left',
+  );
   // The content pane is widened for the two columns, and back to its own width without them.
   const paneWidth = () => page.locator('#content-pane').evaluate((element) => element.getBoundingClientRect().width);
   const wide = await paneWidth();
@@ -849,22 +921,32 @@ await step('Diff Editor: Font Size applies to diffs only', async () => {
   await page.locator('.quick-input-filter').fill('>Compare Active File with Saved');
   await waitFor(async () => (await page.locator('.quick-input-item').count()) === 1, 5000, 'the command');
   await page.locator('.quick-input-filter').press('Enter');
-  const diffSize = await waitFor(async () => {
-    const lines = page.locator('#content-pane .content-editor:not([hidden]) .monaco-diff-editor .view-lines');
-    const size = (await lines.count()) ? await lines.first().evaluate((element) => getComputedStyle(element).fontSize) : '';
-    return size === '18px' ? size : undefined;
-  }, 10_000, 'the diff at 18px');
+  const diffSize = await waitFor(
+    async () => {
+      const lines = page.locator('#content-pane .content-editor:not([hidden]) .monaco-diff-editor .view-lines');
+      const size = (await lines.count()) ? await lines.first().evaluate((element) => getComputedStyle(element).fontSize) : '';
+      return size === '18px' ? size : undefined;
+    },
+    10_000,
+    'the diff at 18px',
+  );
   // Back on the file: the editor keeps the editor font size.
   await press('Control+W');
   await waitFor(async () => (await contentTabs().count()) === 1, 5000, 'the diff tab to close');
-  const editorSize = await page.locator('#content-pane .content-editor:not([hidden]) .view-lines').evaluate((element) => getComputedStyle(element).fontSize);
+  const editorSize = await page
+    .locator('#content-pane .content-editor:not([hidden]) .view-lines')
+    .evaluate((element) => getComputedStyle(element).fontSize);
   if (editorSize === '18px') throw new Error('the editor took the diff font size');
   await page.locator('#content-pane .monaco-editor .view-lines').click();
   // Typing and Enter are separate undo steps.
-  await waitFor(async () => {
-    await page.keyboard.press('Control+Z');
-    return (await page.locator('#content-pane .content-tab.dirty').count()) === 0;
-  }, 5000, 'the file clean again');
+  await waitFor(
+    async () => {
+      await page.keyboard.press('Control+Z');
+      return (await page.locator('#content-pane .content-tab.dirty').count()) === 0;
+    },
+    5000,
+    'the file clean again',
+  );
   await press('Control+W');
   await waitFor(async () => (await contentTabs().count()) === 0, 5000, 'the tab to close');
   const { 'diffEditor.fontSize': _removed, ...rest } = readSettings();
@@ -875,7 +957,10 @@ await step('Diff Editor: Font Size applies to diffs only', async () => {
 await step("File Explorer's context menu: the switch in the settings adds the entries and removes them", async () => {
   const registered = () => {
     try {
-      execFileSync(reg, ['query', `${env.VILAUS_REGISTRY_ROOT}\\Directory\\shell\\Vilausity\\command`, '/ve'], { stdio: 'ignore', windowsHide: true });
+      execFileSync(reg, ['query', `${env.VILAUS_REGISTRY_ROOT}\\Directory\\shell\\Vilausity\\command`, '/ve'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
       return true;
     } catch {
       return false;
@@ -897,107 +982,129 @@ await step("File Explorer's context menu: the switch in the settings adds the en
   await page.keyboard.press('Escape');
   await waitFor(async () => (await page.locator('.settings-dialog').count()) === 0, 5000, 'the settings panel to close');
   // The installer's switches do the same and quit, with an instance running or not.
-  const cli = (flag) => execFileSync(executable, appArgs('--user-data-dir', dataDir, flag), { cwd: root, env, stdio: 'ignore', timeout: 60_000 });
+  const cli = (flag) =>
+    execFileSync(executable, appArgs('--user-data-dir', dataDir, flag), { cwd: root, env, stdio: 'ignore', timeout: 60_000 });
   cli('--register-context-menu');
   if (!registered()) throw new Error('--register-context-menu added nothing');
   cli('--unregister-context-menu');
   if (registered()) throw new Error('--unregister-context-menu left the entries');
 });
 
-await step('keyboard shortcuts: recorded keys replace the default in keybindings.json and work; reset brings it back; the file edited by hand shows', async () => {
-  const keybindingsFile = path.join(dataDir, 'keybindings.json');
-  const search = page.locator('.settings-dialog .settings-search');
-  const row = page.locator('.settings-dialog .keybinding-row[data-command="sessions.toggleSidebar"]');
-  const closeSettings = async () => {
-    await search.fill('');
-    await page.keyboard.press('Escape');
-    await waitFor(async () => (await page.locator('.settings-dialog').count()) === 0, 5000, 'the settings panel to close');
-  };
-  await press('Control+,');
-  await page.locator('.settings-dialog .settings-editor').waitFor({ timeout: 10_000 });
-  // The settings search finds the table's rows.
-  await search.fill('toggle session list');
-  await row.waitFor({ timeout: 5000 });
-  if (await page.locator('.settings-dialog .keybinding-row[data-command="window.zoomIn"]').first().isVisible()) throw new Error('the search did not filter the table');
-  await row.dblclick();
-  const recorder = page.locator('.keybinding-recorder');
-  await recorder.waitFor({ timeout: 5000 });
-  // Main lets the keys through to the recorder (Ctrl+Shift+P would open the palette), which names what has them.
-  await press('Control+Shift+P');
-  await waitFor(async () => (await recorder.innerText()).includes('Also bound to: Show All Commands'), 5000, 'the conflict');
-  await press('Control+Alt+B');
-  await press('Enter');
-  const written = () => (existsSync(keybindingsFile) ? readFileSync(keybindingsFile, 'utf8') : '');
-  await waitFor(() => written().includes('"ctrl+alt+b"') && written().includes('"-sessions.toggleSidebar"'), 5000, 'keybindings.json');
-  await waitFor(async () => (await row.locator('.keybinding-source-text').innerText()) === 'User', 5000, 'the row from keybindings.json');
-  await closeSettings();
-  await press('Control+B');
-  await page.waitForTimeout(300);
-  if (await page.locator('#sidebar').isHidden()) throw new Error('Ctrl+B still toggles the session list');
-  await press('Control+Alt+B');
-  await waitFor(() => page.locator('#sidebar').isHidden(), 5000, 'Ctrl+Alt+B to hide the session list');
-  await press('Control+Alt+B');
-  await waitFor(() => page.locator('#sidebar').isVisible(), 5000, 'the session list back');
+await step(
+  'keyboard shortcuts: recorded keys replace the default in keybindings.json and work; reset brings it back; the file edited by hand shows',
+  async () => {
+    const keybindingsFile = path.join(dataDir, 'keybindings.json');
+    const search = page.locator('.settings-dialog .settings-search');
+    const row = page.locator('.settings-dialog .keybinding-row[data-command="sessions.toggleSidebar"]');
+    const closeSettings = async () => {
+      await search.fill('');
+      await page.keyboard.press('Escape');
+      await waitFor(async () => (await page.locator('.settings-dialog').count()) === 0, 5000, 'the settings panel to close');
+    };
+    await press('Control+,');
+    await page.locator('.settings-dialog .settings-editor').waitFor({ timeout: 10_000 });
+    // The settings search finds the table's rows.
+    await search.fill('toggle session list');
+    await row.waitFor({ timeout: 5000 });
+    if (await page.locator('.settings-dialog .keybinding-row[data-command="window.zoomIn"]').first().isVisible())
+      throw new Error('the search did not filter the table');
+    await row.dblclick();
+    const recorder = page.locator('.keybinding-recorder');
+    await recorder.waitFor({ timeout: 5000 });
+    // Main lets the keys through to the recorder (Ctrl+Shift+P would open the palette), which names what has them.
+    await press('Control+Shift+P');
+    await waitFor(async () => (await recorder.innerText()).includes('Also bound to: Show All Commands'), 5000, 'the conflict');
+    await press('Control+Alt+B');
+    await press('Enter');
+    const written = () => (existsSync(keybindingsFile) ? readFileSync(keybindingsFile, 'utf8') : '');
+    await waitFor(() => written().includes('"ctrl+alt+b"') && written().includes('"-sessions.toggleSidebar"'), 5000, 'keybindings.json');
+    await waitFor(async () => (await row.locator('.keybinding-source-text').innerText()) === 'User', 5000, 'the row from keybindings.json');
+    await closeSettings();
+    await press('Control+B');
+    await page.waitForTimeout(300);
+    if (await page.locator('#sidebar').isHidden()) throw new Error('Ctrl+B still toggles the session list');
+    await press('Control+Alt+B');
+    await waitFor(() => page.locator('#sidebar').isHidden(), 5000, 'Ctrl+Alt+B to hide the session list');
+    await press('Control+Alt+B');
+    await waitFor(() => page.locator('#sidebar').isVisible(), 5000, 'the session list back');
 
-  // Reset: both entries go, the default is back.
-  await press('Control+,');
-  await search.fill('toggle session list');
-  await row.hover();
-  await row.locator('.icon-discard').click();
-  await waitFor(() => !written().includes('sessions.toggleSidebar'), 5000, 'the entries to go');
-  await waitFor(async () => (await row.locator('.keybinding-source-text').innerText()) === 'Default', 5000, 'the default row');
-  // By hand: a command that had no keybinding gets one.
-  writeFileSync(keybindingsFile, '// by hand\n[{ "key": "ctrl+alt+j", "command": "settings.openJson" }]\n');
-  await search.fill('settings json');
-  const added = page.locator('.settings-dialog .keybinding-row[data-command="settings.openJson"]');
-  await waitFor(async () => (await added.locator('.keybinding-key').innerText()).replace(/\s/g, '') === 'Ctrl+Alt+J', 5000, 'the keybinding written by hand');
-  writeFileSync(keybindingsFile, '[]\n');
-  await waitFor(async () => (await added.locator('.keybinding-key').innerText()).trim() === '', 5000, 'the keybinding gone again');
-  await closeSettings();
-  await press('Control+B');
-  await waitFor(() => page.locator('#sidebar').isHidden(), 5000, 'Ctrl+B to toggle again');
-  await press('Control+B');
-  await waitFor(() => page.locator('#sidebar').isVisible(), 5000, 'the session list back');
-});
+    // Reset: both entries go, the default is back.
+    await press('Control+,');
+    await search.fill('toggle session list');
+    await row.hover();
+    await row.locator('.icon-discard').click();
+    await waitFor(() => !written().includes('sessions.toggleSidebar'), 5000, 'the entries to go');
+    await waitFor(async () => (await row.locator('.keybinding-source-text').innerText()) === 'Default', 5000, 'the default row');
+    // By hand: a command that had no keybinding gets one.
+    writeFileSync(keybindingsFile, '// by hand\n[{ "key": "ctrl+alt+j", "command": "settings.openJson" }]\n');
+    await search.fill('settings json');
+    const added = page.locator('.settings-dialog .keybinding-row[data-command="settings.openJson"]');
+    await waitFor(
+      async () => (await added.locator('.keybinding-key').innerText()).replace(/\s/g, '') === 'Ctrl+Alt+J',
+      5000,
+      'the keybinding written by hand',
+    );
+    writeFileSync(keybindingsFile, '[]\n');
+    await waitFor(async () => (await added.locator('.keybinding-key').innerText()).trim() === '', 5000, 'the keybinding gone again');
+    await closeSettings();
+    await press('Control+B');
+    await waitFor(() => page.locator('#sidebar').isHidden(), 5000, 'Ctrl+B to toggle again');
+    await press('Control+B');
+    await waitFor(() => page.locator('#sidebar').isVisible(), 5000, 'the session list back');
+  },
+);
 
-await step('fonts: the UI, the conversation and its code each have their own; the bundled Noto Sans SC loads in webviews; chat.fontSize applies at once', async () => {
-  const chat = await waitFor(async () => {
-    for (const frame of webviewFrames()) {
-      if ((await frame.locator('[role="textbox"][aria-label="Message input"]').count().catch(() => 0)) > 0) return frame;
-    }
-    return undefined;
-  }, 10_000, 'a conversation page');
-  const fonts = () =>
-    chat.evaluate(async () => {
-      const input = getComputedStyle(document.querySelector('[role="textbox"][aria-label="Message input"]'));
-      const button = getComputedStyle(document.querySelector('form button'));
-      const root = getComputedStyle(document.documentElement);
-      // Loading it goes through the page's CSP (font-src) and the font file's CORS headers.
-      const loaded = await document.fonts.load(`${input.fontSize} "Noto Sans SC"`, '中文');
-      return {
-        input: input.fontFamily,
-        inputSize: input.fontSize,
-        button: button.fontFamily,
-        code: root.getPropertyValue('--vscode-editor-font-family').trim(),
-        noto: loaded.filter((face) => face.status === 'loaded').length,
-      };
-    });
-  const before = await fonts();
-  if (!before.input.includes('"Noto Sans SC"')) throw new Error(`message input font: ${before.input}`);
-  if (before.inputSize !== '14px') throw new Error(`message input size: ${before.inputSize}`);
-  if (!before.button.includes('"Microsoft YaHei UI"') || before.button.includes('Noto')) throw new Error(`button font: ${before.button}`);
-  if (!before.code.startsWith('Consolas')) throw new Error(`code font: ${before.code}`);
-  if (before.noto === 0) throw new Error('Noto Sans SC did not load in the conversation page');
-  const shellNoto = await page.evaluate(async () => (await document.fonts.load('14px "Noto Sans SC"', '中文')).length);
-  if (shellNoto === 0) throw new Error('Noto Sans SC did not load in the shell');
+await step(
+  'fonts: the UI, the conversation and its code each have their own; the bundled Noto Sans SC loads in webviews; chat.fontSize applies at once',
+  async () => {
+    const chat = await waitFor(
+      async () => {
+        for (const frame of webviewFrames()) {
+          if (
+            (await frame
+              .locator('[role="textbox"][aria-label="Message input"]')
+              .count()
+              .catch(() => 0)) > 0
+          )
+            return frame;
+        }
+        return undefined;
+      },
+      10_000,
+      'a conversation page',
+    );
+    const fonts = () =>
+      chat.evaluate(async () => {
+        const input = getComputedStyle(document.querySelector('[role="textbox"][aria-label="Message input"]'));
+        const button = getComputedStyle(document.querySelector('form button'));
+        const root = getComputedStyle(document.documentElement);
+        // Loading it goes through the page's CSP (font-src) and the font file's CORS headers.
+        const loaded = await document.fonts.load(`${input.fontSize} "Noto Sans SC"`, '中文');
+        return {
+          input: input.fontFamily,
+          inputSize: input.fontSize,
+          button: button.fontFamily,
+          code: root.getPropertyValue('--vscode-editor-font-family').trim(),
+          noto: loaded.filter((face) => face.status === 'loaded').length,
+        };
+      });
+    const before = await fonts();
+    if (!before.input.includes('"Noto Sans SC"')) throw new Error(`message input font: ${before.input}`);
+    if (before.inputSize !== '14px') throw new Error(`message input size: ${before.inputSize}`);
+    if (!before.button.includes('"Microsoft YaHei UI"') || before.button.includes('Noto')) throw new Error(`button font: ${before.button}`);
+    if (!before.code.startsWith('Consolas')) throw new Error(`code font: ${before.code}`);
+    if (before.noto === 0) throw new Error('Noto Sans SC did not load in the conversation page');
+    const shellNoto = await page.evaluate(async () => (await document.fonts.load('14px "Noto Sans SC"', '中文')).length);
+    if (shellNoto === 0) throw new Error('Noto Sans SC did not load in the shell');
 
-  writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'chat.fontSize': 18 }, null, 2), 'utf8');
-  await waitFor(async () => (await fonts()).inputSize === '18px', 10_000, 'the conversation at 18px');
-  const { 'chat.fontSize': _removed, ...rest } = readSettings();
-  writeFileSync(settingsFile, JSON.stringify(rest, null, 2), 'utf8');
-  await waitFor(async () => (await fonts()).inputSize === '14px', 10_000, 'the conversation back at 14px');
-  return `input ${before.inputSize}, ${before.noto} Noto Sans SC slice(s) loaded`;
-});
+    writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'chat.fontSize': 18 }, null, 2), 'utf8');
+    await waitFor(async () => (await fonts()).inputSize === '18px', 10_000, 'the conversation at 18px');
+    const { 'chat.fontSize': _removed, ...rest } = readSettings();
+    writeFileSync(settingsFile, JSON.stringify(rest, null, 2), 'utf8');
+    await waitFor(async () => (await fonts()).inputSize === '14px', 10_000, 'the conversation back at 14px');
+    return `input ${before.inputSize}, ${before.noto} Noto Sans SC slice(s) loaded`;
+  },
+);
 
 await step('settings.json reaches every Monaco option; Default Settings (JSON) lists them all', async () => {
   // Not in the settings editor, only in settings.json.
@@ -1006,11 +1113,19 @@ await step('settings.json reaches every Monaco option; Default Settings (JSON) l
   await page.locator('.quick-input-filter').fill('sample.ts');
   await waitFor(async () => (await page.locator('.quick-input-item').count()) > 0, 10_000, 'sample.ts in the list');
   await page.locator('.quick-input-filter').press('Enter');
-  await waitFor(async () => (await page.locator('#content-pane .content-editor:not([hidden]) .view-ruler').count()) === 1, 10_000, 'the ruler');
+  await waitFor(
+    async () => (await page.locator('#content-pane .content-editor:not([hidden]) .view-ruler').count()) === 1,
+    10_000,
+    'the ruler',
+  );
 
   await press('Control+,');
   await page.locator('.settings-dialog .settings-open-defaults').click();
-  await waitFor(async () => (await page.locator('#content-pane .content-tab.active .tab-label').innerText()) === 'Default Settings', 10_000, 'the Default Settings tab');
+  await waitFor(
+    async () => (await page.locator('#content-pane .content-tab.active .tab-label').innerText()) === 'Default Settings',
+    10_000,
+    'the Default Settings tab',
+  );
   await waitFor(async () => (await editorText()).includes('Every setting with its default value'), 10_000, 'the default settings text');
   await page.screenshot({ path: path.join(runDir, 'default-settings.png') });
   // Monaco renders only the visible lines of the long view: find an option only Monaco declares.
@@ -1026,11 +1141,19 @@ await step('settings.json reaches every Monaco option; Default Settings (JSON) l
   await page.locator('#content-pane .icon-pop-out').click();
   const aux = await opened;
   const auxLines = aux.locator('.aux-body .view-lines');
-  await waitFor(async () => (await auxLines.count()) > 0 && (await auxLines.innerText()).includes('"editor.rulers"'), 10_000, 'the defaults in the new window, scrolled');
+  await waitFor(
+    async () => (await auxLines.count()) > 0 && (await auxLines.innerText()).includes('"editor.rulers"'),
+    10_000,
+    'the defaults in the new window, scrolled',
+  );
   const closed = aux.waitForEvent('close');
   await aux.locator('.icon-move-back').click();
   await closed;
-  await waitFor(async () => (await page.locator('#content-pane .content-tab.active .tab-label').innerText()) === 'Default Settings', 5000, 'the tab back in the pane');
+  await waitFor(
+    async () => (await page.locator('#content-pane .content-tab.active .tab-label').innerText()) === 'Default Settings',
+    5000,
+    'the tab back in the pane',
+  );
 
   const { 'editor.rulers': _removed, ...rest } = readSettings();
   writeFileSync(settingsFile, JSON.stringify(rest, null, 2), 'utf8');
@@ -1163,7 +1286,11 @@ await step('--prompt from a second start opens a conversation; a vilaus:// link 
   await waitFor(async () => (await tabCount()) === before + 1, 30_000, 'a conversation for the prompt');
   const frame = await waitFor(conversationFrame, 10_000, 'the new conversation');
   const input = frame.locator('[role="textbox"][aria-label="Message input"]');
-  await waitFor(async () => (await input.innerText().catch(() => '')).includes('hello from the command line'), 20_000, 'the prompt in its input');
+  await waitFor(
+    async () => (await input.innerText().catch(() => '')).includes('hello from the command line'),
+    20_000,
+    'the prompt in its input',
+  );
 
   await startAgain('vilaus://anthropic.claude-code/open?prompt=from%20a%20link');
   const open = page.locator('.modal .button', { hasText: /^Open$/ });
@@ -1251,114 +1378,132 @@ const reloaded = async (start) => {
 };
 const reloadWindow = () => reloaded(() => page.evaluate(() => window.vilausNative.invoke('window.reload')));
 
-await step('an API provider: the title bar switches to it, the window takes its accent (the logo and the window icon too), and new Claude processes send its key and model', async () => {
-  const mock = await startMockApi();
-  const accent = (target) =>
-    target.evaluate(() => {
-      const style = getComputedStyle(document.documentElement);
-      return { line: style.getPropertyValue('--vilaus-accent').trim(), focus: style.getPropertyValue('--vscode-focusBorder').trim() };
-    });
-  // The title bar's logo, as drawn.
-  const logo = () => page.evaluate(() => getComputedStyle(document.querySelector('.titlebar-logo svg')).fill);
-  // The window icons main drew in other colors than the app's.
-  const iconFiles = () => (existsSync(path.join(dataDir, 'icons')) ? readdirSync(path.join(dataDir, 'icons')) : []);
-  // The subscription: Claude's orange; the logo in its own.
-  const claude = await accent(page);
-  if (claude.line !== '#d97757' || claude.focus !== '#d97757') throw new Error(`subscription accent: ${JSON.stringify(claude)}`);
-  if ((await logo()) !== 'rgb(255, 123, 28)') throw new Error(`subscription logo: ${await logo()}`);
-  // The setting: a color of one's own, VS Code's own (no line), back to the provider's.
-  writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.accent': 'custom', 'vilaus.accent.custom': '#00aa00' }, null, 2), 'utf8');
-  await waitFor(async () => (await accent(page)).focus === '#00aa00', 5000, 'the custom accent');
-  if ((await logo()) !== 'rgb(0, 170, 0)') throw new Error(`custom logo: ${await logo()}`);
-  if (!iconFiles().some((name) => /^logo-[0-9a-f]{6}-[0-9a-f]{8}\.ico$/.test(name))) throw new Error(`no window icon drawn: ${iconFiles().join(", ")}`);
-  writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.accent': 'vscode' }, null, 2), 'utf8');
-  await waitFor(async () => (await accent(page)).line === 'transparent', 5000, "VS Code's own colors");
-  if ((await accent(page)).focus !== '#0078d4') throw new Error(`VS Code's focus border: ${(await accent(page)).focus}`);
-  if ((await logo()) !== 'rgb(255, 123, 28)') throw new Error(`logo without an accent: ${await logo()}`);
-  const { 'vilaus.accent': _source, 'vilaus.accent.custom': _custom, ...ownSettings } = readSettings();
-  writeFileSync(settingsFile, JSON.stringify(ownSettings, null, 2), 'utf8');
-  await waitFor(async () => (await accent(page)).line === '#d97757', 5000, "the provider's accent again");
-  try {
-    await page.evaluate(async (port) => {
-      await window.vilausNative.invoke('providers.save', {
-        provider: {
-          id: 'mock',
-          name: 'Mock API',
-          type: 'compatible',
-          baseUrl: `http://127.0.0.1:${port}`,
-          auth: 'bearer',
-          models: { main: 'mock-model', haiku: 'mock-haiku' },
-          color: '#ff0000',
-        },
+await step(
+  'an API provider: the title bar switches to it, the window takes its accent (the logo and the window icon too), and new Claude processes send its key and model',
+  async () => {
+    const mock = await startMockApi();
+    const accent = (target) =>
+      target.evaluate(() => {
+        const style = getComputedStyle(document.documentElement);
+        return { line: style.getPropertyValue('--vilaus-accent').trim(), focus: style.getPropertyValue('--vscode-focusBorder').trim() };
       });
-      await window.vilausNative.invoke('providers.setKey', { id: 'mock', key: 'test-key-123' });
-    }, mock.port);
-    if (readFileSync(path.join(dataDir, 'providers.json'), 'utf8').includes('test-key-123')) {
-      throw new Error('providers.json holds the key in clear');
-    }
-
-    await page.locator('.titlebar-provider').click();
-    const filter = page.locator('.quick-input-filter');
-    await filter.waitFor({ timeout: 5000 });
-    await filter.fill('Mock API');
-    await filter.press('Enter');
-    await waitFor(async () => (await page.locator('.titlebar-provider-label').innerText()) === 'Mock API', 5000, 'the provider in the title bar');
-    await waitFor(async () => (await accent(page)).line === '#ff0000', 5000, "the provider's accent line");
-    if ((await accent(page)).focus !== '#ff0000') throw new Error(`focus border: ${(await accent(page)).focus}`);
-    if ((await logo()) !== 'rgb(255, 0, 0)') throw new Error(`the provider's logo: ${await logo()}`);
-    if (!iconFiles().some((name) => name.startsWith('logo-ff0000-'))) throw new Error(`no red window icon: ${iconFiles().join(", ")}`);
-    // The window's webviews take it too.
-    await waitFor(async () => {
-      for (const frame of webviewFrames()) {
-        if ((await accent(frame).catch(() => undefined))?.focus === '#ff0000') return true;
+    // The title bar's logo, as drawn.
+    const logo = () => page.evaluate(() => getComputedStyle(document.querySelector('.titlebar-logo svg')).fill);
+    // The window icons main drew in other colors than the app's.
+    const iconFiles = () => (existsSync(path.join(dataDir, 'icons')) ? readdirSync(path.join(dataDir, 'icons')) : []);
+    // The subscription: Claude's orange; the logo in its own.
+    const claude = await accent(page);
+    if (claude.line !== '#d97757' || claude.focus !== '#d97757') throw new Error(`subscription accent: ${JSON.stringify(claude)}`);
+    if ((await logo()) !== 'rgb(255, 123, 28)') throw new Error(`subscription logo: ${await logo()}`);
+    // The setting: a color of one's own, VS Code's own (no line), back to the provider's.
+    writeFileSync(
+      settingsFile,
+      JSON.stringify({ ...readSettings(), 'vilaus.accent': 'custom', 'vilaus.accent.custom': '#00aa00' }, null, 2),
+      'utf8',
+    );
+    await waitFor(async () => (await accent(page)).focus === '#00aa00', 5000, 'the custom accent');
+    if ((await logo()) !== 'rgb(0, 170, 0)') throw new Error(`custom logo: ${await logo()}`);
+    if (!iconFiles().some((name) => /^logo-[0-9a-f]{6}-[0-9a-f]{8}\.ico$/.test(name)))
+      throw new Error(`no window icon drawn: ${iconFiles().join(', ')}`);
+    writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.accent': 'vscode' }, null, 2), 'utf8');
+    await waitFor(async () => (await accent(page)).line === 'transparent', 5000, "VS Code's own colors");
+    if ((await accent(page)).focus !== '#0078d4') throw new Error(`VS Code's focus border: ${(await accent(page)).focus}`);
+    if ((await logo()) !== 'rgb(255, 123, 28)') throw new Error(`logo without an accent: ${await logo()}`);
+    const { 'vilaus.accent': _source, 'vilaus.accent.custom': _custom, ...ownSettings } = readSettings();
+    writeFileSync(settingsFile, JSON.stringify(ownSettings, null, 2), 'utf8');
+    await waitFor(async () => (await accent(page)).line === '#d97757', 5000, "the provider's accent again");
+    try {
+      await page.evaluate(async (port) => {
+        await window.vilausNative.invoke('providers.save', {
+          provider: {
+            id: 'mock',
+            name: 'Mock API',
+            type: 'compatible',
+            baseUrl: `http://127.0.0.1:${port}`,
+            auth: 'bearer',
+            models: { main: 'mock-model', haiku: 'mock-haiku' },
+            color: '#ff0000',
+          },
+        });
+        await window.vilausNative.invoke('providers.setKey', { id: 'mock', key: 'test-key-123' });
+      }, mock.port);
+      if (readFileSync(path.join(dataDir, 'providers.json'), 'utf8').includes('test-key-123')) {
+        throw new Error('providers.json holds the key in clear');
       }
-      return false;
-    }, 5000, "the provider's accent in a webview");
-    // The open conversation keeps its Claude process until the window reloads, as the notice offers.
-    const reload = page.locator('.toast .button', { hasText: 'Reload Window' });
-    await reload.waitFor({ timeout: 5000 });
-    await reloaded(() => reload.click());
 
-    // A new conversation (the first one holds comments that later steps expect).
-    const before = await tabCount();
-    await press('Control+N');
-    await waitFor(async () => (await tabCount()) === before + 1, 20_000, 'a new conversation');
-    const frame = await waitFor(conversationFrame, 10_000, 'the new conversation');
-    const input = frame.locator('[role="textbox"][aria-label="Message input"]');
-    await input.waitFor({ timeout: 30_000 });
-    // Every state the logo goes through (the mock answers at once).
-    await page.evaluate(() => {
-      const element = document.querySelector('.titlebar-logo');
-      window.logoStates = [element.dataset.activity];
-      new MutationObserver(() => window.logoStates.push(element.dataset.activity)).observe(element, { attributeFilter: ['data-activity'] });
-    });
-    await input.click();
-    await input.fill('hello mock');
-    await frame.locator('button[aria-label="Send message"]').click();
-    const request = await waitFor(
-      () => mock.requests.find((candidate) => candidate.body?.model === 'mock-model'),
-      60_000,
-      'a request for the main model at the mock API',
-    );
-    if (request.headers.authorization !== 'Bearer test-key-123') throw new Error(`authorization: ${request.headers.authorization}`);
-    if (request.headers['x-api-key']) throw new Error('an x-api-key went out too');
-    // While Claude worked, the logo said so (the extension's state, through the bridge and main).
-    await waitFor(() => page.evaluate(() => window.logoStates.includes('running')), 10_000, 'the logo to show Claude at work');
-    await press('Control+W');
-    await waitFor(async () => (await tabCount()) === before, 10_000, 'the conversation to close');
-    await waitFor(
-      () => page.evaluate(() => document.querySelector('.titlebar-logo').dataset.activity === 'idle'),
-      10_000,
-      'the logo to rest once the conversation is closed',
-    );
-    return `${mock.requests.length} requests at the mock; ${request.method} ${request.url}; logo ${await page.evaluate(() => window.logoStates.join(' > '))}`;
-  } finally {
-    mock.server.close();
-    // Back to the subscription, with fresh processes, for the rest of the run.
-    await page.evaluate(() => window.vilausNative.invoke('providers.select', { id: 'subscription' })).catch(() => {});
-    await reloadWindow().catch(() => {});
-  }
-});
+      await page.locator('.titlebar-provider').click();
+      const filter = page.locator('.quick-input-filter');
+      await filter.waitFor({ timeout: 5000 });
+      await filter.fill('Mock API');
+      await filter.press('Enter');
+      await waitFor(
+        async () => (await page.locator('.titlebar-provider-label').innerText()) === 'Mock API',
+        5000,
+        'the provider in the title bar',
+      );
+      await waitFor(async () => (await accent(page)).line === '#ff0000', 5000, "the provider's accent line");
+      if ((await accent(page)).focus !== '#ff0000') throw new Error(`focus border: ${(await accent(page)).focus}`);
+      if ((await logo()) !== 'rgb(255, 0, 0)') throw new Error(`the provider's logo: ${await logo()}`);
+      if (!iconFiles().some((name) => name.startsWith('logo-ff0000-'))) throw new Error(`no red window icon: ${iconFiles().join(', ')}`);
+      // The window's webviews take it too.
+      await waitFor(
+        async () => {
+          for (const frame of webviewFrames()) {
+            if ((await accent(frame).catch(() => undefined))?.focus === '#ff0000') return true;
+          }
+          return false;
+        },
+        5000,
+        "the provider's accent in a webview",
+      );
+      // The open conversation keeps its Claude process until the window reloads, as the notice offers.
+      const reload = page.locator('.toast .button', { hasText: 'Reload Window' });
+      await reload.waitFor({ timeout: 5000 });
+      await reloaded(() => reload.click());
+
+      // A new conversation (the first one holds comments that later steps expect).
+      const before = await tabCount();
+      await press('Control+N');
+      await waitFor(async () => (await tabCount()) === before + 1, 20_000, 'a new conversation');
+      const frame = await waitFor(conversationFrame, 10_000, 'the new conversation');
+      const input = frame.locator('[role="textbox"][aria-label="Message input"]');
+      await input.waitFor({ timeout: 30_000 });
+      // Every state the logo goes through (the mock answers at once).
+      await page.evaluate(() => {
+        const element = document.querySelector('.titlebar-logo');
+        window.logoStates = [element.dataset.activity];
+        new MutationObserver(() => window.logoStates.push(element.dataset.activity)).observe(element, {
+          attributeFilter: ['data-activity'],
+        });
+      });
+      await input.click();
+      await input.fill('hello mock');
+      await frame.locator('button[aria-label="Send message"]').click();
+      const request = await waitFor(
+        () => mock.requests.find((candidate) => candidate.body?.model === 'mock-model'),
+        60_000,
+        'a request for the main model at the mock API',
+      );
+      if (request.headers.authorization !== 'Bearer test-key-123') throw new Error(`authorization: ${request.headers.authorization}`);
+      if (request.headers['x-api-key']) throw new Error('an x-api-key went out too');
+      // While Claude worked, the logo said so (the extension's state, through the bridge and main).
+      await waitFor(() => page.evaluate(() => window.logoStates.includes('running')), 10_000, 'the logo to show Claude at work');
+      await press('Control+W');
+      await waitFor(async () => (await tabCount()) === before, 10_000, 'the conversation to close');
+      await waitFor(
+        () => page.evaluate(() => document.querySelector('.titlebar-logo').dataset.activity === 'idle'),
+        10_000,
+        'the logo to rest once the conversation is closed',
+      );
+      return `${mock.requests.length} requests at the mock; ${request.method} ${request.url}; logo ${await page.evaluate(() => window.logoStates.join(' > '))}`;
+    } finally {
+      mock.server.close();
+      // Back to the subscription, with fresh processes, for the rest of the run.
+      await page.evaluate(() => window.vilausNative.invoke('providers.select', { id: 'subscription' })).catch(() => {});
+      await reloadWindow().catch(() => {});
+    }
+  },
+);
 
 await step('the providers editor adds a provider from a preset, saves edits and a key, and removes it', async () => {
   await press('Control+Shift+P');
@@ -1405,21 +1550,34 @@ await step('open conversations are restored after a restart', async () => {
   page = await app.firstWindow();
   await waitFor(async () => (await tabCount()) === 2, 30_000, 'both tabs to come back');
   // The first conversation's comments (not sent yet) come back with it.
-  await waitFor(async () => {
-    for (const frame of webviewFrames()) {
-      if ((await commentBlocks(frame).count().catch(() => 0)) === 4) return true;
-    }
-    return false;
-  }, 30_000, 'the four comments to come back');
+  await waitFor(
+    async () => {
+      for (const frame of webviewFrames()) {
+        if (
+          (await commentBlocks(frame)
+            .count()
+            .catch(() => 0)) === 4
+        )
+          return true;
+      }
+      return false;
+    },
+    30_000,
+    'the four comments to come back',
+  );
   return `${await tabCount()} tabs restored, with the comments`;
 });
 
 await step('when the page has no place for them, comments show in a bar below the conversation', async () => {
   await page.locator('#tabs .tab').first().click();
-  const frame = await waitFor(async () => {
-    const candidate = await conversationFrame();
-    return candidate && (await commentBlocks(candidate).count()) === 4 ? candidate : undefined;
-  }, 10_000, 'the conversation with comments');
+  const frame = await waitFor(
+    async () => {
+      const candidate = await conversationFrame();
+      return candidate && (await commentBlocks(candidate).count()) === 4 ? candidate : undefined;
+    },
+    10_000,
+    'the conversation with comments',
+  );
   await frame.evaluate(() => document.querySelector('form:has([role="textbox"][aria-label="Message input"])')?.remove());
   const bar = page.locator('#main .panel:not([hidden]) .comments-bar:not([hidden])');
   await waitFor(async () => (await bar.locator('.comments-bar-item').count()) === 4, 5000, 'the shell bar with four comments');
@@ -1452,10 +1610,14 @@ await step('Configure Display Language switches the shell to Chinese after a res
   await press('Control+Shift+P');
   await page.locator('.quick-input-filter').waitFor({ timeout: 5000 });
   await page.locator('.quick-input-filter').fill('>新建对话');
-  const command = await waitFor(async () => {
-    const rows = page.locator('.quick-input-item');
-    return (await rows.count()) ? rows.first().innerText() : undefined;
-  }, 5000, 'the Chinese command');
+  const command = await waitFor(
+    async () => {
+      const rows = page.locator('.quick-input-item');
+      return (await rows.count()) ? rows.first().innerText() : undefined;
+    },
+    5000,
+    'the Chinese command',
+  );
   await page.locator('.quick-input-filter').press('Escape');
 
   const menu = await withRecordedMenus(async () => {
@@ -1466,68 +1628,83 @@ await step('Configure Display Language switches the shell to Chinese after a res
   return `palette: ${command.replace(/\s+/g, ' ')}; menu: ${menu.join(' | ')}`;
 });
 
-await step("in Chinese the extension's UI is Chinese too; its content and aria-labels are not, and the setting applies at once", async () => {
-  const cjk = /[一-鿿]/;
-  const frame = await waitFor(conversationFrame, 10_000, 'the conversation');
-  // Found by its aria-label, which stays English.
-  const input = frame.locator('[role="textbox"][aria-label="Message input"]');
-  await input.waitFor({ timeout: 30_000 });
-  const placeholder = await waitFor(async () => {
-    const value = await input.getAttribute('data-placeholder');
-    return value && cjk.test(value) ? value : undefined;
-  }, 10_000, 'a Chinese input placeholder');
-  const sessions = webviewFrames().find((candidate) => candidate !== frame);
-  const listText = sessions ? await sessions.locator('body').innerText() : '';
-  if (!cjk.test(listText)) throw new Error(`the session list says ${JSON.stringify(listText.slice(0, 200))}`);
+await step(
+  "in Chinese the extension's UI is Chinese too; its content and aria-labels are not, and the setting applies at once",
+  async () => {
+    const cjk = /[一-鿿]/;
+    const frame = await waitFor(conversationFrame, 10_000, 'the conversation');
+    // Found by its aria-label, which stays English.
+    const input = frame.locator('[role="textbox"][aria-label="Message input"]');
+    await input.waitFor({ timeout: 30_000 });
+    const placeholder = await waitFor(
+      async () => {
+        const value = await input.getAttribute('data-placeholder');
+        return value && cjk.test(value) ? value : undefined;
+      },
+      10_000,
+      'a Chinese input placeholder',
+    );
+    const sessions = webviewFrames().find((candidate) => candidate !== frame);
+    const listText = sessions ? await sessions.locator('body').innerText() : '';
+    if (!cjk.test(listText)) throw new Error(`the session list says ${JSON.stringify(listText.slice(0, 200))}`);
 
-  // Text in a part of the page that shows content keeps its words, even ones the table has.
-  const texts = await frame.evaluate(async () => {
-    const region = document.createElement('div');
-    region.setAttribute('aria-label', 'Claude Code conversation');
-    region.innerHTML = '<p>New session</p>';
-    const outside = document.createElement('p');
-    outside.textContent = 'New session';
-    document.body.append(region, outside);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    const result = [region.innerText.trim(), outside.textContent ?? ''];
-    region.remove();
-    outside.remove();
-    return result;
-  });
-  if (texts[0] !== 'New session' || !cjk.test(texts[1])) throw new Error(`content / UI text: ${texts.join(' / ')}`);
+    // Text in a part of the page that shows content keeps its words, even ones the table has.
+    const texts = await frame.evaluate(async () => {
+      const region = document.createElement('div');
+      region.setAttribute('aria-label', 'Claude Code conversation');
+      region.innerHTML = '<p>New session</p>';
+      const outside = document.createElement('p');
+      outside.textContent = 'New session';
+      document.body.append(region, outside);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const result = [region.innerText.trim(), outside.textContent ?? ''];
+      region.remove();
+      outside.remove();
+      return result;
+    });
+    if (texts[0] !== 'New session' || !cjk.test(texts[1])) throw new Error(`content / UI text: ${texts.join(' / ')}`);
 
-  // Turned off, the page shows its own text again at once; turned on, Chinese again.
-  const settings = readSettings();
-  writeFileSync(settingsFile, JSON.stringify({ ...settings, 'vilaus.translateExtensionUi': false }, null, 2), 'utf8');
-  await waitFor(async () => !cjk.test((await input.getAttribute('data-placeholder')) ?? '中'), 10_000, 'the English placeholder');
-  writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf8');
-  await waitFor(async () => cjk.test((await input.getAttribute('data-placeholder')) ?? ''), 10_000, 'the Chinese placeholder again');
+    // Turned off, the page shows its own text again at once; turned on, Chinese again.
+    const settings = readSettings();
+    writeFileSync(settingsFile, JSON.stringify({ ...settings, 'vilaus.translateExtensionUi': false }, null, 2), 'utf8');
+    await waitFor(async () => !cjk.test((await input.getAttribute('data-placeholder')) ?? '中'), 10_000, 'the English placeholder');
+    writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf8');
+    await waitFor(async () => cjk.test((await input.getAttribute('data-placeholder')) ?? ''), 10_000, 'the Chinese placeholder again');
 
-  // What the extension shows in the shell (Rename Session Tab's input box, or its notice) is Chinese.
-  const outcome = await withRecordedMenus(async () => {
-    await openContextMenu(activeConversation());
-    await clickRecordedMenuItem('重命名会话标签页');
-    return waitFor(async () => {
-      if (await page.locator('.quick-input-filter').count()) return 'input box';
-      const toast = page.locator('.toast-message');
-      return (await toast.count()) ? `message "${await toast.first().innerText()}"` : undefined;
-    }, 10_000, 'the rename command to answer');
-  });
-  let rename = outcome;
-  if (outcome === 'input box') {
-    await page.locator('.quick-input-filter').fill('');
-    await page.locator('.quick-input-filter').press('Enter');
-    rename = await waitFor(async () => {
-      const validation = page.locator('.quick-input-validation');
-      return (await validation.count()) ? validation.innerText() : undefined;
-    }, 5000, 'the validation message');
-    await page.locator('.quick-input-filter').press('Escape');
-  } else {
-    await page.locator('.toast-close').first().click();
-  }
-  if (!cjk.test(rename)) throw new Error(`the rename answered in English: ${rename}`);
-  return `placeholder "${placeholder}"; rename: ${rename}`;
-});
+    // What the extension shows in the shell (Rename Session Tab's input box, or its notice) is Chinese.
+    const outcome = await withRecordedMenus(async () => {
+      await openContextMenu(activeConversation());
+      await clickRecordedMenuItem('重命名会话标签页');
+      return waitFor(
+        async () => {
+          if (await page.locator('.quick-input-filter').count()) return 'input box';
+          const toast = page.locator('.toast-message');
+          return (await toast.count()) ? `message "${await toast.first().innerText()}"` : undefined;
+        },
+        10_000,
+        'the rename command to answer',
+      );
+    });
+    let rename = outcome;
+    if (outcome === 'input box') {
+      await page.locator('.quick-input-filter').fill('');
+      await page.locator('.quick-input-filter').press('Enter');
+      rename = await waitFor(
+        async () => {
+          const validation = page.locator('.quick-input-validation');
+          return (await validation.count()) ? validation.innerText() : undefined;
+        },
+        5000,
+        'the validation message',
+      );
+      await page.locator('.quick-input-filter').press('Escape');
+    } else {
+      await page.locator('.toast-close').first().click();
+    }
+    if (!cjk.test(rename)) throw new Error(`the rename answered in English: ${rename}`);
+    return `placeholder "${placeholder}"; rename: ${rename}`;
+  },
+);
 
 await step('started without a folder, the windows open at quit come back', async () => {
   const opened = app.waitForEvent('window');
@@ -1543,11 +1720,15 @@ await step('started without a folder, the windows open at quit come back', async
     timeout: 60_000,
   });
   page = await app.firstWindow();
-  const titles = await waitFor(async () => {
-    const shown = await Promise.all(shellPages().map((candidate) => candidate.title()));
-    const both = [second, workspace].every((folder) => shown.some((title) => showsFolder(title, folder)));
-    return shown.length === 2 && both ? shown : undefined;
-  }, 30_000, 'the two windows');
+  const titles = await waitFor(
+    async () => {
+      const shown = await Promise.all(shellPages().map((candidate) => candidate.title()));
+      const both = [second, workspace].every((folder) => shown.some((title) => showsFolder(title, folder)));
+      return shown.length === 2 && both ? shown : undefined;
+    },
+    30_000,
+    'the two windows',
+  );
   return titles.join(', ');
 });
 
@@ -1555,7 +1736,10 @@ await step('started without a folder, the windows open at quit come back', async
 function makeVsix(version, publisher = 'Anthropic') {
   const dir = path.join(runDir, `vsix-${publisher}-${version}`);
   mkdirSync(path.join(dir, 'extension'), { recursive: true });
-  writeFileSync(path.join(dir, 'extension', 'package.json'), JSON.stringify({ publisher, name: 'claude-code', version, main: './extension.js' }));
+  writeFileSync(
+    path.join(dir, 'extension', 'package.json'),
+    JSON.stringify({ publisher, name: 'claude-code', version, main: './extension.js' }),
+  );
   writeFileSync(path.join(dir, 'extension', 'extension.js'), 'exports.activate = () => {};\n');
   writeFileSync(
     path.join(dir, 'extension.vsixmanifest'),
@@ -1580,12 +1764,16 @@ const readJson = (file) => {
 
 /** The workspace window with the settings editor on Extension Version; resolves to the page and the block. */
 async function openExtensionVersion() {
-  const main = await waitFor(async () => {
-    for (const candidate of shellPages()) {
-      if (showsFolder(await candidate.title(), workspace)) return candidate;
-    }
-    return undefined;
-  }, 30_000, 'the workspace window');
+  const main = await waitFor(
+    async () => {
+      for (const candidate of shellPages()) {
+        if (showsFolder(await candidate.title(), workspace)) return candidate;
+      }
+      return undefined;
+    },
+    30_000,
+    'the workspace window',
+  );
   await press('Control+,');
   await main.locator('.settings-dialog .settings-editor').waitFor({ timeout: 10_000 });
   await main.locator('.settings-dialog .settings-search').fill('extension version');
@@ -1633,7 +1821,12 @@ await step('first run: no extension, no Git -> install from Open VSX without a r
   const noGit = {};
   for (const [name, value] of Object.entries(env)) {
     if (/^claude_code_git_bash_path$/i.test(name)) continue;
-    noGit[name] = /^path$/i.test(name) ? value.split(';').filter((dir) => !/git/i.test(dir)).join(';') : value;
+    noGit[name] = /^path$/i.test(name)
+      ? value
+          .split(';')
+          .filter((dir) => !/git/i.test(dir))
+          .join(';')
+      : value;
   }
 
   const first = await electron.launch({
@@ -1653,8 +1846,16 @@ await step('first run: no extension, no Git -> install from Open VSX without a r
 
     await firstPage.locator('.setup-download').click();
     const status = firstPage.locator('.setup-status');
-    await waitFor(async () => (await status.innerText()) === 'Claude Code 9.0.0 is installed.', 60_000, 'the install and the extension host');
-    await waitFor(() => readJson(path.join(firstData, 'extensions', 'state.json'))?.lastGood === '9.0.0', 30_000, 'the new extension to activate');
+    await waitFor(
+      async () => (await status.innerText()) === 'Claude Code 9.0.0 is installed.',
+      60_000,
+      'the install and the extension host',
+    );
+    await waitFor(
+      () => readJson(path.join(firstData, 'extensions', 'state.json'))?.lastGood === '9.0.0',
+      30_000,
+      'the new extension to activate',
+    );
     await firstPage.screenshot({ path: path.join(runDir, 'first-run.png') });
 
     await firstPage.locator('.setup-provider').click();
@@ -1665,7 +1866,11 @@ await step('first run: no extension, no Git -> install from Open VSX without a r
     const { id } = providers[0];
     // The key, as the editor saves it; the window then switches to the provider.
     await firstPage.evaluate((params) => window.vilausNative.invoke('providers.setKey', params), { id, key: 'sk-first-run' });
-    await waitFor(async () => (await firstPage.locator('.titlebar-provider-label').innerText()) === 'DeepSeek', 10_000, 'the window to use DeepSeek');
+    await waitFor(
+      async () => (await firstPage.locator('.titlebar-provider-label').innerText()) === 'DeepSeek',
+      10_000,
+      'the window to use DeepSeek',
+    );
     return `installed 9.0.0 from ${base}; provider ${id}`;
   } finally {
     await first.close();
@@ -1674,283 +1879,382 @@ await step('first run: no extension, no Git -> install from Open VSX without a r
   }
 });
 
-await step('the session list: the filters are one drop-down, usage resets show the time, and a row deletes its session after asking, open or not', async () => {
-  // An instance of its own, whose Claude Code folder holds one session of its workspace.
-  const own = path.join(runDir, 'delete-session');
-  const ownData = path.join(own, 'data');
-  const ownWorkspace = path.join(own, 'workspace');
-  const claudeDir = path.join(own, 'claude');
-  const id = '0f9c2b1e-4d5a-4c3b-9e8f-7a6b5c4d3e2f';
-  // Claude Code files a folder's sessions under its path with every other character a dash.
-  const project = path.join(claudeDir, 'projects', ownWorkspace.replace(/[^a-zA-Z0-9]/g, '-'));
-  const transcript = path.join(project, `${id}.jsonl`);
-  mkdirSync(ownData, { recursive: true });
-  mkdirSync(ownWorkspace, { recursive: true });
-  mkdirSync(project, { recursive: true });
-  mkdirSync(path.join(claudeDir, 'file-history', id), { recursive: true });
-  const at = (secondsAgo) => new Date(Date.now() - secondsAgo * 1000).toISOString();
-  writeFileSync(
-    transcript,
-    [
-      { type: 'user', uuid: 'u1', parentUuid: null, sessionId: id, timestamp: at(60), cwd: ownWorkspace, message: { role: 'user', content: 'Tidy the downloads folder' } },
-      { type: 'assistant', uuid: 'a1', parentUuid: 'u1', sessionId: id, timestamp: at(50), cwd: ownWorkspace, message: { role: 'assistant', content: [{ type: 'text', text: 'Done.' }] } },
-      { type: 'ai-title', aiTitle: 'Tidy the downloads', sessionId: id },
-    ]
-      .map((line) => JSON.stringify(line))
-      .join('\n'),
-    'utf8',
-  );
-  writeFileSync(
-    path.join(ownData, 'settings.json'),
-    JSON.stringify({ 'claudeCode.hideOnboarding': true, 'claudeCode.disableLoginPrompt': true, 'vilaus.language': 'en', 'vilaus.extension.autoUpdate': false }),
-    'utf8',
-  );
-  const other = await electron.launch({
-    executablePath: executable,
-    args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'),
-    cwd: root,
-    env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
-    timeout: 60_000,
-  });
-  try {
-    const otherPage = await other.firstWindow();
-    const rowSelector = `[id="sessions-list-row-${id}"]`;
-    const list = await waitFor(async () => {
-      for (const frame of otherPage.frames()) {
-        if (frame.url().startsWith('ccw://wv') && (await frame.locator(rowSelector).count().catch(() => 0)) === 1) return frame;
-      }
-    }, 30_000, 'the session in the list');
-    // One drop-down: the status filter's button carries the Active count; the toggle is hidden.
-    const filter = list.locator('.statusFilterMenuButton_OOQiHg[data-vilaus-label="Active · 0"]');
-    await filter.waitFor({ timeout: 5000 });
-    if (await list.locator('.activeFilterToggle_OOQiHg').isVisible()) throw new Error('the Active toggle shows');
-    // A usage bar as the extension draws one (no account is signed in here), and its reset time
-    // as the bridge would pass it on: the bar shows the time instead of "in 3h".
-    const resetsAt = Date.now() + 3 * 3600_000 + 25 * 60_000;
-    await list.evaluate(() => {
-      const bar = document.createElement('div');
-      bar.className = 'usageBarContainer_8s5nuw';
-      bar.innerHTML =
-        '<div class="usageBarHeader_8s5nuw"><span class="usageLabel_8s5nuw">Session (5hr)</span></div><span class="resetText_8s5nuw">Resets in 3h</span>';
-      document.body.appendChild(bar);
-    });
-    await otherPage.evaluate((at) => {
-      for (const frame of document.querySelectorAll('iframe')) frame.contentWindow?.postMessage({ ccwControl: 'usageResets', resets: { 'Session (5hr)': at } }, '*');
-    }, resetsAt);
-    const time = new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(resetsAt);
-    await waitFor(
-      async () => (await list.locator('.resetText_8s5nuw').evaluate((element) => getComputedStyle(element, '::after').content)).includes(time),
-      5000,
-      `the reset time ${time}`,
-    );
-    // The made-up bar sits beside the list and narrows it: gone again.
-    await list.evaluate(() => document.querySelector('body > .usageBarContainer_8s5nuw')?.remove());
-
-    // Open in a tab: it is deleted all the same, the tab closed first. Clicked on its name: the
-    // row's other end has its buttons.
-    const row = list.locator(rowSelector);
-    const tabs = () => otherPage.locator('#tabs .tab').count();
-    const tabsBefore = await tabs();
-    await row.click({ position: { x: 30, y: 10 } });
-    await waitFor(async () => (await tabs()) === tabsBefore + 1, 15_000, 'the session in a tab');
-    // Its Claude process runs (and says so in sessions/<pid>.json) until the tab closes.
-    const runningRecord = () => {
-      const records = path.join(claudeDir, 'sessions');
-      if (!existsSync(records)) return undefined;
-      return readdirSync(records).find((name) => name.endsWith('.json') && readFileSync(path.join(records, name), 'utf8').includes(id));
-    };
-    await waitFor(() => runningRecord() !== undefined, 15_000, 'its Claude process');
-    await row.hover();
-    await row.locator('.vilaus-delete-session[title="Delete session"]').click();
-    const modal = otherPage.locator('.overlay-box.modal');
-    await modal.waitFor({ timeout: 5000 });
-    if (!(await modal.innerText()).includes('"Tidy the downloads"')) throw new Error(`the question: ${await modal.innerText()}`);
-    // Cancel keeps it and its tab; Delete deletes it.
-    await modal.locator('.button', { hasText: 'Cancel' }).click();
-    await otherPage.waitForTimeout(500);
-    if (!existsSync(transcript)) throw new Error('deleted on Cancel');
-    if ((await tabs()) !== tabsBefore + 1) throw new Error('the tab closed on Cancel');
-    await row.hover();
-    await row.locator('.vilaus-delete-session').click();
-    await modal.locator('.button', { hasText: 'Delete' }).click();
-    await waitFor(async () => (await tabs()) === tabsBefore, 5000, 'its tab to close');
-    await waitFor(() => !existsSync(transcript) && !existsSync(path.join(claudeDir, 'file-history', id)), 15_000, 'the files to go');
-    if (runningRecord() !== undefined) throw new Error('deleted while its Claude process still ran');
-    await waitFor(async () => (await list.locator(rowSelector).count()) === 0, 10_000, 'the row to leave the list');
-    if (await modal.isVisible()) throw new Error(`a message after deleting: ${await modal.innerText()}`);
-    // The process ended before: nothing writes the transcript again.
-    await otherPage.waitForTimeout(1000);
-    if (existsSync(transcript)) throw new Error('the transcript came back');
-  } finally {
-    await other.close();
-  }
-  return 'its tab closed, transcript and file history deleted, the list read again';
-});
-
-await step('a session clicked in the list opens as a preview, its row left in place: another click replaces it, leaving or Escape closes it, a double click keeps it; back and forward (keys, mouse) go between the tabs used; Shift+Escape rewinds', async () => {
-  // An instance of its own, whose Claude Code folder holds three sessions of its workspace.
-  const own = path.join(runDir, 'preview');
-  const ownData = path.join(own, 'data');
-  const ownWorkspace = path.join(own, 'workspace');
-  const claudeDir = path.join(own, 'claude');
-  const project = path.join(claudeDir, 'projects', ownWorkspace.replace(/[^a-zA-Z0-9]/g, '-'));
-  mkdirSync(ownData, { recursive: true });
-  mkdirSync(ownWorkspace, { recursive: true });
-  mkdirSync(project, { recursive: true });
-  const sessions = { Alpha: 'a1a1a1a1-0000-4000-8000-000000000001', Bravo: 'b2b2b2b2-0000-4000-8000-000000000002', Charlie: 'c3c3c3c3-0000-4000-8000-000000000003' };
-  const at = (secondsAgo) => new Date(Date.now() - secondsAgo * 1000).toISOString();
-  for (const [name, id] of Object.entries(sessions)) {
+await step(
+  'the session list: the filters are one drop-down, usage resets show the time, and a row deletes its session after asking, open or not',
+  async () => {
+    // An instance of its own, whose Claude Code folder holds one session of its workspace.
+    const own = path.join(runDir, 'delete-session');
+    const ownData = path.join(own, 'data');
+    const ownWorkspace = path.join(own, 'workspace');
+    const claudeDir = path.join(own, 'claude');
+    const id = '0f9c2b1e-4d5a-4c3b-9e8f-7a6b5c4d3e2f';
+    // Claude Code files a folder's sessions under its path with every other character a dash.
+    const project = path.join(claudeDir, 'projects', ownWorkspace.replace(/[^a-zA-Z0-9]/g, '-'));
+    const transcript = path.join(project, `${id}.jsonl`);
+    mkdirSync(ownData, { recursive: true });
+    mkdirSync(ownWorkspace, { recursive: true });
+    mkdirSync(project, { recursive: true });
+    mkdirSync(path.join(claudeDir, 'file-history', id), { recursive: true });
+    const at = (secondsAgo) => new Date(Date.now() - secondsAgo * 1000).toISOString();
     writeFileSync(
-      path.join(project, `${id}.jsonl`),
+      transcript,
       [
-        { type: 'user', uuid: `${name}-u`, parentUuid: null, sessionId: id, timestamp: at(60), cwd: ownWorkspace, message: { role: 'user', content: `${name} question` } },
-        { type: 'assistant', uuid: `${name}-a`, parentUuid: `${name}-u`, sessionId: id, timestamp: at(50), cwd: ownWorkspace, message: { role: 'assistant', content: [{ type: 'text', text: `${name} answer` }] } },
-        { type: 'ai-title', aiTitle: `${name} session`, sessionId: id },
+        {
+          type: 'user',
+          uuid: 'u1',
+          parentUuid: null,
+          sessionId: id,
+          timestamp: at(60),
+          cwd: ownWorkspace,
+          message: { role: 'user', content: 'Tidy the downloads folder' },
+        },
+        {
+          type: 'assistant',
+          uuid: 'a1',
+          parentUuid: 'u1',
+          sessionId: id,
+          timestamp: at(50),
+          cwd: ownWorkspace,
+          message: { role: 'assistant', content: [{ type: 'text', text: 'Done.' }] },
+        },
+        { type: 'ai-title', aiTitle: 'Tidy the downloads', sessionId: id },
       ]
         .map((line) => JSON.stringify(line))
         .join('\n'),
       'utf8',
     );
-  }
-  writeFileSync(
-    path.join(ownData, 'settings.json'),
-    JSON.stringify({ 'claudeCode.hideOnboarding': true, 'claudeCode.disableLoginPrompt': true, 'vilaus.language': 'en', 'vilaus.extension.autoUpdate': false }),
-    'utf8',
-  );
-  const other = await electron.launch({
-    executablePath: executable,
-    args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'),
-    cwd: root,
-    env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
-    timeout: 60_000,
-  });
-  try {
-    const otherPage = await other.firstWindow();
-    const row = (name) => `[id="sessions-list-row-${sessions[name]}"]`;
-    // On the name: the row's other end has its buttons.
-    const onName = { position: { x: 30, y: 10 } };
-    const list = await waitFor(async () => {
-      for (const frame of otherPage.frames()) {
-        if (frame.url().startsWith('ccw://wv') && (await frame.locator(row('Charlie')).count().catch(() => 0)) === 1) return frame;
-      }
-    }, 30_000, 'the sessions in the list');
-    const tabs = otherPage.locator('#tabs .tab');
-    const active = otherPage.locator('#tabs .tab.active');
-    const tab = (name) => otherPage.locator('#tabs .tab', { hasText: `${name} session` });
-    await waitFor(async () => (await tabs.count()) === 1, 30_000, 'the first conversation');
-    const first = await active.getAttribute('data-panel-id');
-    const showing = async (name, preview) => {
-      await waitFor(
-        async () => (await active.innerText()).includes(`${name} session`) && (await active.evaluate((element) => element.classList.contains('preview'))) === preview,
-        15_000,
-        `${name} active${preview ? ', in preview' : ''}`,
-      );
-    };
-    const backTo = async (panelId, how) => {
-      await how();
-      await waitFor(async () => (await active.getAttribute('data-panel-id')) === panelId, 5000, 'the tab used before');
-    };
-    const keys = (shortcut) =>
-      other.evaluate(({ BrowserWindow }, keyCode) => {
-        const contents = BrowserWindow.getAllWindows()[0].webContents;
-        contents.sendInputEvent({ type: 'keyDown', keyCode, modifiers: ['alt'] });
-        contents.sendInputEvent({ type: 'keyUp', keyCode, modifiers: ['alt'] });
-      }, shortcut);
-    // Windows sends the mouse's side buttons to the window as app commands where no page takes
-    // the mouse; over a page, the page has them (button 3 and 4).
-    const mouseBack = () => other.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].emit('app-command', {}, 'browser-backward'));
-    const cdp = await otherPage.context().newCDPSession(otherPage);
-    const mouseButton = async (button, locator) => {
-      const box = await locator.boundingBox();
-      const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
-      await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button, buttons: button === 'back' ? 8 : 16, clickCount: 1 });
-      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button, buttons: 0, clickCount: 1 });
-    };
-    const conversationFrame = otherPage.locator('#main .panel:not([hidden]) .webview-frame');
-    // The rows in the list's order, with the dot of a session open in a tab.
-    const rows = () =>
-      list.locator('button[id^="sessions-list-row-"]').evaluateAll((elements) =>
-        elements.map((element) => `${element.querySelector('[class*=sessionName]')?.textContent}${element.querySelector('[title="Open in a tab"]') ? ' (open)' : ''}`),
-      );
-    const rowsBefore = await rows();
-
-    await list.locator(row('Alpha')).click(onName);
-    await showing('Alpha', true);
-    // In preview its row stays where it was clicked, without the dot of an open session.
-    await otherPage.waitForTimeout(1000);
-    if (JSON.stringify(await rows()) !== JSON.stringify(rowsBefore)) throw new Error(`the rows moved for a preview: ${await rows()}`);
-    await list.locator(row('Bravo')).click(onName);
-    await showing('Bravo', true);
-    await waitFor(async () => (await tabs.count()) === 2 && (await tab('Alpha').count()) === 0, 10_000, 'Bravo in place of Alpha');
-    // Back to the first conversation: the preview it leaves closes.
-    await backTo(first, () => keys('Left'));
-    await waitFor(async () => (await tabs.count()) === 1, 10_000, 'the preview to close');
-
-    // Its tab double-clicked: kept, it stays when the first comes back (the mouse's back button).
-    await list.locator(row('Alpha')).click(onName);
-    await showing('Alpha', true);
-    await active.dblclick();
-    await showing('Alpha', false);
-    // Kept, it is open: first in the list, with the dot.
-    await waitFor(async () => (await rows())[0] === 'Alpha session (open)', 10_000, `Alpha first and open in the list: ${await rows()}`);
-    await backTo(first, mouseBack);
-    await otherPage.waitForTimeout(500);
-    if ((await tabs.count()) !== 2) throw new Error(`a kept tab closed: ${(await tabs.allInnerTexts()).join(" | ")}`);
-    await keys('Right');
-    await showing('Alpha', false);
-    // The mouse's buttons over the conversation's page, and over the shell's.
-    await backTo(first, () => mouseButton('back', conversationFrame));
-    await mouseButton('forward', tabs.first());
-    await showing('Alpha', false);
-
-    // Its row double-clicked: kept from the start.
-    await list.locator(row('Bravo')).dblclick(onName);
-    await showing('Bravo', false);
-    await waitFor(async () => (await tabs.count()) === 3, 10_000, 'Bravo kept next to Alpha');
-
-    // The page's own uses of Escape are the shell's keybindings: Shift+Escape opens its rewind
-    // picker; two plain Escapes in the empty input no longer do (and interrupt nothing).
-    const frameOf = async () => (await conversationFrame.elementHandle())?.contentFrame();
-    const bravoPage = await waitFor(async () => {
-      const frame = await frameOf();
-      return (await frame?.locator('[role="textbox"][aria-label="Message input"]').count()) === 1 ? frame : undefined;
-    }, 30_000, "Bravo's input");
-    const input = bravoPage.locator('[role="textbox"][aria-label="Message input"]');
-    const rewindPicker = bravoPage.locator('[role="dialog"]', { hasText: 'Rewind to' });
-    await input.click();
-    await input.press('Escape');
-    await input.press('Escape');
-    await otherPage.waitForTimeout(800);
-    if ((await rewindPicker.count()) > 0) throw new Error('two Escapes opened the rewind picker');
-    await other.evaluate(({ BrowserWindow }) => {
-      const contents = BrowserWindow.getAllWindows()[0].webContents;
-      contents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape', modifiers: ['shift'] });
-      contents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape', modifiers: ['shift'] });
+    writeFileSync(
+      path.join(ownData, 'settings.json'),
+      JSON.stringify({
+        'claudeCode.hideOnboarding': true,
+        'claudeCode.disableLoginPrompt': true,
+        'vilaus.language': 'en',
+        'vilaus.extension.autoUpdate': false,
+      }),
+      'utf8',
+    );
+    const other = await electron.launch({
+      executablePath: executable,
+      args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'),
+      cwd: root,
+      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      timeout: 60_000,
     });
-    await rewindPicker.waitFor({ timeout: 5000 });
-    // Escape closes the picker, and only that.
-    await bravoPage.locator('[role="dialog"]').press('Escape');
-    await waitFor(async () => (await rewindPicker.count()) === 0, 5000, 'the picker to close');
-    await otherPage.waitForTimeout(300);
-    if ((await tabs.count()) !== 3) throw new Error('the Escape that closed the picker closed the tab');
+    try {
+      const otherPage = await other.firstWindow();
+      const rowSelector = `[id="sessions-list-row-${id}"]`;
+      const list = await waitFor(
+        async () => {
+          for (const frame of otherPage.frames()) {
+            if (
+              frame.url().startsWith('ccw://wv') &&
+              (await frame
+                .locator(rowSelector)
+                .count()
+                .catch(() => 0)) === 1
+            )
+              return frame;
+          }
+        },
+        30_000,
+        'the session in the list',
+      );
+      // One drop-down: the status filter's button carries the Active count; the toggle is hidden.
+      const filter = list.locator('.statusFilterMenuButton_OOQiHg[data-vilaus-label="Active · 0"]');
+      await filter.waitFor({ timeout: 5000 });
+      if (await list.locator('.activeFilterToggle_OOQiHg').isVisible()) throw new Error('the Active toggle shows');
+      // A usage bar as the extension draws one (no account is signed in here), and its reset time
+      // as the bridge would pass it on: the bar shows the time instead of "in 3h".
+      const resetsAt = Date.now() + 3 * 3600_000 + 25 * 60_000;
+      await list.evaluate(() => {
+        const bar = document.createElement('div');
+        bar.className = 'usageBarContainer_8s5nuw';
+        bar.innerHTML =
+          '<div class="usageBarHeader_8s5nuw"><span class="usageLabel_8s5nuw">Session (5hr)</span></div><span class="resetText_8s5nuw">Resets in 3h</span>';
+        document.body.appendChild(bar);
+      });
+      await otherPage.evaluate((at) => {
+        for (const frame of document.querySelectorAll('iframe'))
+          frame.contentWindow?.postMessage({ ccwControl: 'usageResets', resets: { 'Session (5hr)': at } }, '*');
+      }, resetsAt);
+      const time = new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(resetsAt);
+      await waitFor(
+        async () =>
+          (await list.locator('.resetText_8s5nuw').evaluate((element) => getComputedStyle(element, '::after').content)).includes(time),
+        5000,
+        `the reset time ${time}`,
+      );
+      // The made-up bar sits beside the list and narrows it: gone again.
+      await list.evaluate(() => document.querySelector('body > .usageBarContainer_8s5nuw')?.remove());
 
-    // Escape in a preview closes it (the input is empty: the page has no use for one Escape).
-    const bravo = await active.getAttribute('data-panel-id');
-    await list.locator(row('Charlie')).click(onName);
-    await showing('Charlie', true);
-    const charlie = await waitFor(async () => {
-      const handle = await otherPage.locator('#main .panel:not([hidden]) .webview-frame').elementHandle();
-      const frame = await handle?.contentFrame();
-      return (await frame?.locator('[role="textbox"][aria-label="Message input"]').count()) === 1 ? frame : undefined;
-    }, 30_000, "Charlie's input");
-    await charlie.locator('[role="textbox"][aria-label="Message input"]').press('Escape');
-    await waitFor(async () => (await tabs.count()) === 3 && (await tab('Charlie').count()) === 0, 10_000, 'Charlie to close on Escape');
-    await waitFor(async () => (await active.getAttribute('data-panel-id')) === bravo, 5000, 'Bravo back');
-  } finally {
-    await other.close();
-  }
-  return 'replaced, closed on leaving and on Escape, kept by a double click on the tab and on the row; the rewind picker on Shift+Escape only';
-});
+      // Open in a tab: it is deleted all the same, the tab closed first. Clicked on its name: the
+      // row's other end has its buttons.
+      const row = list.locator(rowSelector);
+      const tabs = () => otherPage.locator('#tabs .tab').count();
+      const tabsBefore = await tabs();
+      await row.click({ position: { x: 30, y: 10 } });
+      await waitFor(async () => (await tabs()) === tabsBefore + 1, 15_000, 'the session in a tab');
+      // Its Claude process runs (and says so in sessions/<pid>.json) until the tab closes.
+      const runningRecord = () => {
+        const records = path.join(claudeDir, 'sessions');
+        if (!existsSync(records)) return undefined;
+        return readdirSync(records).find((name) => name.endsWith('.json') && readFileSync(path.join(records, name), 'utf8').includes(id));
+      };
+      await waitFor(() => runningRecord() !== undefined, 15_000, 'its Claude process');
+      await row.hover();
+      await row.locator('.vilaus-delete-session[title="Delete session"]').click();
+      const modal = otherPage.locator('.overlay-box.modal');
+      await modal.waitFor({ timeout: 5000 });
+      if (!(await modal.innerText()).includes('"Tidy the downloads"')) throw new Error(`the question: ${await modal.innerText()}`);
+      // Cancel keeps it and its tab; Delete deletes it.
+      await modal.locator('.button', { hasText: 'Cancel' }).click();
+      await otherPage.waitForTimeout(500);
+      if (!existsSync(transcript)) throw new Error('deleted on Cancel');
+      if ((await tabs()) !== tabsBefore + 1) throw new Error('the tab closed on Cancel');
+      await row.hover();
+      await row.locator('.vilaus-delete-session').click();
+      await modal.locator('.button', { hasText: 'Delete' }).click();
+      await waitFor(async () => (await tabs()) === tabsBefore, 5000, 'its tab to close');
+      await waitFor(() => !existsSync(transcript) && !existsSync(path.join(claudeDir, 'file-history', id)), 15_000, 'the files to go');
+      if (runningRecord() !== undefined) throw new Error('deleted while its Claude process still ran');
+      await waitFor(async () => (await list.locator(rowSelector).count()) === 0, 10_000, 'the row to leave the list');
+      if (await modal.isVisible()) throw new Error(`a message after deleting: ${await modal.innerText()}`);
+      // The process ended before: nothing writes the transcript again.
+      await otherPage.waitForTimeout(1000);
+      if (existsSync(transcript)) throw new Error('the transcript came back');
+    } finally {
+      await other.close();
+    }
+    return 'its tab closed, transcript and file history deleted, the list read again';
+  },
+);
+
+await step(
+  'a session clicked in the list opens as a preview, its row left in place: another click replaces it, leaving or Escape closes it, a double click keeps it; back and forward (keys, mouse) go between the tabs used; Shift+Escape rewinds',
+  async () => {
+    // An instance of its own, whose Claude Code folder holds three sessions of its workspace.
+    const own = path.join(runDir, 'preview');
+    const ownData = path.join(own, 'data');
+    const ownWorkspace = path.join(own, 'workspace');
+    const claudeDir = path.join(own, 'claude');
+    const project = path.join(claudeDir, 'projects', ownWorkspace.replace(/[^a-zA-Z0-9]/g, '-'));
+    mkdirSync(ownData, { recursive: true });
+    mkdirSync(ownWorkspace, { recursive: true });
+    mkdirSync(project, { recursive: true });
+    const sessions = {
+      Alpha: 'a1a1a1a1-0000-4000-8000-000000000001',
+      Bravo: 'b2b2b2b2-0000-4000-8000-000000000002',
+      Charlie: 'c3c3c3c3-0000-4000-8000-000000000003',
+    };
+    const at = (secondsAgo) => new Date(Date.now() - secondsAgo * 1000).toISOString();
+    for (const [name, id] of Object.entries(sessions)) {
+      writeFileSync(
+        path.join(project, `${id}.jsonl`),
+        [
+          {
+            type: 'user',
+            uuid: `${name}-u`,
+            parentUuid: null,
+            sessionId: id,
+            timestamp: at(60),
+            cwd: ownWorkspace,
+            message: { role: 'user', content: `${name} question` },
+          },
+          {
+            type: 'assistant',
+            uuid: `${name}-a`,
+            parentUuid: `${name}-u`,
+            sessionId: id,
+            timestamp: at(50),
+            cwd: ownWorkspace,
+            message: { role: 'assistant', content: [{ type: 'text', text: `${name} answer` }] },
+          },
+          { type: 'ai-title', aiTitle: `${name} session`, sessionId: id },
+        ]
+          .map((line) => JSON.stringify(line))
+          .join('\n'),
+        'utf8',
+      );
+    }
+    writeFileSync(
+      path.join(ownData, 'settings.json'),
+      JSON.stringify({
+        'claudeCode.hideOnboarding': true,
+        'claudeCode.disableLoginPrompt': true,
+        'vilaus.language': 'en',
+        'vilaus.extension.autoUpdate': false,
+      }),
+      'utf8',
+    );
+    const other = await electron.launch({
+      executablePath: executable,
+      args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'),
+      cwd: root,
+      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      timeout: 60_000,
+    });
+    try {
+      const otherPage = await other.firstWindow();
+      const row = (name) => `[id="sessions-list-row-${sessions[name]}"]`;
+      // On the name: the row's other end has its buttons.
+      const onName = { position: { x: 30, y: 10 } };
+      const list = await waitFor(
+        async () => {
+          for (const frame of otherPage.frames()) {
+            if (
+              frame.url().startsWith('ccw://wv') &&
+              (await frame
+                .locator(row('Charlie'))
+                .count()
+                .catch(() => 0)) === 1
+            )
+              return frame;
+          }
+        },
+        30_000,
+        'the sessions in the list',
+      );
+      const tabs = otherPage.locator('#tabs .tab');
+      const active = otherPage.locator('#tabs .tab.active');
+      const tab = (name) => otherPage.locator('#tabs .tab', { hasText: `${name} session` });
+      await waitFor(async () => (await tabs.count()) === 1, 30_000, 'the first conversation');
+      const first = await active.getAttribute('data-panel-id');
+      const showing = async (name, preview) => {
+        await waitFor(
+          async () =>
+            (await active.innerText()).includes(`${name} session`) &&
+            (await active.evaluate((element) => element.classList.contains('preview'))) === preview,
+          15_000,
+          `${name} active${preview ? ', in preview' : ''}`,
+        );
+      };
+      const backTo = async (panelId, how) => {
+        await how();
+        await waitFor(async () => (await active.getAttribute('data-panel-id')) === panelId, 5000, 'the tab used before');
+      };
+      const keys = (shortcut) =>
+        other.evaluate(({ BrowserWindow }, keyCode) => {
+          const contents = BrowserWindow.getAllWindows()[0].webContents;
+          contents.sendInputEvent({ type: 'keyDown', keyCode, modifiers: ['alt'] });
+          contents.sendInputEvent({ type: 'keyUp', keyCode, modifiers: ['alt'] });
+        }, shortcut);
+      // Windows sends the mouse's side buttons to the window as app commands where no page takes
+      // the mouse; over a page, the page has them (button 3 and 4).
+      const mouseBack = () =>
+        other.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].emit('app-command', {}, 'browser-backward'));
+      const cdp = await otherPage.context().newCDPSession(otherPage);
+      const mouseButton = async (button, locator) => {
+        const box = await locator.boundingBox();
+        const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+        await cdp.send('Input.dispatchMouseEvent', {
+          type: 'mousePressed',
+          x,
+          y,
+          button,
+          buttons: button === 'back' ? 8 : 16,
+          clickCount: 1,
+        });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button, buttons: 0, clickCount: 1 });
+      };
+      const conversationFrame = otherPage.locator('#main .panel:not([hidden]) .webview-frame');
+      // The rows in the list's order, with the dot of a session open in a tab.
+      const rows = () =>
+        list
+          .locator('button[id^="sessions-list-row-"]')
+          .evaluateAll((elements) =>
+            elements.map(
+              (element) =>
+                `${element.querySelector('[class*=sessionName]')?.textContent}${element.querySelector('[title="Open in a tab"]') ? ' (open)' : ''}`,
+            ),
+          );
+      const rowsBefore = await rows();
+
+      await list.locator(row('Alpha')).click(onName);
+      await showing('Alpha', true);
+      // In preview its row stays where it was clicked, without the dot of an open session.
+      await otherPage.waitForTimeout(1000);
+      if (JSON.stringify(await rows()) !== JSON.stringify(rowsBefore)) throw new Error(`the rows moved for a preview: ${await rows()}`);
+      await list.locator(row('Bravo')).click(onName);
+      await showing('Bravo', true);
+      await waitFor(async () => (await tabs.count()) === 2 && (await tab('Alpha').count()) === 0, 10_000, 'Bravo in place of Alpha');
+      // Back to the first conversation: the preview it leaves closes.
+      await backTo(first, () => keys('Left'));
+      await waitFor(async () => (await tabs.count()) === 1, 10_000, 'the preview to close');
+
+      // Its tab double-clicked: kept, it stays when the first comes back (the mouse's back button).
+      await list.locator(row('Alpha')).click(onName);
+      await showing('Alpha', true);
+      await active.dblclick();
+      await showing('Alpha', false);
+      // Kept, it is open: first in the list, with the dot.
+      await waitFor(async () => (await rows())[0] === 'Alpha session (open)', 10_000, `Alpha first and open in the list: ${await rows()}`);
+      await backTo(first, mouseBack);
+      await otherPage.waitForTimeout(500);
+      if ((await tabs.count()) !== 2) throw new Error(`a kept tab closed: ${(await tabs.allInnerTexts()).join(' | ')}`);
+      await keys('Right');
+      await showing('Alpha', false);
+      // The mouse's buttons over the conversation's page, and over the shell's.
+      await backTo(first, () => mouseButton('back', conversationFrame));
+      await mouseButton('forward', tabs.first());
+      await showing('Alpha', false);
+
+      // Its row double-clicked: kept from the start.
+      await list.locator(row('Bravo')).dblclick(onName);
+      await showing('Bravo', false);
+      await waitFor(async () => (await tabs.count()) === 3, 10_000, 'Bravo kept next to Alpha');
+
+      // The page's own uses of Escape are the shell's keybindings: Shift+Escape opens its rewind
+      // picker; two plain Escapes in the empty input no longer do (and interrupt nothing).
+      const frameOf = async () => (await conversationFrame.elementHandle())?.contentFrame();
+      const bravoPage = await waitFor(
+        async () => {
+          const frame = await frameOf();
+          return (await frame?.locator('[role="textbox"][aria-label="Message input"]').count()) === 1 ? frame : undefined;
+        },
+        30_000,
+        "Bravo's input",
+      );
+      const input = bravoPage.locator('[role="textbox"][aria-label="Message input"]');
+      const rewindPicker = bravoPage.locator('[role="dialog"]', { hasText: 'Rewind to' });
+      await input.click();
+      await input.press('Escape');
+      await input.press('Escape');
+      await otherPage.waitForTimeout(800);
+      if ((await rewindPicker.count()) > 0) throw new Error('two Escapes opened the rewind picker');
+      await other.evaluate(({ BrowserWindow }) => {
+        const contents = BrowserWindow.getAllWindows()[0].webContents;
+        contents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape', modifiers: ['shift'] });
+        contents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape', modifiers: ['shift'] });
+      });
+      await rewindPicker.waitFor({ timeout: 5000 });
+      // Escape closes the picker, and only that.
+      await bravoPage.locator('[role="dialog"]').press('Escape');
+      await waitFor(async () => (await rewindPicker.count()) === 0, 5000, 'the picker to close');
+      await otherPage.waitForTimeout(300);
+      if ((await tabs.count()) !== 3) throw new Error('the Escape that closed the picker closed the tab');
+
+      // Escape in a preview closes it (the input is empty: the page has no use for one Escape).
+      const bravo = await active.getAttribute('data-panel-id');
+      await list.locator(row('Charlie')).click(onName);
+      await showing('Charlie', true);
+      const charlie = await waitFor(
+        async () => {
+          const handle = await otherPage.locator('#main .panel:not([hidden]) .webview-frame').elementHandle();
+          const frame = await handle?.contentFrame();
+          return (await frame?.locator('[role="textbox"][aria-label="Message input"]').count()) === 1 ? frame : undefined;
+        },
+        30_000,
+        "Charlie's input",
+      );
+      await charlie.locator('[role="textbox"][aria-label="Message input"]').press('Escape');
+      await waitFor(async () => (await tabs.count()) === 3 && (await tab('Charlie').count()) === 0, 10_000, 'Charlie to close on Escape');
+      await waitFor(async () => (await active.getAttribute('data-panel-id')) === bravo, 5000, 'Bravo back');
+    } finally {
+      await other.close();
+    }
+    return 'replaced, closed on leaving and on Escape, kept by a double click on the tab and on the row; the rewind picker on Shift+Escape only';
+  },
+);
 
 await step("a conversation of another folder, found by searching all folders, opens in that folder's window", async () => {
   // An instance of its own, whose Claude Code folder holds a session of another folder.
@@ -1966,8 +2270,24 @@ await step("a conversation of another folder, found by searching all folders, op
   writeFileSync(
     path.join(project, `${id}.jsonl`),
     [
-      { type: 'user', uuid: 'w-u', parentUuid: null, sessionId: id, timestamp: at(60), cwd: there, message: { role: 'user', content: 'When should I water the basil?' } },
-      { type: 'assistant', uuid: 'w-a', parentUuid: 'w-u', sessionId: id, timestamp: at(50), cwd: there, message: { role: 'assistant', content: [{ type: 'text', text: 'Every other morning.' }] } },
+      {
+        type: 'user',
+        uuid: 'w-u',
+        parentUuid: null,
+        sessionId: id,
+        timestamp: at(60),
+        cwd: there,
+        message: { role: 'user', content: 'When should I water the basil?' },
+      },
+      {
+        type: 'assistant',
+        uuid: 'w-a',
+        parentUuid: 'w-u',
+        sessionId: id,
+        timestamp: at(50),
+        cwd: there,
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Every other morning.' }] },
+      },
       { type: 'ai-title', aiTitle: 'Watering plan', sessionId: id },
     ]
       .map((line) => JSON.stringify(line))
@@ -1976,7 +2296,12 @@ await step("a conversation of another folder, found by searching all folders, op
   );
   writeFileSync(
     path.join(ownData, 'settings.json'),
-    JSON.stringify({ 'claudeCode.hideOnboarding': true, 'claudeCode.disableLoginPrompt': true, 'vilaus.language': 'en', 'vilaus.extension.autoUpdate': false }),
+    JSON.stringify({
+      'claudeCode.hideOnboarding': true,
+      'claudeCode.disableLoginPrompt': true,
+      'vilaus.language': 'en',
+      'vilaus.extension.autoUpdate': false,
+    }),
     'utf8',
   );
   const other = await electron.launch({
@@ -2032,10 +2357,14 @@ await step('administrator instance: runs next to the normal one, says so, and re
     // The search box says so after the folder's name.
     await adminPage.locator('.search-box-administrator', { hasText: /\[(Administrator|管理员)\]/ }).waitFor({ timeout: 30_000 });
     // The display language is Chinese by now (an earlier step switched it).
-    title = await waitFor(async () => {
-      const titles = await admin.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((w) => w.getTitle()));
-      return titles.find((candidate) => / \[(Administrator|管理员)\]$/.test(candidate));
-    }, 10_000, 'the window title to say so');
+    title = await waitFor(
+      async () => {
+        const titles = await admin.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((w) => w.getTitle()));
+        return titles.find((candidate) => / \[(Administrator|管理员)\]$/.test(candidate));
+      },
+      10_000,
+      'the window title to say so',
+    );
     // safeStorage there decrypts what the normal instance encrypted: one key for both.
     const key = await admin.evaluate(({ safeStorage }, data) => safeStorage.decryptString(Buffer.from(data, 'base64')), stored);
     if (key !== 'test-key-123') throw new Error(`decrypted "${key}"`);
@@ -2044,7 +2373,10 @@ await step('administrator instance: runs next to the normal one, says so, and re
   } finally {
     await admin.close();
   }
-  for (const own of [['state', 'shell.json'], ['chromium', 'Local State']]) {
+  for (const own of [
+    ['state', 'shell.json'],
+    ['chromium', 'Local State'],
+  ]) {
     if (!existsSync(path.join(dataDir, 'admin', ...own))) throw new Error(`no admin\\${own.join('\\')}`);
   }
   return `${title}; the key is shared`;
@@ -2147,10 +2479,14 @@ await step('after a restart the update runs; Go Back and Restart returns to the 
 
   // The backed-up copy is the real extension: it activates.
   await restart();
-  await waitFor(() => {
-    const state = readExtensionState();
-    return state.current === backup && state.lastGood === backup;
-  }, 60_000, `Claude Code ${backup} from the backup to activate`);
+  await waitFor(
+    () => {
+      const state = readExtensionState();
+      return state.current === backup && state.lastGood === backup;
+    },
+    60_000,
+    `Claude Code ${backup} from the backup to activate`,
+  );
   const again = await openExtensionVersion();
   const source = await again.widget.locator('.extension-version-source').innerText();
   if (!source.includes(path.join(dataDir, 'extensions'))) throw new Error(`it runs from "${source}"`);

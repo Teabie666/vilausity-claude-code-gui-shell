@@ -47,7 +47,11 @@ export class CommentsFallbackBar {
     const { labels } = view;
     const collapsed = this.collapsed;
     const header = div('comments-bar-header');
-    const toggle = button(`comments-bar-toggle ${collapsed ? 'collapsed' : 'expanded'}`, 'toggle', collapsed ? labels.expand : labels.collapse);
+    const toggle = button(
+      `comments-bar-toggle ${collapsed ? 'collapsed' : 'expanded'}`,
+      'toggle',
+      collapsed ? labels.expand : labels.collapse,
+    );
     toggle.textContent = labels.header;
     toggle.setAttribute('aria-expanded', String(!collapsed));
     const hint = div('comments-bar-hint');
@@ -65,7 +69,12 @@ export class CommentsFallbackBar {
       quote.title = block.quote;
       const source = button('comments-bar-source', 'reveal', block.sourceTitle);
       source.textContent = block.source;
-      head.append(quote, source, button('icon-button icon-edit', 'edit', labels.edit), button('icon-button icon-close', 'remove', labels.remove));
+      head.append(
+        quote,
+        source,
+        button('icon-button icon-edit', 'edit', labels.edit),
+        button('icon-button icon-close', 'remove', labels.remove),
+      );
       const text = div('comments-bar-text');
       text.textContent = block.text;
       item.append(head, text);
