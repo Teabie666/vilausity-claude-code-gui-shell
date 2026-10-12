@@ -76,7 +76,7 @@ export class ConversationTabs {
     label.textContent = params.title;
     const close = document.createElement('button');
     close.className = 'tab-close icon-button';
-    close.title = t('closeTab');
+    close.title = t('close');
     close.setAttribute('aria-label', t('closeTabLabel'));
     close.addEventListener('click', (event) => {
       event.stopPropagation();

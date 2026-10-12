@@ -13,6 +13,7 @@ import { contentPaneModule } from '../../features/contentPane';
 import { conversationsModule } from '../../features/conversations';
 import { editorModule } from '../../features/editor';
 import { fontsModule } from '../../features/fonts';
+import { keybindingsModule } from '../../features/keybindings';
 import { markdownModule } from '../../features/markdown';
 import { providersModule } from '../../features/providers';
 import { quickOpenModule } from '../../features/quickOpen';
@@ -38,6 +39,7 @@ const modules: ShellModule[] = [
   commentsModule,
   quickOpenModule,
   settingsModule,
+  keybindingsModule,
   sessionsModule,
   sessionSearchModule,
   themesModule,

@@ -109,9 +109,24 @@ export const conversationsModule: ShellModule = {
         category: 'Claude',
         when: 'conversations.hasActive',
       }),
-      commands.register('conversations.next', () => tabs.cycle(1), { when: 'conversations.multiple' }),
-      commands.register('conversations.previous', () => tabs.cycle(-1), { when: 'conversations.multiple' }),
-      commands.register('conversations.goTo', (index) => tabs.activateIndex(Number(index))),
+      commands.register('conversations.next', () => tabs.cycle(1), {
+        title: t('nextConversation'),
+        category: 'Claude',
+        when: 'conversations.multiple',
+      }),
+      commands.register('conversations.previous', () => tabs.cycle(-1), {
+        title: t('previousConversation'),
+        category: 'Claude',
+        when: 'conversations.multiple',
+      }),
+      // One command per tab, as VS Code's "Open Editor at Index": each its own keybinding.
+      ...Array.from({ length: 9 }, (_, i) =>
+        commands.register(`conversations.goTo${i + 1}`, () => tabs.activateIndex(i), {
+          title: t('openConversationAt', i + 1),
+          category: 'Claude',
+          palette: false,
+        }),
+      ),
       commands.register('conversations.reopenClosed', ext(EXT_REOPEN_CLOSED), {
         title: t('reopenClosedConversation'),
         category: 'Claude',
@@ -132,9 +147,7 @@ export const conversationsModule: ShellModule = {
       keybindings.register({ key: 'ctrl+pageup', command: 'conversations.previous' }),
       keybindings.register({ key: 'ctrl+shift+t', command: 'conversations.reopenClosed' }),
       keybindings.register({ key: 'ctrl+f', command: 'conversations.find' }),
-      ...Array.from({ length: 9 }, (_, i) =>
-        keybindings.register({ key: `ctrl+${i + 1}`, command: 'conversations.goTo', args: [i] }),
-      ),
+      ...Array.from({ length: 9 }, (_, i) => keybindings.register({ key: `ctrl+${i + 1}`, command: `conversations.goTo${i + 1}` })),
     ];
     register.forEach((disposable) => subscriptions.add(disposable));
     // In the search with nothing typed, after the recent conversations (features/sessionSearch).

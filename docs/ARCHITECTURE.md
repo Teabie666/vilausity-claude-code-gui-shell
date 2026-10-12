@@ -87,6 +87,14 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **默认设置（JSON）**：只读的 Monaco 编辑器（`TextEditorService.createViewer`，背后没有文档，插件看不到），内容由所有声明生成（`defaultSettingsText`），声明变了（比如插件的设置晚到）跟着刷新。查找命令找当前有焦点的编辑器（`focusedCodeEditor`），所以 Ctrl+F 在它里面也能用。
 - **写 settings.json**：先写临时文件再 rename（`host/node/jsonFile.ts`）。Windows 上目标文件被别的进程打开着（读它的程序、杀毒软件、同步盘）时 rename 会 EPERM，所以短暂重试，跟 graceful-fs 一样。写入排队执行，一次失败不影响后面的。
 
+## 快捷键（M1；用户层和编辑 M5.5）
+
+- **截住按键**：渲染进程把用到的组合键集合交给主进程（`window.setKeybindings`），主进程在 `before-input-event` 里截住（页面、iframe、Monaco 都收不到），发回渲染进程按规则分派（`core/keybindings.ts`，后面的规则优先，`when` 不成立的跳过）。所以快捷键在哪里都能用，代价是集合里的组合键页面永远收不到。组合键按物理键（`KeyboardEvent.code`）算，跟键盘布局无关（`platform/keybindings.ts`）。
+- **两层**（照 VS Code）：各模块 `IKeybindings.register` 的是默认；用户的 `keybindings.json`（settings.json 旁边，VS Code 的格式：`key`、`command`、`when`、`args`）盖在上面：普通条目加在默认之后（优先），`-命令` 去掉这个命令的默认（`key` 给了就只去掉这个键的，`when` 给了要相同）。只有主进程写这个文件（`host/main/keybindingsStore.ts`，jsonc-parser 改，保留注释；手改也会重新读），渲染进程启动时读一次（`keybindings.read`，在模块登记默认之前），之后收 `keybindingsChanged`。不支持的条目（连按两下的 `ctrl+k ctrl+s`、缺 key 或 command）读的时候跳过；`when` 写错的那条永远不生效。
+- **显示**：菜单、命令面板、提示里的按键都现查（`labelFor`：用户的优先，否则第一条默认；`bindTooltip` 在鼠标移上去时重算），改了快捷键跟着变。
+- **设置里的"键盘快捷方式"**（`features/keybindings`）：设置面板里的一个分区，整块是一张表（照 VS Code 的键盘快捷方式编辑器）：在用的规则、还没有快捷键的命令（可以加）、最后是灰色的只读行（系统的复制粘贴、对话输入框的 Enter、Monaco 的常用键，`builtins.ts`），按命令名排序。设置的搜索框也搜表里的行（`SettingsWidgetHandle.search`）。双击一行或点铅笔录新按键：录的时候主进程暂停截键（`pauseInterception`，不然 Ctrl+P 会直接打开搜索），Enter 确定、Esc 取消；只收带 Ctrl、Alt、Win 的组合或 F 键（别的键要留着打字）；跟别的命令或只读行重了会提示。改法跟 VS Code 一样（`edits.ts`）：默认的不就地改，加一条新的、再加一条 `-命令` 去掉默认，"重置"把这个命令的条目都删掉；用户自己的条目就地改。行上有重置、删除按钮，左边的竖线标出改过的命令。"在 keybindings.json 中编辑"用普通文本标签页打开，带 schema（命令 id 的补全）。
+- **命令要有标题**：表里显示命令的标题；只给快捷键用、不想出现在命令面板里的命令，注册时加 `palette: false`（比如"打开第 N 个对话"，照 VS Code 拆成 9 个命令）。
+
 ## 窗口和工作区（M4）
 
 - **全局和每个窗口**：`host/main/shellApp.ts` 持有窗口共用的东西（设置、插件的 globalState、主题、界面语言、webview 文档、`ccw:` 协议），`host/main/windowContext.ts` 是一个窗口：BrowserWindow、它的文件夹和 workspaceState、它的 extension host。渲染进程调主进程时按发送的窗口分发；设置、主题、语言变了通知所有窗口。插件的 globalState 所有窗口共用：一个窗口的 extension host 写了，主进程转给其他窗口的（`storage.didChange`，compat 的 Memento 跟着更新）。webview 的 id 是随机的，所以所有窗口的 webview 文档放在同一个表里，窗口关掉或插件进程重启时按窗口清掉。
@@ -206,7 +214,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - 内容面板里新的一种标签页：注册一个 `EditorProvider`（`core/editors.ts`），再用 `IContentPane.open(输入)` 打开。要跟插件共用的文档（插件能看到、能改的）一律经 exthost 打开（`documents.show`），别在 renderer 里自己读文件。
 - 搜索框（Ctrl+P）里多一组结果：`IQuickAccess.registerSearchContributor`（id、顺序、按输入给出一组行）；新的前缀模式（像 `>` 那样）用 `registerProvider`。
 - 选中文字旁边的按钮：往 `editor/selection` 菜单（`MenuId.EditorSelection`）登记一个命令，命令收到 `EditorSelectionContext`，可以用 `showWidget` 在原地显示自己的界面（评论的小窗就是这样）。
-- 快捷键注意：主进程会先截住所有注册过的组合键，页面（包括 Monaco）收不到。Monaco 自己要用的键（比如 Ctrl+F）如果被别的模块注册了，要在编辑器模块里用 `when: 'editorTextFocus'` 再注册一条转回给 Monaco。
+- 快捷键注意：主进程会先截住所有注册过的组合键，页面（包括 Monaco）收不到。Monaco 自己要用的键（比如 Ctrl+F）如果被别的模块注册了，要在编辑器模块里用 `when: 'editorTextFocus'` 再注册一条转回给 Monaco。绑了快捷键的命令要有标题（设置里的快捷键表格显示它），提示文字里别写死按键，用 `IKeybindings.bindTooltip` / `tooltip`。
 - 界面上的文字：在模块目录的 `messages.ts` 里用 `defineMessages('<命名空间>', {...})` 写英文，代码里用 `t('键')` 取；中文进 `src/nls/zh-cn.json`，没翻译的先显示英文，`npm run nls` 检查（规范见 `docs/design.md` 的"文案"）。界面语言在每个进程启动时定好（main 算出来，传给 renderer 和 extension host），换语言要重启。
 
 ## 数据
@@ -214,6 +222,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 | 路径（`%APPDATA%\Vilausity\` 下） | 内容 | 谁写 |
 | --- | --- | --- |
 | `settings.json` | 用户设置（JSONC，键名沿用 VS Code / 插件的） | main |
+| `keybindings.json` | 用户的快捷键（JSONC，VS Code 的格式） | main |
 | `state\global.json`、`state\workspaces\<hash>.json` | 插件的 globalState / workspaceState | main |
 | `state\shell.json` | 窗口位置、最近打开的文件夹、要恢复的窗口、缩放级别 | main |
 | `globalStorage\`、`workspaceStorage\` | 插件自己的存储目录 | 插件 |

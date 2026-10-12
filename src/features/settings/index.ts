@@ -55,6 +55,15 @@ export const settingsModule: ShellModule = {
     const dialogs = services.get(IDialogs);
     const settingsUri = URI.file(settings.filePath).toString();
 
+    /** A file in a text tab; false when it could not be opened (it says so). */
+    const openFile = async (uri: string): Promise<boolean> => {
+      dialog.close();
+      const shown = await connection.rpc?.call('documents.show', { uri, preserveFocus: false, preview: false });
+      if (!shown) {
+        await dialogs.showMessage({ severity: 'error', message: t('cannotOpenFile', URI.parse(uri).fsPath), modal: false, items: [] });
+      }
+      return shown === true;
+    };
     /** settings.json in a text tab; with `key`, its entry selected (added with the default value if missing). */
     const openJson = async (key?: string): Promise<void> => {
       const rpc = connection.rpc;
@@ -110,7 +119,7 @@ export const settingsModule: ShellModule = {
     // settings.json gets the schema of everything declared, kept current as modules declare more.
     const fileMatch = [settingsFileGlob(settings.filePath)];
     const updateSchema = (): void => {
-      editors.setJsonSchemas([{ uri: SETTINGS_SCHEMA_URI, fileMatch, schema: settingsJsonSchema(settings.definitions) }]);
+      editors.setJsonSchemas('settings', [{ uri: SETTINGS_SCHEMA_URI, fileMatch, schema: settingsJsonSchema(settings.definitions) }]);
     };
     updateSchema();
     subscriptions.add(settings.onDidChangeDefinitions(updateSchema));
@@ -134,7 +143,7 @@ export const settingsModule: ShellModule = {
 
     const gear = document.createElement('button');
     gear.className = 'icon-button titlebar-button icon-gear';
-    gear.title = t('openSettingsTooltip');
+    services.get(IKeybindings).bindTooltip(gear, t('settingsTooltip'), 'settings.open');
     gear.setAttribute('aria-label', t('openSettings'));
     gear.addEventListener('click', () => openUi());
     // Between the app's name and the API provider.
@@ -157,6 +166,12 @@ export const settingsModule: ShellModule = {
     );
     // For modules whose block in the panel opens something else (the API providers' editor).
     subscriptions.add(commands.register('settings.close', () => dialog.close()));
+    // For modules that open the panel at their section (the keyboard shortcuts).
+    subscriptions.add(
+      commands.register('settings.openSection', (section) => dialog.show(undefined, typeof section === 'string' ? section : undefined)),
+    );
+    // For modules that open a file of the settings folder (keybindings.json): the panel steps aside.
+    subscriptions.add(commands.register('settings.openFile', (uri) => typeof uri === 'string' && openFile(uri)));
     subscriptions.add(services.get(IKeybindings).register({ key: 'ctrl+,', command: 'settings.open' }));
   },
 };

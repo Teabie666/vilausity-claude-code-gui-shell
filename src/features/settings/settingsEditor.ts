@@ -8,7 +8,7 @@
 import { DisposableStore } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
 import type { EditorPane } from '../../core/editors';
-import type { SettingDefinition, SettingsService } from '../../core/settings';
+import type { SettingDefinition, SettingsService, SettingsWidgetHandle } from '../../core/settings';
 import { t } from './messages';
 import {
   controlKind,
@@ -285,6 +285,7 @@ export class SettingsEditorPane implements EditorPane {
   private readonly disposables = new DisposableStore();
   /** The widgets of the last render. */
   private readonly widgets = new DisposableStore();
+  private readonly widgetHandles = new Map<HTMLElement, SettingsWidgetHandle>();
   private renderScheduled = false;
 
   constructor(
@@ -345,6 +346,12 @@ export class SettingsEditorPane implements EditorPane {
     this.applyFilter();
   }
 
+  /** Scrolls a section to the top (its name, as in the table of contents). */
+  revealSection(section: string): void {
+    const heading = [...this.list.querySelectorAll<HTMLElement>('.settings-section-title')].find((candidate) => candidate.textContent === section);
+    heading?.scrollIntoView({ block: 'start' });
+  }
+
   relocate(container: HTMLElement): void {
     container.appendChild(this.root);
   }
@@ -372,6 +379,7 @@ export class SettingsEditorPane implements EditorPane {
     const scroll = this.list.scrollTop;
     this.rows.clear();
     this.widgets.clear();
+    this.widgetHandles.clear();
     this.toc.replaceChildren();
     this.list.replaceChildren();
     const visible = this.context.settings.definitions.filter((definition) => !definition.hidden);
@@ -396,7 +404,9 @@ export class SettingsEditorPane implements EditorPane {
         container.dataset.keywords = `${widget.keywords} ${section}`.toLowerCase();
         group.appendChild(container);
         try {
-          this.widgets.add(widget.create(container));
+          const handle = widget.create(container);
+          this.widgets.add(handle);
+          this.widgetHandles.set(container, handle);
         } catch (error) {
           this.context.logger.error(`settings widget ${widget.id} failed`, error);
         }
@@ -444,9 +454,12 @@ export class SettingsEditorPane implements EditorPane {
       const words = query.toLowerCase().split(/\s+/).filter(Boolean);
       for (const element of section.querySelectorAll<HTMLElement>('.settings-widget')) {
         const keywords = element.dataset.keywords ?? '';
-        element.hidden = !words.every((word) => keywords.includes(word));
+        const search = this.widgetHandles.get(element)?.search;
+        // The section's own words show all of it; otherwise the block finds its items.
+        const found = words.every((word) => keywords.includes(word)) ? (search?.([]) ?? 1) : (search?.(words) ?? 0);
+        element.hidden = found === 0;
         any ||= !element.hidden;
-        shown += element.hidden ? 0 : 1;
+        shown += found;
       }
       for (const element of section.querySelectorAll<HTMLElement>('.setting-item')) {
         const row = this.rows.get(element.dataset.key ?? '');

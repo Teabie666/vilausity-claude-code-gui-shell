@@ -7,7 +7,6 @@ export const t = defineMessages('sessions', {
   noSessionList: 'This version of Claude Code has no session list.',
   sessions: 'Sessions',
   toggleSessionList: 'Toggle Session List',
-  toggleTooltip: 'Toggle Session List (Ctrl+B)',
   /** A session without a title, in the messages below. */
   untitled: 'Untitled',
   deleteTitle: 'Delete the session "{0}" for good?',

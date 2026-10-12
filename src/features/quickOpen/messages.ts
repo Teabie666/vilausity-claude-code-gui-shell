@@ -4,7 +4,7 @@ import { defineMessages } from '../../platform/nls';
 
 export const t = defineMessages('quickOpen', {
   search: 'Search...',
-  searchTooltip: 'Search conversations, files and folders ({0})',
+  searchTooltip: 'Search conversations, files and folders',
   /** The search box: the window's folder. */
   workspaceLabel: 'Workspace: {0}',
   /** After the folder's name in the administrator instance (VS Code's title says the same). */

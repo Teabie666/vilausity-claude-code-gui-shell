@@ -68,6 +68,11 @@ export async function startWorkbench(modules: readonly ShellModule[]): Promise<v
     logger.child('keybindings'),
   );
   native.on('keybinding', ({ chord }) => void keybindings.dispatch(chord));
+  // The user's keybindings before any module registers the defaults they change.
+  const userKeybindings = await native.call('keybindings.read', undefined);
+  keybindings.setUserEntries(userKeybindings.entries);
+  keybindings.filePath = userKeybindings.filePath;
+  native.on('keybindingsChanged', ({ entries }) => keybindings.setUserEntries(entries));
   const menus = new MenuService(contextKeys, logger.child('menus'));
 
   const layout = new Layout();

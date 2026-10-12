@@ -92,7 +92,7 @@ export const sessionsModule: ShellModule = {
 
     const toggle = document.createElement('button');
     toggle.className = 'icon-button titlebar-button icon-sidebar';
-    toggle.title = t('toggleTooltip');
+    keybindings.bindTooltip(toggle, t('toggleSessionList'), 'sessions.toggleSidebar');
     toggle.setAttribute('aria-label', t('toggleSessionList'));
     toggle.addEventListener('click', () => layout.toggleSidebar());
     const syncToggle = (): void => {

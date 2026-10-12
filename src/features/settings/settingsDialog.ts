@@ -21,13 +21,17 @@ export class SettingsDialog {
     return this.open !== undefined;
   }
 
-  /** Opens the panel (or keeps the open one), with `query` in its search box if given. */
-  show(query?: string): void {
+  /** Opens the panel (or keeps the open one), with `query` in its search box if given, or at `section`. */
+  show(query?: string, section?: string): void {
     if (!this.open) {
       this.open = this.create();
     }
     if (query !== undefined) {
       this.open.pane.setQuery(query);
+    }
+    if (section !== undefined) {
+      this.open.pane.setQuery('');
+      this.open.pane.revealSection(section);
     }
     this.open.pane.focus();
   }

@@ -102,11 +102,15 @@ export class TextEditorService {
   ) {}
 
   private json: JsonLanguage | undefined;
-  private jsonSchemas: readonly JsonSchemaAssociation[] = [];
+  /** By the module that gives them. */
+  private readonly jsonSchemas = new Map<string, readonly JsonSchemaAssociation[]>();
 
-  /** JSON schemas for documents by URI (e.g. settings.json's): completion, hovers, validation. */
-  setJsonSchemas(schemas: readonly JsonSchemaAssociation[]): void {
-    this.jsonSchemas = schemas;
+  /**
+   * JSON schemas for documents by URI (e.g. settings.json's): completion, hovers, validation.
+   * Each module's replace what it gave before.
+   */
+  setJsonSchemas(owner: string, schemas: readonly JsonSchemaAssociation[]): void {
+    this.jsonSchemas.set(owner, schemas);
     this.applyJsonSchemas();
   }
 
@@ -119,7 +123,7 @@ export class TextEditorService {
       trailingCommas: 'ignore',
       enableSchemaRequest: false,
       schemaValidation: 'warning',
-      schemas: this.jsonSchemas.map((association) => ({
+      schemas: [...this.jsonSchemas.values()].flat().map((association) => ({
         uri: association.uri,
         fileMatch: [...association.fileMatch],
         schema: association.schema,
@@ -602,6 +606,8 @@ export const editorModule: ShellModule = {
       commands.register(
         'editor.find',
         () => (editors.focusedCodeEditor() ?? editors.activePane?.editor ?? editors.activeDiff?.editor.getModifiedEditor())?.getAction('actions.find')?.run(),
+        // The palette takes the focus from the editor: only a keybinding finds.
+        { title: t('findCommand'), palette: false },
       ),
       commands.register(
         'editor.compareWithSaved',

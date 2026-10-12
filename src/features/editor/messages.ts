@@ -10,6 +10,7 @@ export const t = defineMessages('editor', {
   reload: 'Reload',
   keepMine: 'Keep Mine',
   saveCommand: 'Save',
+  findCommand: 'Find in Editor',
   revertCommand: 'Revert File',
   proposedChanges: 'Proposed changes',
   accept: 'Accept',

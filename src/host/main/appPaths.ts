@@ -16,6 +16,8 @@ export interface AppPaths {
   readonly instanceRoot: string;
   readonly elevated: boolean;
   readonly settingsFile: string;
+  /** The user's keybindings, next to settings.json (shared by both instances, as that is). */
+  readonly keybindingsFile: string;
   readonly globalStateFile: string;
   /** What main itself remembers (windows, recent folders), apart from the extension's state. */
   readonly shellStateFile: string;
@@ -54,6 +56,7 @@ export function createAppPaths(root: string, startedAt = new Date(), elevated = 
     instanceRoot,
     elevated,
     settingsFile: path.join(root, 'settings.json'),
+    keybindingsFile: path.join(root, 'keybindings.json'),
     globalStateFile: path.join(instanceRoot, 'state', 'global.json'),
     shellStateFile: path.join(instanceRoot, 'state', 'shell.json'),
     providersFile: path.join(root, 'providers.json'),

@@ -65,6 +65,7 @@ import { t } from './messages';
 import { ProviderStore, type SecretCipher } from './providerStore';
 import { deleteSession, waitForSessionEnd } from './sessionFiles';
 import { claudeProjectsDir, SessionSearch } from './sessionSearch';
+import { KeybindingsStore } from './keybindingsStore';
 import { SettingsStore } from './settingsStore';
 import { isExternalUrl, nextZoomLevel } from './shellWindow';
 import { StateStore } from './stateStore';
@@ -134,6 +135,7 @@ type RendererHandlers = {
 export class ShellApp extends Disposable implements WindowHost {
   readonly logger: ILogger;
   readonly settings: SettingsStore;
+  private readonly keybindings: KeybindingsStore;
   readonly globalState: StateStore;
   readonly documents: WebviewDocumentStore;
   /** The display language of this run; a different setting applies after a restart. */
@@ -166,6 +168,7 @@ export class ShellApp extends Disposable implements WindowHost {
     super();
     this.logger = env.logger;
     this.settings = this.register(new SettingsStore(env.paths.settingsFile, this.logger.child('settings')));
+    this.keybindings = this.register(new KeybindingsStore(env.paths.keybindingsFile, this.logger.child('keybindings')));
     this.language = this.wantedLanguage();
     setUiLanguage(this.language, languagePack(this.language));
     this.logger.info(`display language: ${this.language}`);
@@ -261,6 +264,8 @@ export class ShellApp extends Disposable implements WindowHost {
     this.registerRendererHandlers();
     this.settings.watch();
     this.register(this.settings.onDidChange(({ keys }) => this.settingsChanged(keys)));
+    this.keybindings.watch();
+    this.register(this.keybindings.onDidChange(() => this.broadcast('keybindingsChanged', { entries: this.keybindings.entries })));
     this.register(
       this.providers.onDidChange(() => {
         for (const window of this.windows) {
@@ -734,6 +739,8 @@ export class ShellApp extends Disposable implements WindowHost {
       },
       'settings.read': () => ({ values: { ...this.settings.all }, filePath: this.settings.filePath }),
       'settings.update': ({ key, value }) => this.settings.set(key, value),
+      'keybindings.read': () => ({ entries: [...this.keybindings.entries], filePath: this.keybindings.filePath }),
+      'keybindings.edit': ({ remove, add }) => this.keybindings.edit(remove, add),
       'window.toggleDevTools': (_params, window) => window.webContents.toggleDevTools(),
       'window.pickFolder': async (_params, window) => {
         const result = await dialog.showOpenDialog(window.browserWindow, {

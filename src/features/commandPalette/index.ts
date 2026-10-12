@@ -89,7 +89,7 @@ export const commandPaletteModule: ShellModule = {
         },
       }),
     );
-    subscriptions.add(commands.register('commandPalette.show', () => quickAccess.show('>')));
+    subscriptions.add(commands.register('commandPalette.show', () => quickAccess.show('>'), { title: t('showAllCommands'), palette: false }));
     subscriptions.add(keybindings.register({ key: 'ctrl+shift+p', command: 'commandPalette.show' }));
     subscriptions.add(keybindings.register({ key: 'f1', command: 'commandPalette.show' }));
 

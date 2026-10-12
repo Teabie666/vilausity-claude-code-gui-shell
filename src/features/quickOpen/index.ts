@@ -70,7 +70,7 @@ export const quickOpenModule: ShellModule = {
     // Keybindings are known once every module has registered its own.
     box.addEventListener('mouseenter', () => {
       openButton.title = [
-        t('searchTooltip', keybindings.labelFor('quickOpen.show') ?? ''),
+        keybindings.tooltip(t('searchTooltip'), 'quickOpen.show'),
         ...workspace.folders,
         ...(workspace.elevated ? [t('administratorTooltip')] : []),
       ].join('\n');

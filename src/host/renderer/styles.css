@@ -1145,6 +1145,187 @@ body.resizing {
   color: var(--vscode-textLink-activeForeground);
 }
 
+/* ---- keyboard shortcuts (features/keybindings), after VS Code's keybindings editor ---- */
+
+.icon-add {
+  --icon: var(--icon-add);
+}
+
+/* The table is the whole block: no box around it. */
+.settings-widget.keybindings-widget {
+  margin: 4px 12px 8px 16px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+}
+
+.keybindings-toolbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.keybindings-hint {
+  color: var(--vscode-descriptionForeground);
+}
+
+.keybindings-toolbar .setting-edit-json {
+  flex: none;
+}
+
+.keybindings-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.keybindings-table th,
+.keybindings-table td {
+  height: 24px;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.keybindings-table th {
+  font-weight: 600;
+  background: var(--vscode-keybindingTable-headerBackground);
+  border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
+}
+
+.keybinding-row:nth-child(odd) {
+  background: var(--vscode-keybindingTable-rowsBackground);
+}
+
+.keybinding-row:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+/* Built-in keys: shown, not changed. */
+.keybinding-row.builtin {
+  color: var(--vscode-descriptionForeground);
+}
+
+.keybinding-row.modified td:first-child {
+  box-shadow: inset 2px 0 0 var(--vscode-settings-modifiedItemIndicator);
+}
+
+.keybindings-table .keybinding-actions {
+  width: 26px;
+  padding: 0 0 0 2px;
+}
+
+.keybindings-table .keybinding-command {
+  width: 36%;
+}
+
+.keybindings-table .keybinding-key {
+  width: 20%;
+}
+
+.keybindings-table .keybinding-source {
+  width: 130px;
+}
+
+.keybindings-table td.keybinding-when {
+  color: var(--vscode-descriptionForeground);
+}
+
+.keybinding-row:not(:hover) .keybinding-actions .icon-button,
+.keybinding-row:not(:hover) .keybinding-row-actions {
+  visibility: hidden;
+}
+
+.keybinding-row {
+  user-select: none;
+}
+
+.keybinding-source-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.keybinding-source-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.keybinding-row-actions {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+}
+
+.keybinding-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Over the settings, not dimming them again. */
+.overlay-backdrop.keybinding-recorder-backdrop {
+  align-items: center;
+}
+
+.overlay-box.keybinding-recorder {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 420px;
+  margin-top: -10vh;
+  padding: 12px 14px;
+}
+
+.keybinding-recorder-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.keybinding-recorder-hint {
+  color: var(--vscode-descriptionForeground);
+}
+
+.keybinding-recorder-field {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 6px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: var(--vscode-cornerRadius-small);
+  outline: none;
+}
+
+.keybinding-recorder-field:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.keybinding-recorder-field.empty {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.keybinding-recorder-field.invalid {
+  border-color: var(--vscode-inputValidation-errorBorder);
+}
+
+.keybinding-recorder-message {
+  min-height: 18px;
+  color: var(--vscode-editorWarning-foreground);
+}
+
+.keybinding-recorder-message.error {
+  color: var(--vscode-errorForeground);
+}
+
 /* ---- API providers editor (laid out like the settings editor) --------------- */
 
 .providers-editor {

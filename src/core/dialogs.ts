@@ -320,7 +320,9 @@ export class Dialogs {
       resolve(value);
     };
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
+      // Only the top one: an overlay can open over another (a question over the settings).
+      const top = [...this.root.children].findLast((child) => child.classList.contains('overlay-backdrop'));
+      if (event.key === 'Escape' && !event.defaultPrevented && top === backdrop) {
         event.preventDefault();
         finish(cancelValue);
       }

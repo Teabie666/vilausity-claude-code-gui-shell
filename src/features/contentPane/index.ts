@@ -72,7 +72,7 @@ export const contentPaneModule: ShellModule = {
 
     const toggle = document.createElement('button');
     toggle.className = 'icon-button titlebar-button icon-content-pane';
-    toggle.title = t('toggleTooltip');
+    keybindings.bindTooltip(toggle, t('toggleContentPane'), 'contentPane.toggle');
     toggle.setAttribute('aria-label', t('toggleContentPane'));
     toggle.addEventListener('click', () => layout.toggleContentPane());
     const syncToggle = (): void => {

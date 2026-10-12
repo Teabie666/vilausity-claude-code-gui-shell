@@ -13,6 +13,8 @@ export interface CommandOptions {
   readonly category?: string;
   /** The command is only enabled (palette, keybindings) while this clause holds. */
   readonly when?: string;
+  /** False: titled for the keyboard shortcuts only, not listed in the palette. */
+  readonly palette?: boolean;
 }
 
 export interface CommandInfo extends CommandOptions {
@@ -50,6 +52,16 @@ export class CommandService {
     return this.commands.has(id);
   }
 
+  /** How the command was registered (its title and category), enabled or not. */
+  info(id: string): CommandInfo | undefined {
+    return this.commands.get(id)?.info;
+  }
+
+  /** Every registered command. */
+  get all(): CommandInfo[] {
+    return [...this.commands.values()].map((entry) => entry.info);
+  }
+
   isEnabled(id: string): boolean {
     const entry = this.commands.get(id);
     return entry !== undefined && this.contextKeys.evaluate(entry.info.when);
@@ -72,6 +84,6 @@ export class CommandService {
   list(): CommandInfo[] {
     return [...this.commands.values()]
       .map((entry) => entry.info)
-      .filter((info) => info.title !== undefined && this.contextKeys.evaluate(info.when));
+      .filter((info) => info.title !== undefined && info.palette !== false && this.contextKeys.evaluate(info.when));
   }
 }

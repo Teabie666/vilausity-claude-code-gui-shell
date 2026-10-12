@@ -1,7 +1,8 @@
 // Shell UI test: keybindings, sidebar, conversation tabs, command palette, themes, find, zoom,
 // context menus, restart restore.
 // Sends no messages to Claude (no usage).   npm run build && node tests/ui.mjs
-// UI_ONLY=<text> runs only the steps whose name contains it (for steps that need no earlier one).
+// UI_ONLY=<regex> runs only the steps whose name matches, e.g. 'chat panel|keyboard shortcuts' (the first
+// step waits for the window to be ready; some steps need others before them).
 import { _electron as electron } from 'playwright-core';
 import electronPath from 'electron';
 import { execFileSync, spawn } from 'node:child_process';
@@ -65,7 +66,7 @@ env.VILAUS_REGISTRY_ROOT = `${registryTestKey}\\Classes`;
 
 const results = [];
 async function step(name, fn) {
-  if (process.env.UI_ONLY && !name.includes(process.env.UI_ONLY)) return;
+  if (process.env.UI_ONLY && !new RegExp(process.env.UI_ONLY).test(name)) return;
   const started = Date.now();
   try {
     const detail = await fn();
@@ -856,6 +857,62 @@ await step("File Explorer's context menu: the switch in the settings adds the en
   if (!registered()) throw new Error('--register-context-menu added nothing');
   cli('--unregister-context-menu');
   if (registered()) throw new Error('--unregister-context-menu left the entries');
+});
+
+await step('keyboard shortcuts: recorded keys replace the default in keybindings.json and work; reset brings it back; the file edited by hand shows', async () => {
+  const keybindingsFile = path.join(dataDir, 'keybindings.json');
+  const search = page.locator('.settings-dialog .settings-search');
+  const row = page.locator('.settings-dialog .keybinding-row[data-command="sessions.toggleSidebar"]');
+  const closeSettings = async () => {
+    await search.fill('');
+    await page.keyboard.press('Escape');
+    await waitFor(async () => (await page.locator('.settings-dialog').count()) === 0, 5000, 'the settings panel to close');
+  };
+  await press('Control+,');
+  await page.locator('.settings-dialog .settings-editor').waitFor({ timeout: 10_000 });
+  // The settings search finds the table's rows.
+  await search.fill('toggle session list');
+  await row.waitFor({ timeout: 5000 });
+  if (await page.locator('.settings-dialog .keybinding-row[data-command="window.zoomIn"]').first().isVisible()) throw new Error('the search did not filter the table');
+  await row.dblclick();
+  const recorder = page.locator('.keybinding-recorder');
+  await recorder.waitFor({ timeout: 5000 });
+  // Main lets the keys through to the recorder (Ctrl+Shift+P would open the palette), which names what has them.
+  await press('Control+Shift+P');
+  await waitFor(async () => (await recorder.innerText()).includes('Also bound to: Show All Commands'), 5000, 'the conflict');
+  await press('Control+Alt+B');
+  await press('Enter');
+  const written = () => (existsSync(keybindingsFile) ? readFileSync(keybindingsFile, 'utf8') : '');
+  await waitFor(() => written().includes('"ctrl+alt+b"') && written().includes('"-sessions.toggleSidebar"'), 5000, 'keybindings.json');
+  await waitFor(async () => (await row.locator('.keybinding-source-text').innerText()) === 'User', 5000, 'the row from keybindings.json');
+  await closeSettings();
+  await press('Control+B');
+  await page.waitForTimeout(300);
+  if (await page.locator('#sidebar').isHidden()) throw new Error('Ctrl+B still toggles the session list');
+  await press('Control+Alt+B');
+  await waitFor(() => page.locator('#sidebar').isHidden(), 5000, 'Ctrl+Alt+B to hide the session list');
+  await press('Control+Alt+B');
+  await waitFor(() => page.locator('#sidebar').isVisible(), 5000, 'the session list back');
+
+  // Reset: both entries go, the default is back.
+  await press('Control+,');
+  await search.fill('toggle session list');
+  await row.hover();
+  await row.locator('.icon-discard').click();
+  await waitFor(() => !written().includes('sessions.toggleSidebar'), 5000, 'the entries to go');
+  await waitFor(async () => (await row.locator('.keybinding-source-text').innerText()) === 'Default', 5000, 'the default row');
+  // By hand: a command that had no keybinding gets one.
+  writeFileSync(keybindingsFile, '// by hand\n[{ "key": "ctrl+alt+j", "command": "settings.openJson" }]\n');
+  await search.fill('settings json');
+  const added = page.locator('.settings-dialog .keybinding-row[data-command="settings.openJson"]');
+  await waitFor(async () => (await added.locator('.keybinding-key').innerText()).replace(/\s/g, '') === 'Ctrl+Alt+J', 5000, 'the keybinding written by hand');
+  writeFileSync(keybindingsFile, '[]\n');
+  await waitFor(async () => (await added.locator('.keybinding-key').innerText()).trim() === '', 5000, 'the keybinding gone again');
+  await closeSettings();
+  await press('Control+B');
+  await waitFor(() => page.locator('#sidebar').isHidden(), 5000, 'Ctrl+B to toggle again');
+  await press('Control+B');
+  await waitFor(() => page.locator('#sidebar').isVisible(), 5000, 'the session list back');
 });
 
 await step('fonts: the UI, the conversation and its code each have their own; the bundled Noto Sans SC loads in webviews; chat.fontSize applies at once', async () => {

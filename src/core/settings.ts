@@ -54,7 +54,16 @@ export interface SettingsWidget {
   /** What the search finds it by, besides the section's name. */
   readonly keywords: string;
   /** Builds the block in `container`. Called each time the editor renders; disposed before the next. */
-  create(container: HTMLElement): IDisposable;
+  create(container: HTMLElement): SettingsWidgetHandle;
+}
+
+export interface SettingsWidgetHandle extends IDisposable {
+  /**
+   * A block with items of its own (the keyboard shortcuts) searches them: it shows those
+   * that have every word and returns how many (none: the block is hidden). Without this, the
+   * keywords decide.
+   */
+  search?(words: readonly string[]): number;
 }
 
 export class SettingsService {

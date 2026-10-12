@@ -13,6 +13,7 @@
  */
 
 import type { ExtensionErrorCode, ManagedExtensions } from './extensionUpdates';
+import type { KeybindingEntry } from './keybindings';
 import type { UiLanguage, UiLanguageSetting } from './nls';
 import type { ProviderConfig, ProviderSummary } from './providers';
 
@@ -716,6 +717,10 @@ export type MainApiForRenderer = {
   'settings.read': (p: void) => { values: Record<string, unknown>; filePath: string };
   /** Writes one setting to settings.json; `value: undefined` removes it (back to the default). */
   'settings.update': (p: { key: string; value: unknown }) => void;
+  /** The entries of keybindings.json that can take effect, and where the file is. */
+  'keybindings.read': (p: void) => { entries: KeybindingEntry[]; filePath: string };
+  /** Takes the entries equal to `remove` out of keybindings.json and appends `add`. */
+  'keybindings.edit': (p: { remove: readonly KeybindingEntry[]; add: readonly KeybindingEntry[] }) => void;
   /** Opens a folder in the system's file manager. */
   'os.openFolder': (p: { path: string }) => void;
   'window.toggleDevTools': (p: void) => void;
@@ -807,6 +812,8 @@ export type MainEventsForRenderer = {
   languageChanged: { readonly language: UiLanguage };
   /** settings.json changed (from the shell or by hand): all values, and the keys that changed. */
   settingsChanged: { readonly values: Readonly<Record<string, unknown>>; readonly keys: readonly string[] };
+  /** keybindings.json changed (from the shell or by hand). */
+  keybindingsChanged: { readonly entries: readonly KeybindingEntry[] };
   /** The extension's UI text is translated with this table now (null: it is not). */
   extensionTranslationsChanged: { readonly translations: ExtensionTranslations | null };
   /** Providers were added, edited or removed, or the window uses another one. */
