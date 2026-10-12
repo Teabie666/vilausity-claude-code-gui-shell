@@ -120,7 +120,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 
 ## 标题栏搜索框和快速访问（M5.5）
 
-- **标题栏**：左边侧栏开关、软件名、API 接口按钮；中间搜索框（照 VS Code 的命令中心，显示"工作区：<文件夹名>"，用户主文件夹后面加"（全局）"——在那里 Claude 能动整台电脑；管理员实例在后面加"[管理员]"）；右边设置、内容面板开关。左右两边平分剩下的宽度，搜索框在窗口正中。
+- **标题栏**：左边侧栏开关、logo 和软件名（见"标题栏 logo 和窗口图标"）、设置、API 接口按钮；中间搜索框（照 VS Code 的命令中心，显示"工作区：<文件夹名>"，用户主文件夹后面加"（全局）"——在那里 Claude 能动整台电脑；管理员实例在后面加"[管理员]"）；右边设置、内容面板开关。左右两边平分剩下的宽度，搜索框在窗口正中。
 - **快速访问**（`core/quickAccess.ts`，照 VS Code 的 quick access）：一个输入框，开头的字符决定交给谁：`>` 是命令（`features/commandPalette`），没有前缀是搜索。打开时盖在标题栏的搜索框上（跟 VS Code 开着命令中心时一样，所有快速输入都在这个位置），看起来是搜索框变大成了输入框、下面接着列表；避开两边的窗口按钮，不能拖动窗口。搜索由各模块登记的分组拼成（`registerSearchContributor`，分组的顺序可以随输入变）：对话（`features/sessionSearch`）、新建对话（`features/conversations`）、文件（`features/quickOpen`；输入像文件名或路径时排到最前，Ctrl+P、文件名、回车照样打开文件）、文件夹（`features/workspace`；没输入时还有打开文件夹、最近的文件夹、以管理员身份打开）、命令（没输入时：显示所有命令，加最近用过的两个）、"在所有文件夹中搜索"。异步的分组按 id 保留上一次的结果直到新结果回来，打字时列表不闪。命令面板照 VS Code 把最近用过的命令排在前面（在命令面板和搜索里执行的才算，存在 localStorage，各窗口共用）。快捷键：Ctrl+P / Ctrl+E 搜索，Ctrl+Shift+P / F1 命令，Ctrl+R 最近的文件夹。
 - **搜对话**：主进程读 Claude Code 的会话记录（`~/.claude/projects/<文件夹>/<会话 id>.jsonl`，`CLAUDE_CONFIG_DIR` 改了就跟着改；测试用 `VILAUS_SESSIONS_DIR` 指到别处）。这是 CLI 自己的存储格式，不是接口，所以只读、容错：不认识的行和字段跳过。只看标题（用户起的名字 > 旁路文件 `<会话 id>/custom-title.json` > 生成的标题 > 第一句话）、用户打的字和 Claude 的回复（不含工具输出、思考、IDE 和 CLI 附加的上下文），以及 Claude 读过和改过的文件。读取在主进程的 worker 线程里（`host/main/sessionSearch.ts`、`sessionSearchWorker.ts`，解析和匹配是纯函数 `sessionTranscripts.ts`），按文件大小和修改时间缓存，3 秒内的搜索直接用缓存。匹配不分大小写、整串子串匹配（中文直接能搜）：标题、文件、内容依次排，同类按时间新的在前。默认只搜当前文件夹的会话（按记录里的 `cwd`）。打开结果走主进程 `sessions.open`：找到（或打开）那个文件夹的窗口，再 `conversation.open`。
 
@@ -129,7 +129,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 都是页面脚本照 bridge 的页面提示做的（对照插件 2.1.296）；插件改了类名就退回插件原样。数据靠 bridge 旁听插件发给页面的消息（`observeToWebview`），再用控制消息（`ShellToWebviewControl`）交给页面脚本。页面上的显示都走 `data-vilaus-*` 属性加 bridge 的样式，React 管的内容不动。
 
 - **用量的重置时间**（`usageBars`、`host/webview/usageResets.ts`）：插件只写"Resets in 3h"。bridge 从 `panel_usage_update`（`unifiedWindows.<窗口>.resetsAt`，秒）和 `get_usage_response`（`rate_limits.<窗口>.resets_at`，ISO 日期；`model_scoped[]` 按模型）里取出精确时刻，按用量条的标签（"Session (5hr)"等，`usageResetsOf`）交给页面；页面按标签的英文原文（汉化记着原文）对上，显示"15:42 重置""明天 09:00 重置"。
-- **筛选下拉**（`statusFilter`、`host/webview/statusFilter.ts`）：插件的筛选按钮写上"活跃 · N"（从藏起来的"活跃"开关抄字），有会话在等用户时加"需要输入 · N"（bridge 数 `session_states_update.sessions` 里 `state` 是 `waiting` 的）。
+- **筛选下拉**（`statusFilter`、`host/webview/statusFilter.ts`）：插件的筛选按钮写上"活跃 · N"（从藏起来的"活跃"开关抄字），有会话在等用户时加"需要输入 · N"（bridge 数 `session_states_update.sessions` 里 `state` 是 `waiting_input` 的，见"标题栏 logo 和窗口图标"；第二块当初按 `waiting` 数，一直没显示过，第六块修了）。
 
 ## 删除会话（M5.5）
 
@@ -152,7 +152,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
   - **顶部色条**：`--vilaus-accent`，标题栏顶边 2px，横贯整个窗口。系统按钮层（titleBarOverlay）的颜色是标题栏的颜色、透明度 0：页面画的标题栏和色条从按钮底下透出来，Windows 照这个颜色算按钮悬停的深浅。
   - **设置** `vilaus.accent`（工作台，"主题色"）：`provider` 跟随 API 接口（默认）、`custom` 用 `vilaus.accent.custom` 的颜色（设置界面里是颜色选择器：schema 的 `format: "color-hex"`，跟 VS Code 一样）、`vscode` 用颜色主题自己的（没有顶部色条）。
   - **插件页面**：插件自己的橙色（发送按钮、输入框的焦点圈、链接、小标签）在 `--app-claude-orange` / `--app-claude-clay-button-orange` 里，bridge 的页面样式把它们指向主题带来的 `--vilaus-accent-line / -fill / -fill-foreground`；auto 和 bypassPermissions 模式下插件把发送按钮和焦点圈换成红色（`--app-error-foreground`），这两处也换成主题色，改由输入框旁的模式按钮带一层底色提醒（bypassPermissions 红色，auto 琥珀色）；没有强调色时这几个变量是 `initial`，回落到插件自己的值。账户用量条不跟主题色，按用掉的比例从绿经黄到红：条的长度是插件写的行内 `width`，引导脚本按页面提示的 `meters` 把它抄成 `--vilaus-meter`，样式再用 `color-mix` 算颜色。
-- **编辑页**是内容面板的标签页（"管理 API 接口"）：左边列表和"添加 API 接口…"（从预设选），右边表单，显式保存。强调色一栏没选时写着"供应商的颜色（默认）"，选了别的可以"恢复默认"；选的跟供应商的一样就不存。"为此接口创建桌面快捷方式"写一个 `.lnk`：`Vilausity.exe --provider <id>`（开发时是 electron.exe 加 app 目录）。
+- **编辑页**是内容面板的标签页（"管理 API 接口"）：左边列表和"添加 API 接口…"（从预设选），右边表单，显式保存。强调色一栏没选时写着"供应商的颜色（默认）"，选了别的可以"恢复默认"；选的跟供应商的一样就不存。"为此接口创建桌面快捷方式"写一个 `.lnk`：`Vilausity.exe --provider <id>`（开发时是 electron.exe 加 app 目录），图标是这个接口的 logo 颜色（见"标题栏 logo 和窗口图标"）。
 - **测试**：界面测试在 127.0.0.1 起一个假的 Anthropic 接口，切到指向它的接口、重新加载窗口、新对话发一句话，检查假接口收到的 `Authorization: Bearer <key>` 和模型名；不花钱也不联网。
 
 ## 插件管理（M4）
@@ -193,6 +193,18 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **命令**：`"Vilausity.exe" "%V"`，管理员那项加 `--admin`、带盾牌图标（`HasLUAShield`）。驱动器的 `"%V"` 是 `"D:\"`，反斜杠把收尾的引号转义了，进程拿到的是 `D:"`，命令行解析时还原成 `D:\`。只有叫 `runas` 的动词才会自己提权，所以 `--admin` 由程序处理：普通权限的进程用"以管理员身份打开此文件夹"同一套（`startElevated`，Windows 弹 UAC）起管理员实例，自己不拿单实例锁、不开窗口，直接退出。
 - **跟着程序走**：安装版每次启动时，菜单在就按当前的程序路径和界面语言重写一遍（换了安装位置、改了语言都能跟上）；开发时不重写（那会指向 electron.exe 和这份代码）。
 - **Windows 11**：新右键菜单只收带签名的 MSIX 包注册的项，我们不签名，所以默认在"显示更多选项"里；开了经典右键菜单的电脑上直接在第一层。
+
+## 标题栏 logo 和窗口图标（M5.5）
+
+- **图形**：几何形状只在 `scripts/icons.mjs` 里改。`npm run icons` 除了 `resources/icon/` 还生成 `src/platform/logoMark.ts`：图形的多边形（光标 `_` 单独一块）、放进图标正方形里的版本、`icon.ico` 有哪些尺寸。程序里的 logo 和别的颜色的图标都照这份数据画。
+- **颜色**：`platform/accent.ts` 的 `logoColor`：就是窗口的强调色，但 Claude 的橙色（订阅、Anthropic API、Claude 的几种平台）和没有强调色时（"VS Code 默认颜色"、没选颜色的自定义接口）用 logo 自己的亮橙 `#ff7b1c`，这样的窗口显示的就是程序图标本身。主题里的 `--vilaus-logo` 是标题栏用的，跟顶部色条一样调到对标题栏至少 3:1（近黑的颜色在深色标题栏上会提亮，亮橙在浅色标题栏上会压暗一点）。
+- **标题栏的 logo**（`features/window/logo.ts`）：内联 SVG，在软件名前面，高 14px。光标兼当状态灯：本窗口任何一个对话里 Claude 在干活时，它像终端光标一样闪（亮 0.53 秒、灭 0.53 秒）；有对话在等用户（权限确认、提问）时琥珀色常亮（`editorWarning.foreground`，跟会话列表的"需要输入"同色），两种都有时显示等用户的。系统关了动画（`prefers-reduced-motion`）时，干活显示成半亮、不闪。悬停提示写着几个对话在干活、几个在等。
+- **状态从哪来**（对照插件 2.1.296）：每个对话页把自己的状态报给插件（`update_session_state`：有权限请求或提问在等时 `waiting_input`，Claude 在回复或有后台任务在跑时 `running`，否则 `idle`）；插件给本窗口每个页面广播 `session_states_update.sessions[] = {sessionId, state, title}`，对话关掉时删掉它那条。bridge 旁听这条广播数出 `{running, waiting}`（每个页面收到的是同一条，变了才报一次），exthost 报给主进程（`sessions.activity`），主进程设任务栏，再转给页面（`sessionActivity` 事件）。插件进程停掉或崩溃时主进程把它归零。会话列表的"需要输入 · N"也用这个数。
+- **任务栏**（`ShellWindow.setActivity`）：干活时任务栏按钮上的绿色进度条来回走（`setProgressBar` 的 `indeterminate`），有对话在等用户时整个按钮变黄（`paused`），都没有就去掉。实测（StartAllBack 的任务栏）前台窗口的按钮不一定画进度，后台窗口的都能看到；前台时看标题栏的 logo 就行。
+- **窗口图标**：每个窗口按 logo 的颜色 `setIcon`（任务栏按钮、Alt+Tab，连同移到独立窗口的标签页）；亮橙用程序自己的 `icon.ico`。别的颜色主进程自己画（`host/main/logoIcons.ts`：多边形扫描线填充，横向按精确面积、纵向每像素采样 16 次，再自己编成 PNG 和 ICO，ICO 的写法跟 `icons.mjs` 一样），存成数据目录下的 `icons/logo-<颜色>-<几何的哈希>.ico`，一个颜色一个文件、两个实例共用；图形改了文件名就不同，旧文件留着给以前建的快捷方式用。必须是 .ico 文件：Electron 只有拿到 .ico 文件时才把 Windows 要的那个尺寸交给它，从图片给的是一张让 Windows 自己缩放。图标对任务栏也要看得清：按任务栏的深浅（`nativeTheme.shouldUseDarkColorsForSystemIntegratedUI`，变了就换）对 Windows 11 任务栏的底色调到 3:1，亮橙不调。不按接口给窗口分任务栏组（2026-10-12 定）：几个窗口合不合成一个按钮看用户的任务栏设置，不合成时每个按钮显示窗口自己的图标（实测）。
+- **快捷方式**："为此接口创建桌面快捷方式"用这个接口的窗口此刻的 logo 颜色的 .ico（亮橙时：安装版用 exe 自己的图标，开发时用 `dist/icon.ico`）。之后改了颜色，再建一次就更新。
+- **`--provider` 和主题**：带 `--provider` 启动（接口的快捷方式就是这样）时，主进程等页面加载完才切接口，新主题可能在页面开始监听之前就发来了，以前会出现接口名对了、颜色还是订阅的。所以 `core/workbench.ts` 在第一个 await 之前就开始听 `themeChanged`，用最后收到的那份。
+- **测试**：单元测试覆盖 logo 的颜色规则和对比度、扫描线填充（对齐像素的方块、半个像素、总面积跟多边形面积一致）、PNG 和 ICO 的格式、图标文件的缓存、bridge 数状态。界面测试在 API 接口那步检查 logo 跟着订阅、自定义颜色、VS Code 默认、假接口变色，图标文件画出来了，给假接口发消息时 logo 从闲着到干活再回来。smoke 检查真实回复时 logo 干活再停下，审批改文件时 logo 和会话列表都显示在等输入。
 
 ## 评论（M3）
 

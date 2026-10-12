@@ -19,6 +19,7 @@ import type { OsBackend } from '../../compat/vscode/host';
 import type { ILogger } from '../../platform/log';
 import type {
   ConversationEscapeHints,
+  SessionActivity,
   SessionBusy,
   SessionRowHints,
   ShellToWebviewControl,
@@ -424,6 +425,8 @@ export interface BridgeOptions {
   readonly workspaceFolders: readonly string[];
   /** Keeps the preview panel of this webview (see `opensAsPreview`). */
   readonly pinPreview?: (webviewId: string) => void;
+  /** What the window's conversations are doing changed (see `observeToWebview`). */
+  readonly onActivity?: (activity: SessionActivity) => void;
 }
 
 export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
@@ -444,6 +447,8 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   private readonly listPages = new Map<WebviewImpl, Record<string, unknown>>();
   /** What the bridge itself posts to pages, which it does not look at again. */
   private readonly ownPosts = new WeakSet<object>();
+  /** The conversations at work and waiting, as last reported. */
+  private activity: SessionActivity = { running: 0, waiting: 0 };
 
   constructor(
     private readonly os: OsBackend,
@@ -616,11 +621,20 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     if (Array.isArray(request.liveElsewhereSessions)) {
       this.elsewhereSessions = new Set(request.liveElsewhereSessions.flatMap(sessionIdOf));
     }
-    // `sessions`: `{sessionId, state, title}`; waiting is the page's "needs input" (asking the user).
-    if (Array.isArray(request.sessions)) {
-      const count = request.sessions.filter((session) => isRecord(session) && session.state === 'waiting').length;
-      const control: ShellToWebviewControl = { ccwControl: 'needsInput', count };
+    // `sessions`: `{sessionId, state, title}` of this window's conversations, `state` as each
+    // one's page reports it: `waiting_input` while it asks the user (a permission, a question:
+    // the list's "needs input"), `running` while Claude works or a background task runs, `idle`.
+    const sessions: unknown = request.sessions;
+    if (Array.isArray(sessions)) {
+      const count = (state: string): number => sessions.filter((session) => isRecord(session) && session.state === state).length;
+      const activity = { running: count('running'), waiting: count('waiting_input') };
+      const control: ShellToWebviewControl = { ccwControl: 'needsInput', count: activity.waiting };
       void webview.postMessage(control);
+      // Every page is sent the same update: report it once.
+      if (activity.running !== this.activity.running || activity.waiting !== this.activity.waiting) {
+        this.activity = activity;
+        this.options.onActivity?.(activity);
+      }
     }
     if (webview.viewType !== SESSION_LIST_VIEW_TYPE || !isRecord(message) || !isRecord(inner)) {
       return undefined;

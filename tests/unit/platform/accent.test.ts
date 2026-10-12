@@ -1,7 +1,8 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { contrast, ensureContrast, formatColor, luminance, parseColor, withAccent, type Rgba } from '../../../src/platform/accent';
+import { contrast, ensureContrast, formatColor, logoColor, luminance, parseColor, withAccent, type Rgba } from '../../../src/platform/accent';
+import { LOGO_COLOR } from '../../../src/platform/logoMark';
 import {
   CLAUDE_ACCENT,
   PRESET_ACCENTS,
@@ -44,6 +45,30 @@ describe('colors', () => {
     // On white it darkens instead.
     const lightBlue = ensureContrast(color('#8ab4f8'), color('#ffffff'), 3);
     assert.ok(luminance(lightBlue) < luminance(color('#8ab4f8')));
+  });
+});
+
+describe('the logo', () => {
+  test("is the accent's color, but the app's own orange for Claude's and for none", () => {
+    assert.equal(logoColor(undefined), LOGO_COLOR);
+    assert.equal(logoColor(CLAUDE_ACCENT), LOGO_COLOR);
+    assert.equal(logoColor('#D97757'), LOGO_COLOR);
+    assert.equal(logoColor('#4D6BFE'), '#4d6bfe');
+    assert.equal(logoColor('not a color'), LOGO_COLOR);
+  });
+
+  test('every theme has the title bar logo, as visible on the title bar as the accent line', () => {
+    const titleBar = color(v(dark, 'titleBar-activeBackground'));
+    assert.equal(withAccent(dark, undefined).variables['vilaus-logo'], LOGO_COLOR);
+    assert.equal(withAccent(dark, CLAUDE_ACCENT).variables['vilaus-logo'], LOGO_COLOR);
+    assert.equal(withAccent(dark, '#4d6bfe').variables['vilaus-logo'], '#4d6bfe');
+    // A near-black vendor color is lightened on a dark title bar.
+    const glm = color(withAccent(dark, '#2b2b2b').variables['vilaus-logo']);
+    assert.ok(contrast(glm, titleBar) >= 3, formatColor(glm));
+    // The orange darkens a little on a light one.
+    const onLight = color(withAccent(light, undefined).variables['vilaus-logo']);
+    assert.ok(contrast(onLight, color(v(light, 'titleBar-activeBackground'))) >= 3, formatColor(onLight));
+    assert.ok(luminance(onLight) < luminance(color(LOGO_COLOR)));
   });
 });
 

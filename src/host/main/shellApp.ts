@@ -9,7 +9,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { app, dialog, ipcMain, net, safeStorage, session, shell } from 'electron';
+import { app, dialog, ipcMain, nativeTheme, net, safeStorage, session, shell } from 'electron';
 import {
   AUTO_UPDATE_SETTING,
   DEFAULT_OPEN_VSX_URL,
@@ -40,7 +40,8 @@ import {
   type StartupNotices,
   type ThemeData,
 } from '../../platform/protocol';
-import { ACCENT_COLOR_SETTING, ACCENT_SETTING, ACCENT_SOURCES, parseColor, withAccent } from '../../platform/accent';
+import { ACCENT_COLOR_SETTING, ACCENT_SETTING, ACCENT_SOURCES, logoColor, parseColor, withAccent } from '../../platform/accent';
+import { LOGO_COLOR } from '../../platform/logoMark';
 import {
   DEFAULT_PROVIDER_SETTING,
   providerAccentColor,
@@ -66,6 +67,7 @@ import { ProviderStore, type SecretCipher } from './providerStore';
 import { deleteSession, waitForSessionEnd } from './sessionFiles';
 import { claudeProjectsDir, SessionSearch } from './sessionSearch';
 import { KeybindingsStore } from './keybindingsStore';
+import { LogoIcons, systemIconColor } from './logoIcons';
 import { SettingsStore } from './settingsStore';
 import { isExternalUrl, nextZoomLevel } from './shellWindow';
 import { StateStore } from './stateStore';
@@ -152,6 +154,8 @@ export class ShellApp extends Disposable implements WindowHost {
   private readonly projectsDir = claudeProjectsDir(process.env, os.homedir());
   /** File Explorer's "Open with Vilausity" entries. */
   private readonly explorerMenu = new ExplorerMenu(explorerMenuRoot(process.env), explorerMenuTarget());
+  /** The app icon in the colors of windows' logos, for their icons and providers' shortcuts. */
+  private readonly logoIcons: LogoIcons;
   private readonly themesDir: string;
   private currentTheme: ThemeData;
   private currentZoom: number;
@@ -199,6 +203,7 @@ export class ShellApp extends Disposable implements WindowHost {
       targetPlatformOf(process.platform, process.arch),
       this.logger.child('extensions'),
     );
+    this.logoIcons = new LogoIcons(env.paths.iconsDir, this.logger.child('icons'));
     this.themesDir = path.join(env.appDir, 'themes');
     const themeId = env.args.theme ?? stringSetting(this.settings.all[THEME_SETTING]) ?? DEFAULT_THEME_ID;
     this.currentTheme = withFontVariables(loadTheme(this.themesDir, themeId, this.logger), this.settings.all);
@@ -278,6 +283,10 @@ export class ShellApp extends Disposable implements WindowHost {
         }
       }),
     );
+    // The taskbar turned dark or light: icons drawn to show on it may have to change.
+    const onNativeThemeUpdated = (): void => this.windows.forEach((window) => window.refreshIcon());
+    nativeTheme.on('updated', onNativeThemeUpdated);
+    this.register(toDisposable(() => nativeTheme.off('updated', onNativeThemeUpdated)));
     // A quit from elsewhere (app.quit()) would close the windows one by one, and only the
     // last would be restored; quit the way the Exit command does instead.
     const onBeforeQuit = (event: Electron.Event): void => {
@@ -421,20 +430,39 @@ export class ShellApp extends Disposable implements WindowHost {
   }
 
   /**
-   * The theme of a window whose provider is `providerId`: the shared one in the accent the
-   * `vilaus.accent` setting asks for (the provider's by default).
+   * The accent of a window whose provider is `providerId`, as the `vilaus.accent` setting asks
+   * (the provider's by default); undefined for none (VS Code's own colors).
    */
-  windowTheme(providerId: string): ThemeData {
+  private windowAccent(providerId: string): string | undefined {
     const settings = this.settings.all;
     const source = ACCENT_SOURCES.find((candidate) => candidate === settings[ACCENT_SETTING]) ?? 'provider';
     const custom = settings[ACCENT_COLOR_SETTING];
-    const accent =
-      source === 'provider'
-        ? providerAccentColor(this.providers.get(providerId) ?? SUBSCRIPTION_PROVIDER)
-        : source === 'custom' && typeof custom === 'string' && parseColor(custom)
-          ? custom
-          : undefined;
-    return withAccent(this.theme, accent);
+    return source === 'provider'
+      ? providerAccentColor(this.providers.get(providerId) ?? SUBSCRIPTION_PROVIDER)
+      : source === 'custom' && typeof custom === 'string' && parseColor(custom)
+        ? custom
+        : undefined;
+  }
+
+  /** The theme of a window whose provider is `providerId`: the shared one in the window's accent. */
+  windowTheme(providerId: string): ThemeData {
+    return withAccent(this.theme, this.windowAccent(providerId));
+  }
+
+  /** The icon file of a window whose provider is `providerId`: the app's, or the app's in its logo's color. */
+  windowIcon(providerId: string): string {
+    return this.logoIconFile(providerId) ?? this.appIcon;
+  }
+
+  /** The app icon as the build copies it next to main.js. */
+  private get appIcon(): string {
+    return path.join(this.env.appDir, 'icon.ico');
+  }
+
+  /** The icon drawn in the logo color of `providerId`'s windows; undefined when that is the app's own. */
+  private logoIconFile(providerId: string): string | undefined {
+    const color = systemIconColor(logoColor(this.windowAccent(providerId)), nativeTheme.shouldUseDarkColorsForSystemIntegratedUI);
+    return color === LOGO_COLOR ? undefined : this.logoIcons.file(color);
   }
 
   /** The folder's provider from last time, else the default setting's, else the subscription. */
@@ -558,7 +586,10 @@ export class ShellApp extends Disposable implements WindowHost {
     this.history.rememberFolderProvider(window.folder, id);
   }
 
-  /** A desktop shortcut that starts Vilausity with this provider (`--provider <id>`). */
+  /**
+   * A desktop shortcut that starts Vilausity with this provider (`--provider <id>`), its icon
+   * in the color of the logo its windows show now (made again, it follows a new color).
+   */
   private createShortcut(id: string): string {
     const provider = this.providers.get(id);
     if (!provider) {
@@ -566,13 +597,15 @@ export class ShellApp extends Disposable implements WindowHost {
     }
     const label = (provider.name || 'Claude').replace(/[\\/:*?"<>|]+/g, ' ').trim();
     const file = path.join(app.getPath('desktop'), `Vilausity (${label}).lnk`);
-    // In development the executable is electron.exe, which needs the app's folder first.
+    // In development the executable is electron.exe, which needs the app's folder first and
+    // has Electron's icon.
     const args = [...(app.isPackaged ? [] : [`"${app.getAppPath()}"`]), '--provider', id].join(' ');
+    const icon = this.logoIconFile(id) ?? (app.isPackaged ? process.execPath : this.appIcon);
     const written = shell.writeShortcutLink(file, fs.existsSync(file) ? 'replace' : 'create', {
       target: process.execPath,
       args,
       description: `Vilausity - ${label}`,
-      icon: process.execPath,
+      icon,
       iconIndex: 0,
     });
     if (!written) {

@@ -27,6 +27,7 @@ import {
   IpcChannel,
   type ContextMenuItemDto,
   type MainEventsForRenderer,
+  type SessionActivity,
   type ThemeData,
 } from '../../platform/protocol';
 import { APP_ORIGIN, CCW_SCHEME, WEBVIEW_ID_PREFIX, webviewIdFromUrl } from '../../platform/webviewUrls';
@@ -57,7 +58,7 @@ const ALLOWED_PERMISSIONS = new Set([
 export interface ShellWindowOptions {
   readonly theme: ThemeData;
   readonly preloadPath: string;
-  /** The window icon (`<app>/icon.ico`), shown in the taskbar and Alt+Tab. */
+  /** The window icon (an .ico), shown in the taskbar and Alt+Tab; `setIcon` changes it. */
   readonly iconPath: string;
   readonly logger: ILogger;
   readonly openDevTools: boolean;
@@ -144,10 +145,13 @@ export class ShellWindow extends Disposable {
   /** Content pane tabs moved into windows of their own; the main window's page drives them. */
   private readonly auxWindows = new Set<BrowserWindow>();
   private theme: ThemeData;
+  private iconPath: string;
+  private progress: 'none' | 'indeterminate' | 'paused' = 'none';
 
   constructor(private readonly options: ShellWindowOptions) {
     super();
     this.theme = options.theme;
+    this.iconPath = options.iconPath;
     const saved = visibleBounds(options.placement.bounds);
     const bounds = options.secondaryDisplay ? (onSecondaryDisplay(saved ?? DEFAULT_SIZE) ?? saved) : saved;
     this.window = new BrowserWindow({
@@ -235,6 +239,36 @@ export class ShellWindow extends Disposable {
     }
   }
 
+  /** Another icon file for the window and the windows of its moved-out tabs. */
+  setIcon(iconPath: string): void {
+    if (iconPath === this.iconPath) {
+      return;
+    }
+    this.iconPath = iconPath;
+    for (const window of [this.window, ...this.auxWindows]) {
+      if (!window.isDestroyed()) {
+        window.setIcon(iconPath);
+      }
+    }
+  }
+
+  /**
+   * The taskbar button shows what the conversations are doing: a moving bar while Claude
+   * works, a full yellow one (Windows' "paused") while one waits for the user.
+   */
+  setActivity(activity: SessionActivity): void {
+    const progress = activity.waiting > 0 ? 'paused' : activity.running > 0 ? 'indeterminate' : 'none';
+    if (progress === this.progress || this.window.isDestroyed()) {
+      return;
+    }
+    this.progress = progress;
+    if (progress === 'none') {
+      this.window.setProgressBar(-1);
+    } else {
+      this.window.setProgressBar(1, { mode: progress });
+    }
+  }
+
   setInterceptedChords(chords: readonly string[]): void {
     this.interceptedChords = new Set(chords);
   }
@@ -313,7 +347,7 @@ export class ShellWindow extends Disposable {
     return {
       minWidth: 400,
       minHeight: 300,
-      icon: this.options.iconPath,
+      icon: this.iconPath,
       backgroundColor: this.theme.variables['vscode-editor-background'] ?? '#1f1f1f',
       titleBarStyle: 'hidden',
       titleBarOverlay: overlayColors(this.theme),

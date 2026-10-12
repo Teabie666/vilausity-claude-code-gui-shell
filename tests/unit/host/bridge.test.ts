@@ -128,12 +128,54 @@ describe('ClaudeWebviewBridge and sessions', () => {
   test('tells the page how many sessions wait for the user', () => {
     const { bridge, webview, messages } = makeBridge(true);
     const sessions = [
-      { sessionId: 'a', state: 'waiting', title: 'A' },
+      { sessionId: 'a', state: 'waiting_input', title: 'A' },
       { sessionId: 'b', state: 'running', title: 'B' },
-      { sessionId: 'c', state: 'waiting', title: 'C' },
+      { sessionId: 'c', state: 'waiting_input', title: 'C' },
+      { sessionId: 'd', state: 'idle', title: 'D' },
     ];
     bridge.observeToWebview(webview, statesUpdate({ sessions }));
     assert.deepEqual(messages, [{ ccwControl: 'needsInput', count: 2 }]);
+  });
+
+  test('reports what the conversations are doing once per change, though every page is told', () => {
+    const activities: unknown[] = [];
+    const bridge = new ClaudeWebviewBridge(makeOs().os, NullLogger, {
+      diffEditorAvailable: () => true,
+      comments: new CommentStore(),
+      workspaceFolders: [],
+      onActivity: (activity) => activities.push(activity),
+    });
+    const list = pageOf('claudeVSCodeSessionsList');
+    const panel = pageOf('claudeVSCodePanel');
+    const tell = (sessions: unknown[]): void => {
+      for (const page of [list, panel]) {
+        bridge.observeToWebview(page.webview, statesUpdate({ sessions }));
+      }
+    };
+    tell([{ sessionId: 'a', state: 'idle', title: 'A' }]);
+    assert.deepEqual(activities, []);
+    tell([{ sessionId: 'a', state: 'running', title: 'A' }]);
+    tell([
+      { sessionId: 'a', state: 'running', title: 'A' },
+      { sessionId: 'b', state: 'waiting_input', title: 'B' },
+    ]);
+    // A title change alone is no change of activity.
+    tell([
+      { sessionId: 'a', state: 'running', title: 'A2' },
+      { sessionId: 'b', state: 'waiting_input', title: 'B' },
+    ]);
+    tell([]);
+    assert.deepEqual(activities, [
+      { running: 1, waiting: 0 },
+      { running: 1, waiting: 1 },
+      { running: 0, waiting: 0 },
+    ]);
+    // An update without `sessions` (only what is open) changes nothing.
+    bridge.observeToWebview(list.webview, {
+      type: 'from-extension',
+      message: { type: 'request', channelId: '', requestId: 'r2', request: { type: 'session_states_update', openSessionIds: [] } },
+    });
+    assert.equal(activities.length, 3);
   });
 
   test("asks the extension's session pages to list the sessions again", () => {

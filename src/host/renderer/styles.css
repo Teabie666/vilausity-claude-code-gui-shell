@@ -220,6 +220,47 @@ kbd {
   font-weight: 600;
 }
 
+/*
+ * The logo (features/window/logo.ts) in the window's logo color. Its cursor blinks like a
+ * terminal's while Claude works, and stays on in amber (the session list's "needs input")
+ * while a conversation waits for the user.
+ */
+/* Out of the drag region, or its hover text would not show. */
+.titlebar-logo {
+  display: flex;
+  align-self: center;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-logo svg {
+  display: block;
+  height: 14px;
+  width: auto;
+  fill: var(--vilaus-logo, #ff7b1c);
+}
+
+.titlebar-logo[data-activity='running'] .titlebar-logo-cursor {
+  animation: titlebar-logo-blink 1.06s steps(1, end) infinite;
+}
+
+.titlebar-logo[data-activity='waiting'] .titlebar-logo-cursor {
+  fill: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+@keyframes titlebar-logo-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Without animations: half on while Claude works. */
+@media (prefers-reduced-motion: reduce) {
+  .titlebar-logo[data-activity='running'] .titlebar-logo-cursor {
+    animation: none;
+    opacity: 0.4;
+  }
+}
+
 .titlebar-provider {
   display: inline-flex;
   align-items: center;

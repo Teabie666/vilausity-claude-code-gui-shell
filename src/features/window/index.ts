@@ -1,11 +1,12 @@
 /**
- * Window-level features: title, closing and quitting, zoom, developer tools. (The search box
- * says when this is the administrator instance.)
+ * Window-level features: the title bar's logo and name, title, closing and quitting, zoom,
+ * developer tools. (The search box says when this is the administrator instance.)
  */
 
 import type { ShellModule } from '../../core/module';
 import { CommandCategory } from '../../core/messages';
 import { ICommands, IDialogs, IKeybindings, ILayout, INative, IWorkspace } from '../../core/serviceIds';
+import { createTitleBarLogo } from './logo';
 import { t } from './messages';
 
 export const windowModule: ShellModule = {
@@ -19,11 +20,13 @@ export const windowModule: ShellModule = {
 
     const brand = document.createElement('div');
     brand.className = 'titlebar-brand';
+    const logo = createTitleBarLogo();
     const app = document.createElement('span');
     app.className = 'titlebar-app';
     app.textContent = 'Vilausity';
-    brand.append(app);
+    brand.append(logo.element, app);
     subscriptions.add(layout.addTitleBarItem('left', brand, 10));
+    subscriptions.add(native.on('sessionActivity', (activity) => logo.setActivity(activity)));
     document.title = `${workspace.name} - Vilausity`;
 
     const zoom = (delta: number) => () => native.call('window.zoom', { delta });

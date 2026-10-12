@@ -1242,22 +1242,30 @@ const reloaded = async (start) => {
 };
 const reloadWindow = () => reloaded(() => page.evaluate(() => window.vilausNative.invoke('window.reload')));
 
-await step('an API provider: the title bar switches to it, the window takes its accent, and new Claude processes send its key and model', async () => {
+await step('an API provider: the title bar switches to it, the window takes its accent (the logo and the window icon too), and new Claude processes send its key and model', async () => {
   const mock = await startMockApi();
   const accent = (target) =>
     target.evaluate(() => {
       const style = getComputedStyle(document.documentElement);
       return { line: style.getPropertyValue('--vilaus-accent').trim(), focus: style.getPropertyValue('--vscode-focusBorder').trim() };
     });
-  // The subscription: Claude's orange.
+  // The title bar's logo, as drawn.
+  const logo = () => page.evaluate(() => getComputedStyle(document.querySelector('.titlebar-logo svg')).fill);
+  // The window icons main drew in other colors than the app's.
+  const iconFiles = () => (existsSync(path.join(dataDir, 'icons')) ? readdirSync(path.join(dataDir, 'icons')) : []);
+  // The subscription: Claude's orange; the logo in its own.
   const claude = await accent(page);
   if (claude.line !== '#d97757' || claude.focus !== '#d97757') throw new Error(`subscription accent: ${JSON.stringify(claude)}`);
+  if ((await logo()) !== 'rgb(255, 123, 28)') throw new Error(`subscription logo: ${await logo()}`);
   // The setting: a color of one's own, VS Code's own (no line), back to the provider's.
   writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.accent': 'custom', 'vilaus.accent.custom': '#00aa00' }, null, 2), 'utf8');
   await waitFor(async () => (await accent(page)).focus === '#00aa00', 5000, 'the custom accent');
+  if ((await logo()) !== 'rgb(0, 170, 0)') throw new Error(`custom logo: ${await logo()}`);
+  if (!iconFiles().some((name) => /^logo-[0-9a-f]{6}-[0-9a-f]{8}\.ico$/.test(name))) throw new Error(`no window icon drawn: ${iconFiles()}`);
   writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.accent': 'vscode' }, null, 2), 'utf8');
   await waitFor(async () => (await accent(page)).line === 'transparent', 5000, "VS Code's own colors");
   if ((await accent(page)).focus !== '#0078d4') throw new Error(`VS Code's focus border: ${(await accent(page)).focus}`);
+  if ((await logo()) !== 'rgb(255, 123, 28)') throw new Error(`logo without an accent: ${await logo()}`);
   const { 'vilaus.accent': _source, 'vilaus.accent.custom': _custom, ...ownSettings } = readSettings();
   writeFileSync(settingsFile, JSON.stringify(ownSettings, null, 2), 'utf8');
   await waitFor(async () => (await accent(page)).line === '#d97757', 5000, "the provider's accent again");
@@ -1288,6 +1296,8 @@ await step('an API provider: the title bar switches to it, the window takes its 
     await waitFor(async () => (await page.locator('.titlebar-provider-label').innerText()) === 'Mock API', 5000, 'the provider in the title bar');
     await waitFor(async () => (await accent(page)).line === '#ff0000', 5000, "the provider's accent line");
     if ((await accent(page)).focus !== '#ff0000') throw new Error(`focus border: ${(await accent(page)).focus}`);
+    if ((await logo()) !== 'rgb(255, 0, 0)') throw new Error(`the provider's logo: ${await logo()}`);
+    if (!iconFiles().some((name) => name.startsWith('logo-ff0000-'))) throw new Error(`no red window icon: ${iconFiles()}`);
     // The window's webviews take it too.
     await waitFor(async () => {
       for (const frame of webviewFrames()) {
@@ -1307,6 +1317,12 @@ await step('an API provider: the title bar switches to it, the window takes its 
     const frame = await waitFor(conversationFrame, 10_000, 'the new conversation');
     const input = frame.locator('[role="textbox"][aria-label="Message input"]');
     await input.waitFor({ timeout: 30_000 });
+    // Every state the logo goes through (the mock answers at once).
+    await page.evaluate(() => {
+      const element = document.querySelector('.titlebar-logo');
+      window.logoStates = [element.dataset.activity];
+      new MutationObserver(() => window.logoStates.push(element.dataset.activity)).observe(element, { attributeFilter: ['data-activity'] });
+    });
     await input.click();
     await input.fill('hello mock');
     await frame.locator('button[aria-label="Send message"]').click();
@@ -1317,9 +1333,16 @@ await step('an API provider: the title bar switches to it, the window takes its 
     );
     if (request.headers.authorization !== 'Bearer test-key-123') throw new Error(`authorization: ${request.headers.authorization}`);
     if (request.headers['x-api-key']) throw new Error('an x-api-key went out too');
+    // While Claude worked, the logo said so (the extension's state, through the bridge and main).
+    await waitFor(() => page.evaluate(() => window.logoStates.includes('running')), 10_000, 'the logo to show Claude at work');
     await press('Control+W');
     await waitFor(async () => (await tabCount()) === before, 10_000, 'the conversation to close');
-    return `${mock.requests.length} requests at the mock; ${request.method} ${request.url}`;
+    await waitFor(
+      () => page.evaluate(() => document.querySelector('.titlebar-logo').dataset.activity === 'idle'),
+      10_000,
+      'the logo to rest once the conversation is closed',
+    );
+    return `${mock.requests.length} requests at the mock; ${request.method} ${request.url}; logo ${await page.evaluate(() => window.logoStates.join(' > '))}`;
   } finally {
     mock.server.close();
     // Back to the subscription, with fresh processes, for the rest of the run.

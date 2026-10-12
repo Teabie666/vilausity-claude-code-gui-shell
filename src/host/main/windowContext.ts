@@ -18,6 +18,7 @@ import type {
   MainEventsForRenderer,
   ProvidersState,
   RendererInitData,
+  SessionActivity,
   ThemeData,
 } from '../../platform/protocol';
 import { ENVIRONMENT_SETTING } from '../../platform/providers';
@@ -34,6 +35,8 @@ import { StateStore } from './stateStore';
 import type { WebviewDocumentStore } from './webviewDocuments';
 import type { WindowPlacement } from './windowHistory';
 
+const IDLE: SessionActivity = { running: 0, waiting: 0 };
+
 /** What a window needs from the application. */
 export interface WindowHost {
   readonly env: ShellEnvironment;
@@ -44,6 +47,8 @@ export interface WindowHost {
   /** The theme every window shares; a window shows it in its provider's accent (`windowTheme`). */
   readonly theme: ThemeData;
   windowTheme(providerId: string): ThemeData;
+  /** The icon file of a window with this provider: the app icon in its logo's color. */
+  windowIcon(providerId: string): string;
   /** The extension UI's translations in this run's language, if there are any. */
   readonly extensionTable: ExtensionTranslations | undefined;
   /** Undefined until the extension is installed: the window then has no extension host. */
@@ -113,7 +118,7 @@ export class WindowContext extends Disposable {
       new ShellWindow({
         theme: host.windowTheme(options.provider),
         preloadPath: path.join(env.appDir, 'preload.js'),
-        iconPath: path.join(env.appDir, 'icon.ico'),
+        iconPath: host.windowIcon(options.provider),
         logger: this.logger,
         openDevTools: env.args.devtools,
         secondaryDisplay: env.args.secondaryDisplay,
@@ -216,6 +221,7 @@ export class WindowContext extends Disposable {
     this.setWorkspace(folder);
     // Each folder keeps its own provider.
     this.currentProvider = this.host.initialProvider(folder);
+    this.refreshIcon();
     this.webContents.reload();
   }
 
@@ -318,11 +324,23 @@ export class WindowContext extends Disposable {
     return owner === this.documentOwner;
   }
 
-  /** The shared theme or this window's accent changed: the window and its page follow. */
+  /** The shared theme or this window's accent changed: the window and its page follow, and the icon. */
   refreshTheme(): void {
     const theme = this.theme;
     this.window.setTheme(theme);
     this.window.emit('themeChanged', theme);
+    this.refreshIcon();
+  }
+
+  /** The window's icon, in its logo's color (which follows the provider, the accent and the taskbar's darkness). */
+  refreshIcon(): void {
+    this.window.setIcon(this.host.windowIcon(this.currentProvider));
+  }
+
+  /** The taskbar button and the page show what the conversations are doing. */
+  private setActivity(activity: SessionActivity): void {
+    this.window.setActivity(activity);
+    this.window.emit('sessionActivity', activity);
   }
 
   /** After a crash (the page's restart button). */
@@ -392,6 +410,8 @@ export class WindowContext extends Disposable {
       previous.dispose();
     }
     this.host.documents.releaseOwner(this.documentOwner);
+    // Its conversations went with it.
+    this.setActivity(IDLE);
   }
 
   private async startExtHost(): Promise<void> {
@@ -428,6 +448,7 @@ export class WindowContext extends Disposable {
           state: 'crashed',
           detail: t('extensionHostExited', code ?? '?', this.logsDir),
         });
+        this.setActivity(IDLE);
       }
     });
 
@@ -467,6 +488,7 @@ export class WindowContext extends Disposable {
       host.globalStateChanged(this, key, value);
     });
     rpc.handle('settings.set', ({ key, value }) => host.settings.set(key, value));
+    rpc.handle('sessions.activity', (activity) => this.setActivity(activity));
   }
 
   private createInitData(extension: LocatedExtension): ExtHostInitData {

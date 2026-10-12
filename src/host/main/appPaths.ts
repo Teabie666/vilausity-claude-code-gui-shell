@@ -25,6 +25,8 @@ export interface AppPaths {
   readonly providersFile: string;
   /** The Claude Code extension as vilaus installs it (from Open VSX or a .vsix). */
   readonly extensionsDir: string;
+  /** The app icon drawn in other colors (logoIcons.ts): windows' icons and providers' shortcuts point here. */
+  readonly iconsDir: string;
   /** Chromium's own profile data (cache, local storage), kept apart from ours. */
   readonly chromium: string;
   /** The other instance's Chromium profile (normal or administrator): safeStorage shares its key. */
@@ -61,6 +63,7 @@ export function createAppPaths(root: string, startedAt = new Date(), elevated = 
     shellStateFile: path.join(instanceRoot, 'state', 'shell.json'),
     providersFile: path.join(root, 'providers.json'),
     extensionsDir: path.join(root, 'extensions'),
+    iconsDir: path.join(root, 'icons'),
     chromium: path.join(instanceRoot, 'chromium'),
     otherChromium: elevated ? path.join(root, 'chromium') : path.join(root, ADMIN_FOLDER, 'chromium'),
     logsRoot,

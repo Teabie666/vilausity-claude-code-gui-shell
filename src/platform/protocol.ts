@@ -545,6 +545,15 @@ export interface StartupNotices {
   readonly gitMissing: boolean;
 }
 
+/**
+ * What a window's conversations are doing, as their pages tell the extension: how many have
+ * Claude at work, and how many wait for the user (a permission, a question).
+ */
+export interface SessionActivity {
+  readonly running: number;
+  readonly waiting: number;
+}
+
 /** The API providers (without keys) and the one this window uses. */
 export interface ProvidersState {
   readonly providers: readonly ProviderSummary[];
@@ -570,6 +579,8 @@ export type MainApiForExtHost = {
   'storage.set': (p: { scope: StorageScope; key: string; value: unknown }) => void;
   /** `value: undefined` removes the setting. */
   'settings.set': (p: { key: string; value: unknown }) => void;
+  /** The window's conversations started or stopped working or waiting (the taskbar button and the title bar's logo show it). */
+  'sessions.activity': (p: SessionActivity) => void;
 };
 
 /** Served by the extension host, called by main. The `init` call carries the renderer port. */
@@ -831,6 +842,8 @@ export type MainEventsForRenderer = {
   /** The mouse's back or forward button was pressed over the window. */
   navigate: { readonly direction: 'back' | 'forward' };
   extensionHostState: { readonly state: 'running' | 'crashed'; readonly detail?: string };
+  /** What the window's conversations are doing changed; a page that loads starts with none at work. */
+  sessionActivity: SessionActivity;
   /** The theme changed (picked in the shell, or theme/font settings edited by hand). */
   themeChanged: ThemeData;
   /** The user clicked an item registered with `window.setWebviewMenu`. */

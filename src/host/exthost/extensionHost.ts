@@ -135,6 +135,7 @@ export class ExtensionHost {
           compat.host.webviews.updatePanel({ panelId: panel.id, pinned: true });
         }
       },
+      onActivity: (activity) => this.main.notify('sessions.activity', activity),
     });
     webviews.interceptor = bridge;
     this.bridge = bridge;

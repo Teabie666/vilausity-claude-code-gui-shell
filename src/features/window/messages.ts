@@ -1,8 +1,12 @@
-/** Text of the window commands. */
+/** Text of the window commands and of the title bar's logo. */
 
 import { defineMessages } from '../../platform/nls';
 
 export const t = defineMessages('window', {
+  logoWorking: 'Claude is working',
+  logoWorkingIn: 'Claude is working in {0} conversations',
+  logoWaiting: 'Claude needs your input',
+  logoWaitingIn: '{0} conversations need your input',
   closeWindow: 'Close Window',
   quit: 'Exit',
   zoomIn: 'Zoom In',

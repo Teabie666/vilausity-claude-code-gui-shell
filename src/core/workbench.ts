@@ -7,6 +7,7 @@
 import { setUnexpectedErrorHandler } from '../platform/event';
 import { languagePack } from '../nls/packs';
 import { htmlLang, setUiLanguage } from '../platform/nls';
+import type { ThemeData } from '../platform/protocol';
 import { CommandService } from './commands';
 import { ContextKeyService } from './contextKeys';
 import { Dialogs } from './dialogs';
@@ -50,6 +51,10 @@ export async function startWorkbench(modules: readonly ShellModule[]): Promise<v
   // Subscribe before any await: main posts the first port as soon as the page loads.
   const connection = new ExtensionHostConnection(logger.child('exthost'));
   native.onExtensionHostPort((port) => connection.connect(port));
+  // So may a theme (main sends each change): the window takes the command line's provider
+  // (--provider) once the page has loaded, and its accent may come after the init data.
+  let newerTheme: ThemeData | undefined;
+  const earlyThemes = native.on('themeChanged', (theme) => (newerTheme = theme));
 
   const init = await native.call('app.getInitData', undefined);
   const settings = new SettingsService(native);
@@ -79,7 +84,8 @@ export async function startWorkbench(modules: readonly ShellModule[]): Promise<v
   layout.tabs.setAttribute('aria-label', t('openConversations'));
   layout.sidebar.setAttribute('aria-label', t('sessions'));
   const frames = new WebviewFrames(connection, logger.child('webviews'));
-  const themes = new ThemeService(init.theme, frames, native);
+  const themes = new ThemeService(newerTheme ?? init.theme, frames, native);
+  earlyThemes.dispose();
   const dialogs = new Dialogs(layout.overlays);
   const folder = init.workspaceFolders[0] ?? '';
 

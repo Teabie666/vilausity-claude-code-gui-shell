@@ -11,13 +11,16 @@
  * - highlighted text (matches in lists) at 4.5:1.
  * A theme value outside the accent's hue (Light Modern's grey selections) stays as it is;
  * high contrast themes keep all their colors. Every theme gets `--vilaus-accent`: the line
- * at the top of the window (transparent without an accent), and the `--vilaus-accent-line /
+ * at the top of the window (transparent without an accent), the `--vilaus-accent-line /
  * -fill / -fill-foreground` the extension's pages take for their own orange (bridge.ts;
- * `initial`, so that the page keeps its own, when the theme keeps its colors).
+ * `initial`, so that the page keeps its own, when the theme keeps its colors), and
+ * `--vilaus-logo`, the title bar's logo (`logoColor`) as visible on it as the line.
  * Pure functions: main computes each window's theme with them; the tests use them directly.
  */
 
+import { LOGO_COLOR } from './logoMark';
 import type { ThemeData } from './protocol';
+import { CLAUDE_ACCENT } from './providers';
 
 /** Where a window's accent comes from: its API provider, the user's color, or nowhere (VS Code's). */
 export type AccentSource = 'provider' | 'custom' | 'vscode';
@@ -208,6 +211,17 @@ const TEXT_KEYS = [
 const HUE_TOLERANCE = 30;
 
 /**
+ * The logo's color in a window with this accent (`#rrggbb`, or undefined for none): the
+ * accent, but the logo's own orange for Claude's (the subscription, the Anthropic API) and
+ * for none, so that such windows show the app's icon as it is.
+ */
+export function logoColor(accent: string | undefined): string {
+  const color = parseColor(accent);
+  const hex = color ? formatColor({ ...color, a: 1 }) : undefined;
+  return hex === undefined || hex === CLAUDE_ACCENT ? LOGO_COLOR : hex;
+}
+
+/**
  * The theme with the window's accent: `accent` is `#rrggbb` or undefined (the theme's own
  * colors, no line). See the file's comment for what changes.
  */
@@ -215,12 +229,17 @@ export function withAccent(theme: ThemeData, accent: string | undefined): ThemeD
   const vars = theme.variables;
   const get = (key: string): Rgba | undefined => parseColor(vars[`vscode-${key}`]);
   const editor = get('editor-background') ?? { r: 31, g: 31, b: 31, a: 1 };
+  const titleBar = over(get('titleBar-activeBackground') ?? editor, editor);
+  const logo = formatColor(ensureContrast(parseColor(logoColor(accent))!, titleBar, 3));
   const color = parseColor(accent);
   if (!color) {
-    return { ...theme, variables: { ...vars, ...PAGE_ACCENT_UNSET, 'vilaus-accent': 'transparent' } };
+    return { ...theme, variables: { ...vars, ...PAGE_ACCENT_UNSET, 'vilaus-accent': 'transparent', 'vilaus-logo': logo } };
   }
-  const titleBar = over(get('titleBar-activeBackground') ?? editor, editor);
-  const overrides: Record<string, string> = { ...PAGE_ACCENT_UNSET, 'vilaus-accent': formatColor(ensureContrast(color, titleBar, 3)) };
+  const overrides: Record<string, string> = {
+    ...PAGE_ACCENT_UNSET,
+    'vilaus-accent': formatColor(ensureContrast(color, titleBar, 3)),
+    'vilaus-logo': logo,
+  };
   const highContrast = theme.kind === 'vscode-high-contrast' || theme.kind === 'vscode-high-contrast-light';
   const own = get('focusBorder');
   const ownHue = own ? hueAndSaturation(own) : undefined;

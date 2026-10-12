@@ -170,18 +170,43 @@ await step('@-mention lists workspace files (workspace.findFiles)', async () => 
   await input().fill('');
 });
 
-await step('message round trip', async () => {
+/** What the title bar's logo shows: idle, running (Claude works) or waiting (for the user). */
+const logoActivity = () => page.evaluate(() => document.querySelector('.titlebar-logo')?.dataset.activity);
+
+await step('message round trip; the logo shows Claude at work, then rests', async () => {
+  // Every state the logo goes through.
+  await page.evaluate(() => {
+    const element = document.querySelector('.titlebar-logo');
+    window.logoStates = [element.dataset.activity];
+    new MutationObserver(() => window.logoStates.push(element.dataset.activity)).observe(element, { attributeFilter: ['data-activity'] });
+  });
   await send('What is 17 + 25? Reply with only the number, nothing else.');
   await waitFor(async () => /\b42\b/.test(await conversation().innerText()), RESPONSE_TIMEOUT, 'the answer 42');
   await waitForIdle();
+  await waitFor(async () => (await logoActivity()) === 'idle', 10_000, 'the logo to rest');
+  const states = await page.evaluate(() => window.logoStates);
+  if (!states.includes('running')) throw new Error(`the logo went ${states.join(' > ')}`);
+  return `logo ${states.join(' > ')}`;
 });
 
-await step('edit approved inline is applied', async () => {
+await step('edit approved inline is applied; while Claude asks, the logo and the session list say it needs input', async () => {
   await send('Use the Edit tool to replace the word alpha with beta in a.txt. Do nothing else.');
+  await waitFor(async () => (await logoActivity()) === 'waiting', RESPONSE_TIMEOUT, 'the logo to show Claude waiting for input');
+  // The session list's filter button, "Needs input · 1".
+  const needsInput = await waitFor(async () => {
+    for (const candidate of page.frames().filter((f) => f.url().startsWith('ccw://wv'))) {
+      const label = await candidate
+        .evaluate(() => document.querySelector('[data-vilaus-needs-input]')?.getAttribute('data-vilaus-needs-input'))
+        .catch(() => undefined);
+      if (label) return label;
+    }
+    return undefined;
+  }, 10_000, 'the session list to show "Needs input"');
   await clickPermission('Yes');
   await waitFor(() => readTarget() === 'beta', RESPONSE_TIMEOUT, 'a.txt to become "beta"');
   await waitForIdle();
-  return `a.txt = ${readTarget()}`;
+  await waitFor(async () => (await logoActivity()) === 'idle', 10_000, 'the logo to rest');
+  return `a.txt = ${readTarget()}; ${needsInput}`;
 });
 
 await step('edit rejected inline is not applied', async () => {
