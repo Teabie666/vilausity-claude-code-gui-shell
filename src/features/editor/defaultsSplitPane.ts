@@ -2,12 +2,13 @@
  * A settings file beside its defaults, as VS Code can show settings.json: on the left, read
  * only, what applies where the file says nothing (generated text); on the right, the file in
  * the text editor, which this pane embeds. A sash between them sets the widths; the defaults
- * can be hidden. Both are remembered per kind of file.
+ * can be hidden. Both are remembered per kind of file. While both columns show, the content
+ * pane is widened for them, and goes back to its own width after.
  */
 
 import type { EditorHost, EditorInput, EditorPane, EditorSelectionContext } from '../../core/editors';
 import type { Event } from '../../platform/event';
-import { DisposableStore } from '../../platform/lifecycle';
+import { DisposableStore, type IDisposable } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
 import type { RangeDto } from '../../platform/protocol';
 import type { TextEditorService, TextViewer } from './index';
@@ -24,7 +25,12 @@ export interface DefaultsSplitOptions {
   readonly onDidChangeDefaults?: Event<void>;
   /** Where the width and whether the defaults show are remembered (localStorage). */
   readonly stateKey: string;
+  /** Widens the content pane until disposed: two columns need the room (core/layout.ts). */
+  readonly widen?: (width: number) => IDisposable;
 }
+
+/** What the two columns ask of the content pane while they show in it. */
+const SPLIT_WIDTH = 1100;
 
 interface SplitState {
   readonly hidden: boolean;
@@ -47,6 +53,8 @@ export class DefaultsSplitPane implements EditorPane {
   private skeleton: Skeleton;
   private state: SplitState;
   private disposed = false;
+  private visible = false;
+  private widening: IDisposable | undefined;
   private readonly disposables = new DisposableStore();
   readonly onDidChangeTextEditors: Event<void>;
 
@@ -85,7 +93,10 @@ export class DefaultsSplitPane implements EditorPane {
     this.text.layout();
   }
 
-  setVisible(): void {}
+  setVisible(visible: boolean): void {
+    this.visible = visible;
+    this.updateWidth();
+  }
 
   focus(): void {
     this.text.focus();
@@ -114,10 +125,12 @@ export class DefaultsSplitPane implements EditorPane {
     for (const element of [previous.side, previous.sash, previous.main]) {
       element.remove();
     }
+    this.updateWidth();
   }
 
   dispose(): void {
     this.disposed = true;
+    this.widening?.dispose();
     this.disposables.dispose();
     this.viewer?.dispose();
     this.text.dispose();
@@ -172,6 +185,18 @@ export class DefaultsSplitPane implements EditorPane {
     this.state = state;
     this.apply();
     writeState(this.options.stateKey, state);
+    this.updateWidth();
+  }
+
+  /** The content pane widens while both columns show in it; not for a tab in a window of its own. */
+  private updateWidth(): void {
+    const wanted = this.visible && !this.state.hidden && this.container.ownerDocument === document;
+    if (wanted && !this.widening) {
+      this.widening = this.options.widen?.(SPLIT_WIDTH);
+    } else if (!wanted && this.widening) {
+      this.widening.dispose();
+      this.widening = undefined;
+    }
   }
 
   /** Dragging sets the defaults' share of the width; a double click halves it again. */

@@ -8,7 +8,7 @@ import { URI } from 'vscode-uri';
 import type { CommandInfo } from '../../core/commands';
 import { CommandCategory } from '../../core/messages';
 import type { ShellModule } from '../../core/module';
-import { ICommands, IDialogs, IEditors, IKeybindings, INative, ISettings } from '../../core/serviceIds';
+import { ICommands, IDialogs, IEditors, IKeybindings, ILayout, INative, ISettings } from '../../core/serviceIds';
 import { ITextEditors, TEXT_INPUT } from '../editor';
 import { DefaultsSplitPane } from '../editor/defaultsSplitPane';
 import { isFileUri, settingsFileGlob } from '../settings';
@@ -124,6 +124,7 @@ export const keybindingsModule: ShellModule = {
               defaultsText: () => defaultKeybindingsText(keybindings.defaultRules, describe, t('defaultKeybindingsHeader')),
               onDidChangeDefaults: keybindings.onDidChange,
               stateKey: 'vilaus.keybindingsJson.split',
+              widen: (width) => services.get(ILayout).widenContentPane(width),
             },
             logger,
           ),

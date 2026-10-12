@@ -807,10 +807,16 @@ await step('settings.json opens in the editor beside the default settings, valid
   const shown = (selector) => page.locator(`#content-pane .content-editor:not([hidden]) ${selector}`);
   await waitFor(async () => (await shown('.defaults-split-header').count()) === 2, 10_000, 'settings.json beside the defaults');
   await waitFor(async () => (await shown('.defaults-split-side .view-lines').innerText()).includes('{'), 15_000, 'the defaults on the left');
+  // The content pane is widened for the two columns, and back to its own width without them.
+  const paneWidth = () => page.locator('#content-pane').evaluate((element) => element.getBoundingClientRect().width);
+  const wide = await paneWidth();
   await shown('.defaults-split-header .button').click();
   await waitFor(() => shown('.defaults-split-side').isHidden(), 5000, 'the defaults to hide');
+  const own = await paneWidth();
+  if (own < 1000 && !(wide > own)) throw new Error(`the pane is ${wide}px with the defaults, ${own}px without`);
   await shown('.defaults-split-header .button').click();
   await waitFor(() => shown('.defaults-split-side').isVisible(), 5000, 'the defaults to show again');
+  await waitFor(async () => (await paneWidth()) === wide, 5000, 'the pane wide again');
   await page.screenshot({ path: path.join(runDir, 'settings-json.png') });
   writeFileSync(settingsFile, original, 'utf8');
   await waitFor(async () => !(await editorText()).includes('"wide"'), 10_000, 'the file back as it was');

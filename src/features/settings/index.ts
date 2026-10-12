@@ -138,6 +138,7 @@ export const settingsModule: ShellModule = {
                 defaultSettingsText(settings.definitions, { header: t('defaultSettingsSideHeader'), deprecated: t('deprecated') }),
               onDidChangeDefaults: settings.onDidChangeDefinitions,
               stateKey: 'vilaus.settingsJson.split',
+              widen: (width) => services.get(ILayout).widenContentPane(width),
             },
             logger,
           ),

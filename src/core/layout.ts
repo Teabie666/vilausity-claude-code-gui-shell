@@ -52,6 +52,8 @@ export class Layout {
   private readonly sidebarSash = element('sidebar-sash');
   private readonly contentSash = element('content-sash');
   private readonly state: LayoutState;
+  /** Widths asked for while a wide tab shows (`widenContentPane`); 0 once the user drags the sash. */
+  private readonly widenings = new Set<{ width: number }>();
   private readonly sidebarEmitter = new Emitter<boolean>();
   readonly onDidChangeSidebarVisibility: Event<boolean> = this.sidebarEmitter.event;
   private readonly contentEmitter = new Emitter<boolean>();
@@ -75,8 +77,10 @@ export class Layout {
       reset: () => SIDEBAR_DEFAULT,
     });
     this.installSash(this.contentSash, {
-      get: () => this.state.contentWidth,
+      get: () => this.contentWidth(),
       set: (width) => {
+        // The user's width from now on, the wide tab's included.
+        this.widenings.forEach((widening) => (widening.width = 0));
         this.state.contentWidth = width;
         this.contentPane.style.width = `${width}px`;
         this.resizeEmitter.fire();
@@ -90,11 +94,42 @@ export class Layout {
         const clamped = this.clampContentWidth(this.state.contentWidth);
         if (clamped !== this.state.contentWidth) {
           this.state.contentWidth = clamped;
-          this.contentPane.style.width = `${clamped}px`;
         }
+        this.contentPane.style.width = `${this.contentWidth()}px`;
         this.resizeEmitter.fire();
       }
     });
+  }
+
+  /**
+   * Makes the content pane at least `width` wide (as far as the window allows) until disposed:
+   * a tab that needs the room, while it shows. The user's own width comes back after, unless
+   * they drag the sash meanwhile, which sets it.
+   */
+  widenContentPane(width: number): IDisposable {
+    const widening = { width };
+    this.widenings.add(widening);
+    this.applyContentWidth();
+    return {
+      dispose: () => {
+        if (this.widenings.delete(widening)) {
+          this.applyContentWidth();
+        }
+      },
+    };
+  }
+
+  /** The width shown: the user's, or wider while a tab asks for it. */
+  private contentWidth(): number {
+    return this.clampContentWidth(Math.max(this.state.contentWidth, ...[...this.widenings].map((widening) => widening.width)));
+  }
+
+  private applyContentWidth(): void {
+    const width = `${this.contentWidth()}px`;
+    if (this.state.contentVisible && this.contentPane.style.width !== width) {
+      this.contentPane.style.width = width;
+      this.resizeEmitter.fire();
+    }
   }
 
   get sidebarVisible(): boolean {
@@ -159,7 +194,7 @@ export class Layout {
     }
     this.contentPane.hidden = !visible;
     this.contentSash.hidden = !visible;
-    this.contentPane.style.width = `${this.clampContentWidth(this.state.contentWidth)}px`;
+    this.contentPane.style.width = `${this.contentWidth()}px`;
     document.body.classList.toggle('content-pane-visible', visible);
   }
 
