@@ -388,9 +388,9 @@ const sampleText = 'export const answer: number = 42;\n// a comment\nfunction gr
 mkdirSync(path.dirname(sampleFile), { recursive: true });
 writeFileSync(sampleFile, sampleText, 'utf8');
 const contentTabs = () => page.locator('#content-pane .content-tab');
-// Monaco renders spaces as no-break spaces.
+// Monaco renders spaces as no-break spaces. The last editor: a file shown beside its defaults is on the right.
 const editorText = async () =>
-  (await page.locator('#content-pane .content-editor:not([hidden]) .view-lines').innerText()).replace(/ /g, ' ');
+  (await page.locator('#content-pane .content-editor:not([hidden]) .view-lines').last().innerText()).replace(/ /g, ' ');
 
 await step('Ctrl+P opens a file in the content pane, highlighted', async () => {
   await press('Control+P');
@@ -789,7 +789,7 @@ await step('Ctrl+, opens the settings panel; Editor: Font Size applies to the ed
   return `editor ${fontSize}`;
 });
 
-await step('settings.json opens in the editor, validated against the settings schema', async () => {
+await step('settings.json opens in the editor beside the default settings, validated against the settings schema', async () => {
   const original = readFileSync(settingsFile, 'utf8');
   const withError = { ...JSON.parse(original), 'editor.tabSize': 'wide' };
   writeFileSync(settingsFile, JSON.stringify(withError, null, 2), 'utf8');
@@ -803,6 +803,14 @@ await step('settings.json opens in the editor, validated against the settings sc
     15_000,
     'the schema warning on "wide"',
   );
+  // Beside the defaults, read only, as VS Code can show it; they hide and show again.
+  const shown = (selector) => page.locator(`#content-pane .content-editor:not([hidden]) ${selector}`);
+  await waitFor(async () => (await shown('.defaults-split-header').count()) === 2, 10_000, 'settings.json beside the defaults');
+  await waitFor(async () => (await shown('.defaults-split-side .view-lines').innerText()).includes('{'), 15_000, 'the defaults on the left');
+  await shown('.defaults-split-header .button').click();
+  await waitFor(() => shown('.defaults-split-side').isHidden(), 5000, 'the defaults to hide');
+  await shown('.defaults-split-header .button').click();
+  await waitFor(() => shown('.defaults-split-side').isVisible(), 5000, 'the defaults to show again');
   await page.screenshot({ path: path.join(runDir, 'settings-json.png') });
   writeFileSync(settingsFile, original, 'utf8');
   await waitFor(async () => !(await editorText()).includes('"wide"'), 10_000, 'the file back as it was');

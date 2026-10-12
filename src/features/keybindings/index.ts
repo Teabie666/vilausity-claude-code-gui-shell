@@ -8,9 +8,11 @@ import { URI } from 'vscode-uri';
 import type { CommandInfo } from '../../core/commands';
 import { CommandCategory } from '../../core/messages';
 import type { ShellModule } from '../../core/module';
-import { ICommands, IDialogs, IKeybindings, INative, ISettings } from '../../core/serviceIds';
-import { ITextEditors } from '../editor';
-import { settingsFileGlob } from '../settings';
+import { ICommands, IDialogs, IEditors, IKeybindings, INative, ISettings } from '../../core/serviceIds';
+import { ITextEditors, TEXT_INPUT } from '../editor';
+import { DefaultsSplitPane } from '../editor/defaultsSplitPane';
+import { isFileUri, settingsFileGlob } from '../settings';
+import { defaultKeybindingsText } from './defaultsText';
 import { t } from './messages';
 import { createShortcutsTable } from './table';
 
@@ -99,5 +101,33 @@ export const keybindingsModule: ShellModule = {
     };
     updateSchema();
     subscriptions.add(commands.onDidChange(updateSchema));
+
+    // keybindings.json beside the default keybindings, like settings.json beside the default settings.
+    const describe = (id: string): string => {
+      const info = commands.all.find((candidate) => candidate.id === id);
+      return info?.title ? (info.category ? `${info.category}: ${info.title}` : info.title) : '';
+    };
+    subscriptions.add(
+      services.get(IEditors).register({
+        id: 'keybindings.jsonWithDefaults',
+        priority: 20,
+        accepts: (input) => input.typeId === TEXT_INPUT && isFileUri(input.resource, keybindings.filePath),
+        create: (container, input, host) =>
+          new DefaultsSplitPane(
+            container,
+            input,
+            host,
+            editors,
+            {
+              defaultsUri: 'vilaus-settings:/keybindings.defaults.json',
+              defaultsTitle: t('defaultKeybindingsSide'),
+              defaultsText: () => defaultKeybindingsText(keybindings.defaultRules, describe, t('defaultKeybindingsHeader')),
+              onDidChangeDefaults: keybindings.onDidChange,
+              stateKey: 'vilaus.keybindingsJson.split',
+            },
+            logger,
+          ),
+      }),
+    );
   },
 };

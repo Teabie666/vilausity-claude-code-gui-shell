@@ -20,12 +20,13 @@ import {
 } from '../../core/serviceIds';
 import { DisposableStore } from '../../platform/lifecycle';
 import { IContentPane } from '../contentPane';
-import { ITextEditors } from '../editor';
+import { ITextEditors, TEXT_INPUT } from '../editor';
+import { DefaultsSplitPane } from '../editor/defaultsSplitPane';
 import { DefaultSettingsPane } from './defaultSettings';
 import { extensionSettingDefinitions } from './extensionSettings';
 import { t } from './messages';
 import { SettingsDialog } from './settingsDialog';
-import { settingsJsonSchema } from './settingItems';
+import { defaultSettingsText, settingsJsonSchema } from './settingItems';
 
 const DEFAULTS_INPUT = 'settings-defaults';
 
@@ -42,6 +43,11 @@ export function settingsFileGlob(filePath: string): string {
 }
 /** Identifies the schema of settings.json for the JSON language service. */
 const SETTINGS_SCHEMA_URI = 'vilaus://schemas/settings.json';
+
+/** Whether a document URI is the file at `filePath` (the case of the drive letter may differ). */
+export function isFileUri(resource: string | undefined, filePath: string): boolean {
+  return resource !== undefined && URI.parse(resource).fsPath.toLowerCase() === URI.file(filePath).fsPath.toLowerCase();
+}
 
 export const settingsModule: ShellModule = {
   id: 'settings',
@@ -111,6 +117,30 @@ export const settingsModule: ShellModule = {
         id: 'settings.defaults',
         accepts: (input) => input.typeId === DEFAULTS_INPUT,
         create: (container) => new DefaultSettingsPane(container, editors, settings, logger),
+      }),
+    );
+    // settings.json beside the defaults, as VS Code can show it: over the plain text editor, which it embeds.
+    subscriptions.add(
+      services.get(IEditors).register({
+        id: 'settings.jsonWithDefaults',
+        priority: 20,
+        accepts: (input) => input.typeId === TEXT_INPUT && isFileUri(input.resource, settings.filePath),
+        create: (container, input, host) =>
+          new DefaultsSplitPane(
+            container,
+            input,
+            host,
+            editors,
+            {
+              defaultsUri: 'vilaus-settings:/settings.defaults.json',
+              defaultsTitle: t('defaultSettingsSide'),
+              defaultsText: () =>
+                defaultSettingsText(settings.definitions, { header: t('defaultSettingsSideHeader'), deprecated: t('deprecated') }),
+              onDidChangeDefaults: settings.onDidChangeDefinitions,
+              stateKey: 'vilaus.settingsJson.split',
+            },
+            logger,
+          ),
       }),
     );
     /** `query` fills the search box (the extension's "open configuration" searches for its settings). */

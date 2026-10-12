@@ -659,6 +659,45 @@ body.resizing {
   color: var(--vscode-descriptionForeground);
 }
 
+/* A settings file beside its defaults (features/editor/defaultsSplitPane.ts). */
+.defaults-split {
+  display: flex;
+}
+
+.defaults-split-side,
+.defaults-split-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.defaults-split-side {
+  flex: 0 0 50%;
+  border-right: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border, transparent));
+}
+
+.defaults-split-column {
+  flex: 1 1 0;
+}
+
+.defaults-split-main {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The same height on both sides (the right one has a button), so the two editors line up. */
+.defaults-split-header {
+  box-sizing: border-box;
+  height: 37px;
+}
+
+.defaults-split-header .editor-toolbar-spacer {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- settings panel: over the middle of the window, after VS Code's modal editor ---- */
 
 .overlay-backdrop.overlay-backdrop-centered {

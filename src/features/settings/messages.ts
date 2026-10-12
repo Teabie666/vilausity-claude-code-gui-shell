@@ -25,6 +25,10 @@ export const t = defineMessages('settings', {
   defaultSettingsButton: 'Default Settings (JSON)',
   defaultSettingsHeader:
     'Every setting with its default value. Read only: to change one, copy it into settings.json (Open Settings (JSON)).\nsettings.json keeps only what you change, so new defaults still reach you after updates.',
+  /** Left of settings.json in its tab. */
+  defaultSettingsSide: 'Default Settings (read only)',
+  defaultSettingsSideHeader:
+    'Every setting with its default value. Read only: to change one, copy it into settings.json, on the right.\nsettings.json keeps only what you change, so new defaults still reach you after updates.',
 });
 
 /** Settings' titles in the display language, by key (see titles.ts); English is VS Code's derived title. */

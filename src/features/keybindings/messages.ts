@@ -8,6 +8,10 @@ export const t = defineMessages('keybindings', {
   keywords: 'keyboard shortcuts keybindings keys hotkeys',
   openKeyboardShortcuts: 'Open Keyboard Shortcuts',
   openKeyboardShortcutsJson: 'Open Keyboard Shortcuts (JSON)',
+  /** Left of keybindings.json in its tab. */
+  defaultKeybindingsSide: 'Default Keyboard Shortcuts (read only)',
+  defaultKeybindingsHeader:
+    'The default keyboard shortcuts. Read only: an entry in keybindings.json, on the right, adds a shortcut;\none whose command starts with "-" removes a default. The keyboard shortcuts in the settings write them for you.',
   openJson: 'Edit in keybindings.json',
   hint: 'Double-click a row to change its keybinding. Rows in gray come with the editor, the conversation or Windows and cannot be changed.',
   columnCommand: 'Command',

@@ -18,6 +18,8 @@ export const t = defineMessages('editor', {
   acceptCommand: 'Accept Proposed Changes',
   rejectCommand: 'Reject Proposed Changes',
   compareWithSaved: 'Compare Active File with Saved',
+  hideDefaults: 'Hide Defaults',
+  showDefaults: 'Show Defaults',
   compareWithSavedTitle: '{0} (on disk) ↔ {0}',
   // Settings (descriptions as in VS Code).
   sectionTextEditor: 'Text Editor',

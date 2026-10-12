@@ -6,6 +6,7 @@ import { changeKeybinding, removeKeybinding, resetKeybindings } from '../../../s
 import { editKeybindingsText } from '../../../src/host/main/keybindingsStore';
 import { parseKeybindingEntries } from '../../../src/platform/keybindings';
 import { parse } from 'jsonc-parser';
+import { defaultKeybindingsText } from '../../../src/features/keybindings/defaultsText';
 
 const DEFAULTS = [
   { key: 'ctrl+b', command: 'sessions.toggleSidebar' },
@@ -85,5 +86,36 @@ describe('keybindings.json text', () => {
   test('of two equal entries, one goes per removal', () => {
     const text = '[{"key":"ctrl+q","command":"a"},{"key":"ctrl+q","command":"a"}]';
     assert.equal(parseKeybindingEntries(parse(editKeybindingsText(text, [{ key: 'ctrl+q', command: 'a' }], []))).length, 1);
+  });
+});
+
+describe('defaultKeybindingsText', () => {
+  test("writes the rules as keybindings.json does, each under its command's title, after the header", () => {
+    const text = defaultKeybindingsText(
+      [
+        { key: 'ctrl+shift+p', command: 'commandPalette.show' },
+        { key: 'ctrl+w', command: 'contentPane.closeEditor', when: 'contentPaneFocus' },
+        { key: 'ctrl+1', command: 'go', args: [{ index: 1 }] },
+      ],
+      (command) => (command === 'commandPalette.show' ? 'View: Show All Commands' : ''),
+      'Defaults.\nRead only.',
+    );
+    assert.equal(
+      text,
+      [
+        '// Defaults.',
+        '// Read only.',
+        '[',
+        '  // View: Show All Commands',
+        '  { "key": "ctrl+shift+p", "command": "commandPalette.show" },',
+        '  { "key": "ctrl+w", "command": "contentPane.closeEditor", "when": "contentPaneFocus" },',
+        '  { "key": "ctrl+1", "command": "go", "args": {"index":1} }',
+        ']',
+        '',
+      ].join('\n'),
+    );
+    // What it writes reads back as the same rules.
+    const entries = parse(text) as { key: string; command: string }[];
+    assert.deepEqual(entries.map((entry) => entry.command), ['commandPalette.show', 'contentPane.closeEditor', 'go']);
   });
 });
