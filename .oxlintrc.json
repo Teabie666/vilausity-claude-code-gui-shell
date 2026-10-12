@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // npm run lint: oxlint's default rules (its own and ESLint's, typescript-eslint's and
+  // unicorn's, under their names) and, with --type-aware, the rules that need types, which run
+  // on typescript-go (TypeScript 7). Any warning fails the run.
+  "ignorePatterns": ["dist/**", "release/**", ".local/**", ".scratch/**", ".test-data/**", ".test-build/**", "tools/theme-capture/.run/**"],
+  "rules": {
+    // Loops go over a copy on purpose: a listener may remove itself, an entry may be deleted
+    // while the loop runs.
+    "unicorn/no-useless-spread": "off",
+    "typescript/no-floating-promises": [
+      "warn",
+      {
+        // node:test awaits what its test() and describe() return.
+        "allowForKnownSafeCalls": [
+          {
+            "from": "package",
+            "package": "node:test",
+            "name": ["test", "describe", "it", "suite", "before", "after", "beforeEach", "afterEach"]
+          }
+        ]
+      }
+    ]
+  }
+}

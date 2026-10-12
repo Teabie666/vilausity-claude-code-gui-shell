@@ -56,7 +56,7 @@ export function parseColor(value: string | undefined): Rgba | undefined {
   }
   let match = /^#([0-9a-f]{3})$/.exec(text);
   if (match) {
-    const [r, g, b] = [...match[1]!].map((digit) => parseInt(digit + digit, 16));
+    const [r, g, b] = match[1]!.split('').map((digit) => parseInt(digit + digit, 16));
     return { r: r!, g: g!, b: b!, a: 1 };
   }
   match = /^#([0-9a-f]{6})([0-9a-f]{2})?$/.exec(text);

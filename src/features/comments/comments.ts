@@ -305,7 +305,7 @@ export class CommentsController implements IDisposable {
 
   /** Shows the commented text: in the tab that shows its document, else by opening it. */
   private async reveal(comment: CommentDto): Promise<void> {
-    const open = this.contentPane.tabs.find((tab) => tab.input.resource === comment.uri && tab.pane.revealSelection);
+    const open = this.contentPane.tabs.find((tab) => tab.input.resource === comment.uri && tab.pane.revealSelection !== undefined);
     if (open) {
       this.contentPane.open(open.input);
       open.pane.revealSelection?.(comment.uri, comment.range, comment.quote);

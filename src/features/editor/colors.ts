@@ -5,7 +5,7 @@ export function toHexColor(value: string): string | undefined {
   const text = value.trim();
   if (/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(text)) {
     if (text.length <= 5) {
-      return `#${[...text.slice(1)].map((c) => c + c).join('')}`.toLowerCase();
+      return `#${text.slice(1).replace(/./g, '$&$&')}`.toLowerCase();
     }
     return text.toLowerCase();
   }

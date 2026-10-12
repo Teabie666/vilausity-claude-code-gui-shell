@@ -320,7 +320,7 @@ Vilausity 多数时候拿来做简单的电脑任务，工作流基本在单个�
 
 ## M6 打包和发布：进行中（2026-10-13 开始）
 
-2026-10-13 定：第一个发布版是 0.9.0，试用后再出 1.0.0；干净环境在本机模拟（临时数据目录、临时的 Claude 配置目录 = 没登录、不用别的编辑器里的插件，真从 Open VSX 下载），再加使用者各自的电脑；发布说明中英双语，中文在前；安装默认只装当前用户。发布前加做三项：ESLint + Prettier、关窗口 / 退出时问未保存的文件、插件新版本缺接口时提示退回。不做：`.sigzip` 签名校验、UAC 那一步的自动测试。
+2026-10-13 定：第一个发布版是 0.9.0，试用后再出 1.0.0；干净环境在本机模拟（临时数据目录、临时的 Claude 配置目录 = 没登录、不用别的编辑器里的插件，真从 Open VSX 下载），再加使用者各自的电脑；发布说明中英双语，中文在前；安装默认只装当前用户。发布前加做三项：ESLint + Prettier（实际用 oxlint + Prettier）、关窗口 / 退出时问未保存的文件、插件新版本缺接口时提示退回。不做：`.sigzip` 签名校验、UAC 那一步的自动测试。
 
 分五块：① 能跑的打包版 ② 安装包 ③ 发布前补的功能 ④ 干净环境测试 ⑤ 发布。
 
@@ -337,7 +337,7 @@ Vilausity 多数时候拿来做简单的电脑任务，工作流基本在单个�
 - [x] 右键菜单的复选框（第一次装默认不勾，重装照旧）：以启动安装程序的用户运行 `--register-context-menu` / `--unregister-context-menu`；卸载只删指向本次安装的项；更新安装时不删
 - [x] `vilaus://` 由安装包登记（electron-builder 的 `protocols` 在 Windows 上不写）；命令里 `%1` 前加 `--`，链接塞不进命令行开关（实测没有 `--` 时能塞进去）
 - [x] 安装测试 `tests/installer.mjs`：当前用户 6/6、所有用户（Program Files，管理员实例 + 普通令牌）7/7；图形界面的安装和卸载用屏幕工具点过；smoke 改成把右键菜单写进测试键（以前拿打包版跑会改写真实的菜单项）
-- [ ] 试用：为所有用户安装（UAC 那一步）、勾上右键菜单、完成页"运行 Vilausity"、右键文件夹打开、`vilaus://` 链接、卸载
+- [x] 试用（2026-10-13）：为所有用户安装（UAC 那一步）、用、卸载，没问题
 
 ### 整个 M6 的清单
 
@@ -355,7 +355,7 @@ Vilausity 多数时候拿来做简单的电脑任务，工作流基本在单个�
 - [x] TypeScript strict，四套 tsconfig（node 侧 / 网页侧 / preload / 单元测试）
 - [x] 跨进程消息的类型只在 `protocol.ts` 里定义
 - [ ] 运行时校验 IPC 消息的内容（PLAN 写的是用 zod；现在 `ipc.ts` 只检查信封格式）
-- [ ] ESLint + Prettier（还没装）
+- [x] 代码检查和格式：oxlint + Prettier（2026-10-13，`npm run lint`、`npm run format`；ESLint 换成 oxlint 的原因见 PLAN"工程规范"）
 - [ ] 每个模块都有单元测试
   - [x] compat 的 configuration，host 的 bridge 和 webviewDocuments
   - [x] A 组：platform 的 ipc / event / cancellation，compat 的 types（2026-10-09；写测试时发现并修了 `Event.once`、ipc 发送失败、FileSystemError 名字三处源码问题）

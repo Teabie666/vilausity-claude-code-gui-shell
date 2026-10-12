@@ -221,11 +221,12 @@ export const extensionUpdatesModule: ShellModule = {
   },
 };
 
+/** The buttons' handlers (handed to them as they are, so not methods). */
 interface VersionActions {
-  relaunch(): void;
-  check(): void;
-  installFile(): void;
-  rollBack(): void;
+  readonly relaunch: () => void;
+  readonly check: () => void;
+  readonly installFile: () => void;
+  readonly rollBack: () => void;
 }
 
 /** The block in the settings editor. */

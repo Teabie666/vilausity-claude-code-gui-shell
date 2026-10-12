@@ -124,13 +124,14 @@ export const setupModule: ShellModule = {
   },
 };
 
+/** The page's handlers (handed to its buttons as they are, so not methods). */
 interface SetupActions {
-  download(): void;
-  installFile(): void;
-  changeServer(): void;
-  account(): void;
-  provider(): void;
-  later(): void;
+  readonly download: () => void;
+  readonly installFile: () => void;
+  readonly changeServer: () => void;
+  readonly account: () => void;
+  readonly provider: () => void;
+  readonly later: () => void;
 }
 
 /** The page, over the main area. */

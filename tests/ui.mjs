@@ -302,6 +302,8 @@ async function rightClick(locator) {
 /** Runs `fn` while native menus are recorded instead of shown (a shown menu blocks the test). */
 async function withRecordedMenus(fn) {
   await app.evaluate(({ Menu }) => {
+    // Kept to be put back on the prototype, never called on its own.
+    // oxlint-disable-next-line typescript/unbound-method
     globalThis.vilausRealPopup = Menu.prototype.popup;
     Menu.prototype.popup = function () {
       globalThis.vilausLastMenu = this;
@@ -1210,16 +1212,17 @@ function startMockApi() {
           usage: { input_tokens: 1, output_tokens: 1 },
         };
         if (body?.stream) {
+          // Each event is named after its type.
           const events = [
-            ['message_start', { type: 'message_start', message }],
-            ['content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }],
-            ['content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'MOCK-OK' } }],
-            ['content_block_stop', { type: 'content_block_stop', index: 0 }],
-            ['message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 1 } }],
-            ['message_stop', { type: 'message_stop' }],
+            { type: 'message_start', message },
+            { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+            { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'MOCK-OK' } },
+            { type: 'content_block_stop', index: 0 },
+            { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 1 } },
+            { type: 'message_stop' },
           ];
           response.writeHead(200, { 'content-type': 'text/event-stream' });
-          response.end(events.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join(''));
+          response.end(events.map((data) => `event: ${data.type}\ndata: ${JSON.stringify(data)}\n\n`).join(''));
         } else {
           response.writeHead(200, { 'content-type': 'application/json' });
           response.end(JSON.stringify({ ...message, content: [{ type: 'text', text: 'MOCK-OK' }], stop_reason: 'end_turn' }));
@@ -1267,7 +1270,7 @@ await step('an API provider: the title bar switches to it, the window takes its 
   writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.accent': 'custom', 'vilaus.accent.custom': '#00aa00' }, null, 2), 'utf8');
   await waitFor(async () => (await accent(page)).focus === '#00aa00', 5000, 'the custom accent');
   if ((await logo()) !== 'rgb(0, 170, 0)') throw new Error(`custom logo: ${await logo()}`);
-  if (!iconFiles().some((name) => /^logo-[0-9a-f]{6}-[0-9a-f]{8}\.ico$/.test(name))) throw new Error(`no window icon drawn: ${iconFiles()}`);
+  if (!iconFiles().some((name) => /^logo-[0-9a-f]{6}-[0-9a-f]{8}\.ico$/.test(name))) throw new Error(`no window icon drawn: ${iconFiles().join(", ")}`);
   writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.accent': 'vscode' }, null, 2), 'utf8');
   await waitFor(async () => (await accent(page)).line === 'transparent', 5000, "VS Code's own colors");
   if ((await accent(page)).focus !== '#0078d4') throw new Error(`VS Code's focus border: ${(await accent(page)).focus}`);
@@ -1303,7 +1306,7 @@ await step('an API provider: the title bar switches to it, the window takes its 
     await waitFor(async () => (await accent(page)).line === '#ff0000', 5000, "the provider's accent line");
     if ((await accent(page)).focus !== '#ff0000') throw new Error(`focus border: ${(await accent(page)).focus}`);
     if ((await logo()) !== 'rgb(255, 0, 0)') throw new Error(`the provider's logo: ${await logo()}`);
-    if (!iconFiles().some((name) => name.startsWith('logo-ff0000-'))) throw new Error(`no red window icon: ${iconFiles()}`);
+    if (!iconFiles().some((name) => name.startsWith('logo-ff0000-'))) throw new Error(`no red window icon: ${iconFiles().join(", ")}`);
     // The window's webviews take it too.
     await waitFor(async () => {
       for (const frame of webviewFrames()) {
@@ -1892,7 +1895,7 @@ await step('a session clicked in the list opens as a preview, its row left in pl
     await waitFor(async () => (await rows())[0] === 'Alpha session (open)', 10_000, `Alpha first and open in the list: ${await rows()}`);
     await backTo(first, mouseBack);
     await otherPage.waitForTimeout(500);
-    if ((await tabs.count()) !== 2) throw new Error(`a kept tab closed: ${await tabs.allInnerTexts()}`);
+    if ((await tabs.count()) !== 2) throw new Error(`a kept tab closed: ${(await tabs.allInnerTexts()).join(" | ")}`);
     await keys('Right');
     await showing('Alpha', false);
     // The mouse's buttons over the conversation's page, and over the shell's.

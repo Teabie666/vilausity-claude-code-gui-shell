@@ -240,7 +240,13 @@ class SettingRow {
           // Never under the user's cursor: their typing wins until it is written.
           if (doc.activeElement !== input) {
             const value = this.value;
-            input.value = value === undefined || value === null ? '' : String(value);
+            // settings.json may hold anything there: an object shows as its JSON.
+            input.value =
+              value === undefined || value === null
+                ? ''
+                : typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+                  ? String(value)
+                  : JSON.stringify(value);
             input.classList.remove('invalid');
             validation.hidden = true;
           }

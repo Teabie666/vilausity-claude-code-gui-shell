@@ -12,6 +12,8 @@ Vilausity：在 VS Code 之外原样运行官方 Claude Code 插件的 Electron 
 ```powershell
 npm run build        # esbuild 打包到 dist/
 npm run typecheck    # 四套 tsconfig 都要过（含单元测试）
+npm run lint         # oxlint（带类型的规则，跑在 typescript-go 上）+ Prettier 检查，有警告就算失败
+npm run format       # Prettier 改格式（代码文件；Markdown、JSON 不管）
 npm test             # 单元测试（免费），之后顺带跑 npm run nls
 npm run nls          # 语言包检查：没翻译的条目（显示英文）和过时的条目（算失败）；-- --todo 输出待翻译的 JSON
 node tests/ui.mjs    # 界面测试：快捷键、标签页、主题、查找、重启恢复（不发消息，免费）
@@ -23,7 +25,7 @@ node tests/installer.mjs   # 静默装、查、启动、卸载 release\ 里的�
 run-dev.cmd          # 在资源管理器里双击：构建并启动（手动试用就用它）
 ```
 
-改完代码的顺序：typecheck，然后 `npm test`，然后 `node tests/ui.mjs`。动了插件私有协议相关的代码（bridge、compat）才跑 smoke。动了打包相关的（electron-builder 配置、构建脚本、读程序文件的路径）就 `npm run package:dir`，再用 `VILAUS_EXECUTABLE=release\win-unpacked\Vilausity.exe` 跑界面测试（smoke 也认）。`npm run package` 之后 `dist/` 是正式构建，`npm run build` 换回开发版。
+改完代码的顺序：typecheck，`npm run lint`（格式不对就先 `npm run format`），然后 `npm test`，然后 `node tests/ui.mjs`。动了插件私有协议相关的代码（bridge、compat）才跑 smoke。动了打包相关的（electron-builder 配置、构建脚本、读程序文件的路径）就 `npm run package:dir`，再用 `VILAUS_EXECUTABLE=release\win-unpacked\Vilausity.exe` 跑界面测试（smoke 也认）。`npm run package` 之后 `dist/` 是正式构建，`npm run build` 换回开发版。
 
 ## 必须遵守
 

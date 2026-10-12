@@ -296,19 +296,21 @@ collectWebview(path.join(extension.path, 'webview', 'index.js'));
 collectExtension(path.join(extension.path, String(packageJson.main ?? 'extension.js')));
 collectSettings(packageJson);
 
+/** UTF-16 code unit order, the default sort's for strings. */
+const byCodeUnit = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const sorted = (map) =>
   Object.fromEntries(
     [...map.entries()]
-      .sort(([, a], [, b]) => (a.text < b.text ? -1 : a.text > b.text ? 1 : 0))
+      .sort(([, a], [, b]) => byCodeUnit(a.text, b.text))
       .map(([key, { arrays, ...entry }]) => {
         const sentences = [...(arrays ?? [])].map(sentenceOf).filter((sentence) => sentence && sentence !== entry.text);
         return [
           key,
           {
             ...entry,
-            kinds: [...entry.kinds].sort(),
-            sources: [...entry.sources].sort(),
-            ...(sentences.length > 0 ? { sentences: [...new Set(sentences)].sort() } : {}),
+            kinds: [...entry.kinds].sort(byCodeUnit),
+            sources: [...entry.sources].sort(byCodeUnit),
+            ...(sentences.length > 0 ? { sentences: [...new Set(sentences)].sort(byCodeUnit) } : {}),
           },
         ];
       }),

@@ -1,0 +1,15 @@
+# Prettier formats the code (TypeScript, JavaScript, CSS, HTML). The documents are written by
+# hand, and the JSON files are written by tools (npm, the language pack scripts, the theme
+# capture) or by hand.
+*.md
+*.json
+node_modules/
+dist/
+release/
+.local/
+.scratch/
+.test-data/
+.test-build/
+tools/theme-capture/.run/
+# Written by scripts/icons.mjs.
+src/platform/logoMark.ts

@@ -189,9 +189,13 @@ export function scanLiterals(source, onLiteral) {
         while (i < n) {
           const r = source[i];
           if (r === '\\') i += 2;
-          else if (r === '[') (inClass = true), i++;
-          else if (r === ']') (inClass = false), i++;
-          else if (r === '/' && !inClass) break;
+          else if (r === '[') {
+            inClass = true;
+            i++;
+          } else if (r === ']') {
+            inClass = false;
+            i++;
+          } else if (r === '/' && !inClass) break;
           else if (r === '\n') break;
           else i++;
         }

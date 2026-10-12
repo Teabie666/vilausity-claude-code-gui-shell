@@ -83,6 +83,8 @@ function formatL10n(message: string, args: readonly unknown[]): string {
   const values = args.length === 1 && typeof args[0] === 'object' && args[0] !== null ? (args[0] as Record<string, unknown>) : args;
   return message.replace(/\{(\w+)\}/g, (match, key: string) => {
     const value = (values as Record<string, unknown>)[key];
+    // As VS Code's l10n formats whatever it is handed.
+    // oxlint-disable-next-line typescript/no-base-to-string
     return value === undefined ? match : String(value);
   });
 }

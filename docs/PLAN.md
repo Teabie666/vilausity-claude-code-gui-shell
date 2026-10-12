@@ -76,7 +76,7 @@ src/
 
 - **以后的插件系统**：内置功能本身就用"模块 + Vilausity API + 贡献点"这套机制，以后开放外部插件只是"从用户目录加载同样格式的模块"。第一版不开放，但 API 按这个要求设计：版本号、只读的上下文、可撤销的注册。
 - **工程规范**：
-  - TypeScript strict，ESLint + Prettier；
+  - TypeScript strict，ESLint + Prettier；（2026-10-13 改：ESLint 换成 oxlint。ESLint 解析 TypeScript 靠 typescript-eslint，它只支持到 TypeScript 6.0，项目用的 TypeScript 7 没有它要的 JS 接口；oxlint 实现了 ESLint 和 typescript-eslint 的规则，要类型信息的规则跑在 typescript-go 上。）
   - IPC 消息全部在 `protocol.ts` 里有类型定义，运行时用 zod 校验；
   - 每个模块都有单元测试；
   - `docs/ARCHITECTURE.md` 写清楚分层和数据流，关键决策写成 ADR（决策记录，放 `docs/adr/`）；

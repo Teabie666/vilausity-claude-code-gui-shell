@@ -256,7 +256,7 @@ export class ExtensionHost {
   ): Promise<boolean> {
     const version = String(packageJson.version);
     try {
-      const mainFile = path.join(init.extensionPath, String(packageJson.main ?? 'extension.js'));
+      const mainFile = path.join(init.extensionPath, typeof packageJson.main === 'string' ? packageJson.main : 'extension.js');
       const load = Module.createRequire(mainFile);
       this.extension = load(mainFile) as ExtensionModule;
       const context = createExtensionContext(

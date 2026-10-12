@@ -63,7 +63,7 @@ export interface SettingsWidgetHandle extends IDisposable {
    * that have every word and returns how many (none: the block is hidden). Without this, the
    * keywords decide.
    */
-  search?(words: readonly string[]): number;
+  readonly search?: (words: readonly string[]) => number;
 }
 
 export class SettingsService {

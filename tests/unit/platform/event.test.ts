@@ -29,6 +29,8 @@ describe('Emitter', () => {
     const context = { tag: 'ctx' };
     let receivedThis: unknown;
     emitter.event(function (this: unknown) {
+      // What the test is about.
+      // oxlint-disable-next-line typescript/no-this-alias
       receivedThis = this;
     }, context);
     emitter.fire(1);

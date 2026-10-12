@@ -29,7 +29,7 @@ function isFromPreload(event: MessageEvent): boolean {
 }
 
 export class NativeApi {
-  call<M extends keyof MainApiForRenderer & string>(
+  call<M extends keyof MainApiForRenderer>(
     method: M,
     params: ParamsOf<MainApiForRenderer, M>,
   ): Promise<ResultOf<MainApiForRenderer, M>> {

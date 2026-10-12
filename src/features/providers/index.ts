@@ -110,7 +110,7 @@ export const providersModule: ShellModule = {
             ]
               .filter(Boolean)
               .join(' · ');
-          const actions = [
+          const actions: { label: string; run: () => void | Promise<void> }[] = [
             { label: t('manage'), run: () => openEditor() },
             {
               label: t('addProvider'),

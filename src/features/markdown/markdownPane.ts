@@ -40,8 +40,8 @@ export function slugify(text: string): string {
 
 interface MarkdownRenderer {
   /** Sanitized HTML with a hidden line marker before each top-level block, and those blocks. */
-  render(markdown: string): { html: string; blocks: SourceBlock[] };
-  sanitize(html: string): string;
+  readonly render: (markdown: string) => { html: string; blocks: SourceBlock[] };
+  readonly sanitize: (html: string) => string;
 }
 
 let renderer: Promise<MarkdownRenderer> | undefined;
