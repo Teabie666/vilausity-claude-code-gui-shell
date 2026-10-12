@@ -1,4 +1,4 @@
-import { describe, test } from 'node:test';
+import { afterEach, beforeEach, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { ClaudeWebviewBridge, conversationSessionId, describeShape, usageResetsOf } from '../../../src/host/exthost/bridge';
@@ -258,5 +258,205 @@ describe('describeShape', () => {
 
   test('collapses objects beyond the depth limit to object', () => {
     assert.equal(describeShape({ a: { b: { c: { d: { e: { f: 'x' } } } } } }), '{a: {b: {c: {d: {e: object}}}}}');
+  });
+});
+
+function fakeWebview(id: string, viewType: string): WebviewImpl {
+  return { id, viewType, postMessage: () => Promise.resolve(true) } as unknown as WebviewImpl;
+}
+
+function openInEditor(requestId: string, sessionId: string): unknown {
+  return { type: 'request', channelId: 'c', requestId, request: { type: 'open_in_editor', sessionId } };
+}
+
+function userMessage(): unknown {
+  return {
+    type: 'io_message',
+    channelId: 'c',
+    message: { type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'hi' }] } },
+    done: false,
+  };
+}
+
+function makePreviewBridge(pinned?: string[]): ClaudeWebviewBridge {
+  const { os } = makeOs();
+  return new ClaudeWebviewBridge(os, NullLogger, {
+    diffEditorAvailable: () => true,
+    comments: new CommentStore(),
+    workspaceFolders: [],
+    ...(pinned ? { pinPreview: (id: string) => void pinned.push(id) } : {}),
+  });
+}
+
+describe('ClaudeWebviewBridge and previews', () => {
+  beforeEach(() => {
+    mock.timers.enable({ apis: ['Date'], now: 1000 });
+  });
+  afterEach(() => {
+    mock.timers.reset();
+  });
+
+  test('marks one panel a preview while an open is pending, and only one per click', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    const list = fakeWebview('list', 'claudeVSCodeSessionsList');
+    assert.equal(bridge.interceptFromWebview(list, openInEditor('r1', 'S1')), false);
+    assert.equal(bridge.opensAsPreview(fakeWebview('panel-1', 'claudeVSCodePanel')), true);
+    assert.equal(bridge.opensAsPreview(fakeWebview('panel-2', 'claudeVSCodePanel')), false);
+    assert.deepEqual(pinned, []);
+  });
+
+  test('the extension answering the open ends the preview window', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    const list = fakeWebview('list', 'claudeVSCodeSessionsList');
+    bridge.interceptFromWebview(list, openInEditor('r1', 'S1'));
+    bridge.observeToWebview(list, {
+      type: 'from-extension',
+      message: { type: 'response', requestId: 'r1', response: { type: 'open_in_editor_response' } },
+    });
+    assert.equal(bridge.opensAsPreview(fakeWebview('panel', 'claudeVSCodePanel')), false);
+    assert.deepEqual(pinned, []);
+  });
+
+  test('a response for a different request does not end the preview', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    const list = fakeWebview('list', 'claudeVSCodeSessionsList');
+    bridge.interceptFromWebview(list, openInEditor('r1', 'S1'));
+    bridge.observeToWebview(list, {
+      type: 'from-extension',
+      message: { type: 'response', requestId: 'other', response: { type: 'open_in_editor_response' } },
+    });
+    assert.equal(bridge.opensAsPreview(fakeWebview('panel', 'claudeVSCodePanel')), true);
+  });
+
+  test('returns false when nothing was clicked', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    assert.equal(bridge.opensAsPreview(fakeWebview('panel', 'claudeVSCodePanel')), false);
+  });
+
+  test('a plan preview is not a preview, and does not consume the pending open', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    const list = fakeWebview('list', 'claudeVSCodeSessionsList');
+    bridge.interceptFromWebview(list, openInEditor('r1', 'S1'));
+    assert.equal(bridge.opensAsPreview(fakeWebview('plan', 'claudePlanPreview')), false);
+    assert.equal(bridge.opensAsPreview(fakeWebview('panel', 'claudeVSCodePanel')), true);
+  });
+
+  test('an open_in_editor from a conversation panel does not count', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    bridge.interceptFromWebview(fakeWebview('panel', 'claudeVSCodePanel'), openInEditor('r1', 'S1'));
+    assert.equal(bridge.opensAsPreview(fakeWebview('panel-2', 'claudeVSCodePanel')), false);
+  });
+
+  test('an open_in_editor without a sessionId does not count', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    const list = fakeWebview('list', 'claudeVSCodeSessionsList');
+    bridge.interceptFromWebview(list, { type: 'request', channelId: 'c', requestId: 'r1', request: { type: 'open_in_editor' } });
+    assert.equal(bridge.opensAsPreview(fakeWebview('panel', 'claudeVSCodePanel')), false);
+  });
+
+  test('times out: a panel after OPEN_TIMEOUT_MS is not a preview', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    const list = fakeWebview('list', 'claudeVSCodeSessionsList');
+    bridge.interceptFromWebview(list, openInEditor('r1', 'S1'));
+    mock.timers.tick(5001); // OPEN_TIMEOUT_MS is 5000
+    assert.equal(bridge.opensAsPreview(fakeWebview('panel', 'claudeVSCodePanel')), false);
+  });
+
+  test('a double click pins the panel the first click already made a preview', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    const list = fakeWebview('list', 'claudeVSCodeSessionsList');
+    bridge.interceptFromWebview(list, openInEditor('r1', 'S1'));
+    const panel = fakeWebview('panel', 'claudeVSCodePanel');
+    assert.equal(bridge.opensAsPreview(panel), true);
+    bridge.interceptFromWebview(list, openInEditor('r2', 'S1'));
+    assert.deepEqual(pinned, ['panel']);
+  });
+
+  test('two clicks before any panel: the later panel is not a preview and nothing is pinned', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    const list = fakeWebview('list', 'claudeVSCodeSessionsList');
+    bridge.interceptFromWebview(list, openInEditor('r1', 'S1'));
+    bridge.interceptFromWebview(list, openInEditor('r2', 'S1'));
+    assert.equal(bridge.opensAsPreview(fakeWebview('panel', 'claudeVSCodePanel')), false);
+    assert.deepEqual(pinned, []);
+  });
+
+  test('a second open after DOUBLE_CLICK_MS is not a double click', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    const list = fakeWebview('list', 'claudeVSCodeSessionsList');
+    bridge.interceptFromWebview(list, openInEditor('r1', 'S1'));
+    mock.timers.tick(500); // DOUBLE_CLICK_MS is 500; equal is not "less than"
+    bridge.interceptFromWebview(list, openInEditor('r2', 'S1'));
+    assert.deepEqual(pinned, []);
+    assert.equal(bridge.opensAsPreview(fakeWebview('panel', 'claudeVSCodePanel')), true);
+  });
+
+  test('a second open of a different session is not a double click', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    const list = fakeWebview('list', 'claudeVSCodeSessionsList');
+    bridge.interceptFromWebview(list, openInEditor('r1', 'S1'));
+    mock.timers.tick(100);
+    bridge.interceptFromWebview(list, openInEditor('r2', 'S2'));
+    assert.deepEqual(pinned, []);
+    assert.equal(bridge.opensAsPreview(fakeWebview('panel', 'claudeVSCodePanel')), true);
+  });
+
+  test('a user message in a preview panel pins it once', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    const list = fakeWebview('list', 'claudeVSCodeSessionsList');
+    const panel = fakeWebview('panel', 'claudeVSCodePanel');
+    bridge.interceptFromWebview(list, openInEditor('r1', 'S1'));
+    assert.equal(bridge.opensAsPreview(panel), true);
+    assert.equal(bridge.interceptFromWebview(panel, userMessage()), false);
+    assert.deepEqual(pinned, ['panel']);
+    assert.equal(bridge.interceptFromWebview(panel, userMessage()), false);
+    assert.deepEqual(pinned, ['panel']);
+  });
+
+  test('a message in a panel that is not a preview does not pin', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    const panel = fakeWebview('panel', 'claudeVSCodePanel');
+    assert.equal(bridge.interceptFromWebview(panel, userMessage()), false);
+    assert.deepEqual(pinned, []);
+  });
+
+  test('an io_message that is not a user message does not pin', () => {
+    const pinned: string[] = [];
+    const bridge = makePreviewBridge(pinned);
+    const list = fakeWebview('list', 'claudeVSCodeSessionsList');
+    const panel = fakeWebview('panel', 'claudeVSCodePanel');
+    bridge.interceptFromWebview(list, openInEditor('r1', 'S1'));
+    assert.equal(bridge.opensAsPreview(panel), true);
+    bridge.interceptFromWebview(panel, { type: 'io_message', channelId: 'c', message: { type: 'assistant', message: {} }, done: false });
+    assert.deepEqual(pinned, []);
+  });
+
+  test('works without a pinPreview callback', () => {
+    const bridge = makePreviewBridge();
+    const list = fakeWebview('list', 'claudeVSCodeSessionsList');
+    const panel = fakeWebview('panel', 'claudeVSCodePanel');
+    bridge.interceptFromWebview(list, openInEditor('r1', 'S1'));
+    assert.equal(bridge.opensAsPreview(panel), true);
+    assert.equal(bridge.interceptFromWebview(panel, userMessage()), false); // pins without a callback
+
+    const bridge2 = makePreviewBridge();
+    const list2 = fakeWebview('list2', 'claudeVSCodeSessionsList');
+    bridge2.interceptFromWebview(list2, openInEditor('r1', 'S1'));
+    assert.equal(bridge2.opensAsPreview(fakeWebview('panel2', 'claudeVSCodePanel')), true);
+    bridge2.interceptFromWebview(list2, openInEditor('r2', 'S1')); // double click pins without a callback
   });
 });

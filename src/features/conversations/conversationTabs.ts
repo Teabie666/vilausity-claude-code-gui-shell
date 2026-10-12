@@ -2,6 +2,10 @@
  * Conversation panels (the extension's `createWebviewPanel`) as tabs above the conversation.
  * One panel is visible at a time; hidden ones keep their iframe (and Claude process)
  * alive, as the extension asks with retainContextWhenHidden.
+ *
+ * A session opened by a click in the session list is a preview (VS Code's preview editors,
+ * the title in italics): another click takes its place, and it closes once another tab shows,
+ * unless it was kept: its tab or its row double-clicked, or a message sent in it.
  */
 
 import { Emitter, type Event } from '../../platform/event';
@@ -19,6 +23,8 @@ export interface ConversationPanel {
   title: string;
   /** Holds the panel's iframe; other modules may add UI below it (it is a column). */
   readonly container: HTMLElement;
+  /** Opened to look at (see above); closes when another tab shows. */
+  readonly isPreview: boolean;
 }
 
 interface PanelEntry extends ConversationPanel {
@@ -26,6 +32,9 @@ interface PanelEntry extends ConversationPanel {
   readonly label: HTMLElement;
   readonly icon: HTMLImageElement;
   iconPath: IconPathDto | undefined;
+  isPreview: boolean;
+  /** A preview the shell asked the extension to close. */
+  closing: boolean;
 }
 
 export class ConversationTabs {
@@ -63,8 +72,12 @@ export class ConversationTabs {
   }
 
   create(params: PanelCreateParams): void {
+    const preview = params.preview === true;
+    // A new preview takes the place of the one open.
+    const replaced = preview ? [...this.panels.values()].find((entry) => entry.isPreview && !entry.closing) : undefined;
     const tab = document.createElement('div');
     tab.className = 'tab';
+    tab.classList.toggle('preview', preview);
     tab.setAttribute('role', 'tab');
     tab.dataset.panelId = params.panelId;
     tab.title = params.title;
@@ -93,7 +106,12 @@ export class ConversationTabs {
         this.requestClose(params.panelId);
       }
     });
-    this.tabStrip.appendChild(tab);
+    tab.addEventListener('dblclick', () => this.pin(params.panelId));
+    if (replaced) {
+      replaced.tab.after(tab);
+    } else {
+      this.tabStrip.appendChild(tab);
+    }
 
     const container = document.createElement('div');
     container.className = 'panel';
@@ -111,12 +129,17 @@ export class ConversationTabs {
       icon,
       container,
       iconPath: params.iconPath,
+      isPreview: preview,
+      closing: false,
     };
     this.panels.set(params.panelId, entry);
     this.renderIcon(entry);
     this.countEmitter.fire(this.panels.size);
     if (!params.preserveFocus || this.activeId === undefined) {
       this.activate(params.panelId, !params.preserveFocus);
+    }
+    if (replaced) {
+      this.closePreview(replaced);
     }
   }
 
@@ -136,6 +159,18 @@ export class ConversationTabs {
     if (params.iconPath !== undefined) {
       entry.iconPath = params.iconPath ?? undefined;
       this.renderIcon(entry);
+    }
+    if (params.pinned) {
+      this.pin(params.panelId);
+    }
+  }
+
+  /** Keeps a preview: it stays when another tab shows. */
+  pin(panelId: string): void {
+    const entry = this.panels.get(panelId);
+    if (entry?.isPreview && !entry.closing) {
+      entry.isPreview = false;
+      entry.tab.classList.remove('preview');
     }
   }
 
@@ -225,6 +260,7 @@ export class ConversationTabs {
         active: false,
         visible: false,
       });
+      this.closePreview(previous);
     }
     const changed = this.activeId !== panelId;
     this.activeId = panelId;
@@ -239,6 +275,14 @@ export class ConversationTabs {
     }
     if (changed) {
       this.activeEmitter.fire(entry);
+    }
+  }
+
+  /** A preview goes once another tab shows or another preview takes its place. */
+  private closePreview(entry: PanelEntry): void {
+    if (entry.isPreview && !entry.closing) {
+      entry.closing = true;
+      this.requestClose(entry.panelId);
     }
   }
 

@@ -577,7 +577,7 @@ body.resizing {
   background: var(--vscode-editor-background);
 }
 
-.content-tab.preview .tab-label {
+.tab.preview .tab-label {
   font-style: italic;
 }
 

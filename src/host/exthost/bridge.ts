@@ -47,6 +47,18 @@ const SESSION_LIST_VIEW_TYPE = 'claudeVSCodeSessionsList';
 const PLAN_PREVIEW_VIEW_TYPE = 'claudePlanPreview';
 
 /**
+ * What the session list's page asks when a row is clicked (anthropic.claude-code 2.1.296):
+ * `{type: 'request', requestId, request: {type: 'open_in_editor', sessionId, ...}}`. The
+ * extension runs `claude-vscode.editor.open`, which creates the session's conversation panel
+ * (or brings its open one forward), and then answers `open_in_editor_response`.
+ */
+const OPEN_IN_EDITOR = 'open_in_editor';
+/** Two opens of one session this close together are its row double-clicked (ms; Windows' default). */
+const DOUBLE_CLICK_MS = 500;
+/** An open still unanswered after this long no longer makes previews (ms). */
+const OPEN_TIMEOUT_MS = 5000;
+
+/**
  * Where the extension's pages show content rather than their own UI, which the translation
  * of the UI text leaves alone (anthropic.claude-code 2.1.282; the conversation and the session
  * list are one bundle, so one list serves both): the conversation; Markdown (a plan in a
@@ -397,6 +409,8 @@ export interface BridgeOptions {
   readonly comments: PendingComments;
   /** For the paths in comments: relative to the workspace when inside it. */
   readonly workspaceFolders: readonly string[];
+  /** Keeps the preview panel of this webview (see `opensAsPreview`). */
+  readonly pinPreview?: (webviewId: string) => void;
 }
 
 export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
@@ -407,6 +421,12 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   private openSessions = new Set<string>();
   private elsewhereSessions = new Set<string>();
   private loggedStatesShape = false;
+  /** The session list's latest open still unanswered; `preview` until it has made its panel. */
+  private listOpen: { requestId: string; sessionId: string; at: number; preview: boolean } | undefined;
+  /** The session the list last opened, and when: a second open soon after is a double click. */
+  private lastListOpen: { sessionId: string; at: number } | undefined;
+  /** The session each preview panel's webview shows, by webview id. */
+  private readonly previews = new Map<string, string>();
 
   constructor(
     private readonly os: OsBackend,
@@ -424,6 +444,10 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     if (message.type === 'io_message') {
       this.logInputShapeOnce(message);
       this.attachComments(webview, message);
+      // A message sent in a preview: the conversation goes on there, it is kept.
+      if (this.previews.has(webview.id) && isRecord(message.message) && message.message.type === 'user') {
+        this.pin(webview.id);
+      }
       return false;
     }
     if (!isWebviewRequest(message)) {
@@ -436,9 +460,52 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
         return this.answerAcceptDiff(webview, message);
       case 'open_url':
         return this.openUrl(webview, message);
+      case OPEN_IN_EDITOR:
+        this.noteListOpen(webview, message);
+        return false;
       default:
         return false;
     }
+  }
+
+  /**
+   * A conversation panel created while a click in the session list is being answered shows
+   * the clicked session (see OPEN_IN_EDITOR): it opens as a preview. One panel per click; a
+   * double click opens a panel of its own.
+   */
+  opensAsPreview(webview: WebviewImpl): boolean {
+    const open = this.listOpen;
+    if (webview.viewType !== CHAT_PANEL_VIEW_TYPE || !open?.preview || Date.now() - open.at > OPEN_TIMEOUT_MS) {
+      return false;
+    }
+    this.listOpen = { ...open, preview: false };
+    this.previews.set(webview.id, open.sessionId);
+    return true;
+  }
+
+  private noteListOpen(webview: WebviewImpl, message: WebviewRequest): void {
+    const sessionId = message.request.sessionId;
+    if (webview.viewType !== SESSION_LIST_VIEW_TYPE || typeof sessionId !== 'string') {
+      return;
+    }
+    const now = Date.now();
+    const last = this.lastListOpen;
+    const doubleClick = last !== undefined && last.sessionId === sessionId && now - last.at < DOUBLE_CLICK_MS;
+    // A third click starts over.
+    this.lastListOpen = doubleClick ? undefined : { sessionId, at: now };
+    if (doubleClick) {
+      for (const [webviewId, shown] of this.previews) {
+        if (shown === sessionId) {
+          this.pin(webviewId);
+        }
+      }
+    }
+    this.listOpen = { requestId: message.requestId, sessionId, at: now, preview: !doubleClick };
+  }
+
+  private pin(webviewId: string): void {
+    this.previews.delete(webviewId);
+    this.options.pinPreview?.(webviewId);
   }
 
   /**
@@ -507,6 +574,10 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
       return;
     }
     const inner = isRecord(message) && message.type === 'from-extension' ? message.message : undefined;
+    // The session list's open is answered: panels from now on are not its.
+    if (isRecord(inner) && inner.type === 'response' && this.listOpen && inner.requestId === this.listOpen.requestId) {
+      this.listOpen = undefined;
+    }
     const request = isRecord(inner) && inner.type === 'request' && isRecord(inner.request) ? inner.request : undefined;
     if (request?.type !== 'session_states_update') {
       return;

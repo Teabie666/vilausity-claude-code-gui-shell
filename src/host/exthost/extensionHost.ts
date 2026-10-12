@@ -129,6 +129,12 @@ export class ExtensionHost {
       diffEditorAvailable: () => true,
       comments,
       workspaceFolders: init.workspaceFolders,
+      pinPreview: (webviewId) => {
+        const panel = webviews.allPanels.find((candidate) => candidate.webview.id === webviewId);
+        if (panel) {
+          compat.host.webviews.updatePanel({ panelId: panel.id, pinned: true });
+        }
+      },
     });
     webviews.interceptor = bridge;
     this.bridge = bridge;

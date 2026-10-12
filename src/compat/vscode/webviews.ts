@@ -35,6 +35,8 @@ export interface WebviewMessageInterceptor {
   observeToWebview?(webview: WebviewImpl, message: unknown): void;
   /** What the shell's script in this webview should know about the page (asked once per webview). */
   pageHints?(webview: WebviewImpl): WebviewPageHints | undefined;
+  /** Whether a panel being created for this webview opens as a preview (see `PanelCreateParams.preview`). */
+  opensAsPreview?(webview: WebviewImpl): boolean;
 }
 
 type IconPath = vscode.Uri | { readonly light: vscode.Uri; readonly dark: vscode.Uri } | ThemeIcon;
@@ -440,6 +442,7 @@ export class WebviewManager implements IDisposable {
     );
     this.panels.set(panelId, panel);
     this.panelsEmitter.fire();
+    const preview = this.interceptor?.opensAsPreview?.(webview) === true;
     this.host.webviews.createPanel({
       panelId,
       webviewId,
@@ -449,6 +452,7 @@ export class WebviewManager implements IDisposable {
       preserveFocus,
       retainContextWhenHidden: options.retainContextWhenHidden === true,
       enableFindWidget: options.enableFindWidget === true,
+      ...(preview ? { preview } : {}),
     });
     return panel;
   }

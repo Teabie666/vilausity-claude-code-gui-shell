@@ -267,12 +267,19 @@ export interface PanelCreateParams {
   readonly preserveFocus: boolean;
   readonly retainContextWhenHidden: boolean;
   readonly enableFindWidget: boolean;
+  /**
+   * A conversation opened by a click in the session list, to look at: a preview, as VS Code's
+   * preview editors, until it is kept (`PanelUpdateParams.pinned`, or in the shell).
+   */
+  readonly preview?: boolean;
 }
 
 export interface PanelUpdateParams {
   readonly panelId: string;
   readonly title?: string;
   readonly iconPath?: IconPathDto | null;
+  /** A preview is kept: a message was sent in it, or its row in the session list double-clicked. */
+  readonly pinned?: true;
 }
 
 /** A webview view (`registerWebviewViewProvider`), e.g. the extension's session list. */
