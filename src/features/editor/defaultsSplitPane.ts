@@ -29,8 +29,11 @@ export interface DefaultsSplitOptions {
   readonly widen?: (width: number) => IDisposable;
 }
 
-/** What the two columns ask of the content pane while they show in it. */
-const SPLIT_WIDTH = 1100;
+/**
+ * What the two columns ask of the content pane while they show in it: all it can get, the
+ * conversation squeezed to the least the sash allows (editing settings, it waits).
+ */
+const SPLIT_WIDTH = Number.POSITIVE_INFINITY;
 
 interface SplitState {
   readonly hidden: boolean;
