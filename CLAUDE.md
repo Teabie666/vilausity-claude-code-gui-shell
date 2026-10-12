@@ -17,10 +17,12 @@ npm run nls          # 语言包检查：没翻译的条目（显示英文）和
 node tests/ui.mjs    # 界面测试：快捷键、标签页、主题、查找、重启恢复（不发消息，免费）
 npm run smoke        # 端到端：真实 Claude 会话发 3 条消息。条款只允许脚本走 API key，所以默认拒绝运行，M2 接上 API 模式；-- --subscription 强制用登录的账号
 npm run icons        # 重新生成 resources/icon/ 的图标（SVG + .ico），几何形状和颜色在 scripts/icons.mjs 里改
+npm run package      # 正式构建 + electron-builder：release\win-unpacked\ 和 NSIS 安装包
+npm run package:dir  # 只出 release\win-unpacked\（快，测打包版用）
 run-dev.cmd          # 在资源管理器里双击：构建并启动（手动试用就用它）
 ```
 
-改完代码的顺序：typecheck，然后 `npm test`，然后 `node tests/ui.mjs`。动了插件私有协议相关的代码（bridge、compat）才跑 smoke。
+改完代码的顺序：typecheck，然后 `npm test`，然后 `node tests/ui.mjs`。动了插件私有协议相关的代码（bridge、compat）才跑 smoke。动了打包相关的（electron-builder 配置、构建脚本、读程序文件的路径）就 `npm run package:dir`，再用 `VILAUS_EXECUTABLE=release\win-unpacked\Vilausity.exe` 跑界面测试（smoke 也认）。`npm run package` 之后 `dist/` 是正式构建，`npm run build` 换回开发版。
 
 ## 必须遵守
 

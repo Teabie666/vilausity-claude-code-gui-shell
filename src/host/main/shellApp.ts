@@ -42,6 +42,7 @@ import {
 } from '../../platform/protocol';
 import { ACCENT_COLOR_SETTING, ACCENT_SETTING, ACCENT_SOURCES, logoColor, parseColor, withAccent } from '../../platform/accent';
 import { LOGO_COLOR } from '../../platform/logoMark';
+import { URI_SCHEME } from '../../platform/product';
 import {
   DEFAULT_PROVIDER_SETTING,
   providerAccentColor,
@@ -479,7 +480,7 @@ export class ShellApp extends Disposable implements WindowHost {
     return {
       appName: 'Vilausity (VSCodium)',
       vscodeVersion: VSCODE_COMPAT_VERSION,
-      uriScheme: 'vilaus',
+      uriScheme: URI_SCHEME,
       language: this.language,
       machineId: this.machineId(),
       sessionId: crypto.randomUUID(),

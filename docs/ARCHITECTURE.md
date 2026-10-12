@@ -231,6 +231,16 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **壳里的提示**：插件经 `window.showInformationMessage` / `showQuickPick` / `showInputBox` 弹出的文字，在插件进程里（`host/exthost/compatHost.ts`）查表后再发给渲染进程。返回给插件的仍是它自己的条目，插件按英文比较选项不受影响。表经 `ExtHostInitData.extensionTranslations` 交给插件进程，是否翻译按当时的设置。
 - **设置** `vilaus.translateExtensionUi`：默认开，只在中文界面起作用，改了立即生效：main 通知渲染进程，渲染进程给每个 webview 发控制消息（开 = 发表，关 = 换回原文）。
 
+## 打包（M6）
+
+- **构建**：`npm run package` = `node scripts/build.mjs --production`（压缩、不带 source map；`keepNames` 留住函数名和类名，日志里的调用栈看得懂，插件看到的 API 类名也不变）+ electron-builder（配置在 `electron-builder.config.ts`，electron-builder 用 jiti 直接加载 TS）。输出在 `release/`：`win-unpacked\`（装好后的样子）和 `Vilausity-Setup-<版本>.exe`。`npm run package:dir` 只出 `win-unpacked`，快。
+- **只装 `dist/` 和 package.json**：esbuild 把运行时要的东西全打进了 `dist/`，所以 package.json 里的包都是 devDependencies，electron-builder 一个 `node_modules` 也不带。打成 `app.asar`，不用 `asarUnpack`：插件进程（`utilityProcess.fork`）、搜索会话的 worker 线程、`ccw:` 协议、`fs` 读主题 / 字体 / 引导脚本、窗口图标都直接读 asar（界面测试和 smoke 在打包版上全过）。
+- **Electron**：版本和 zip 都来自 `node_modules/electron`（npm 装它时 zip 已经下进 `%LOCALAPPDATA%\electron\Cache`，不再下第二次）。不用 `electronDist` 指向解开的目录：那样 electron-builder 不删 `default_app.asar`。
+- **fuse**：关掉 `RunAsNode`：从 VS Code 系的终端启动时会继承 `ELECTRON_RUN_AS_NODE`，exe 就成了纯 Node；程序和插件都不靠它（插件进程是 utilityProcess，插件不 fork）。打开 `OnlyLoadAppFromAsar`。`--inspect` 留着：Playwright 靠它连打包版。
+- **AppUserModelID**：`platform/product.ts` 的 `APP_ID` 既是安装包的 appId，也是开始菜单快捷方式的 AUMID；安装版启动时 `app.setAppUserModelId(APP_ID)`，于是从右键菜单、链接、接口快捷方式启动的窗口也跟开始菜单、固定到任务栏的图标合成一组，系统通知也算在它名下。开发时不设，免得跟装好的那份混成一组。`APP_ID` 不能改：安装信息的注册表项由它算出来，改了会装成第二份。
+- **许可证**：打包时去掉了第三方库的许可证注释（`legalComments: 'none'`），所以构建按 esbuild 的 metafile 找出打进包的每个 npm 包（加上复制进去的 Monaco 样式和思源黑体），把它们的 LICENSE / NOTICE / ThirdPartyNotices 拼成 `dist/ThirdPartyNotices.txt`；安装时它和本项目的 `LICENSE.txt` 放在 exe 旁边，Electron 自带的 `LICENSE.electron.txt`、`LICENSES.chromium.html` 也在。
+- **在打包版上跑测试**：`VILAUS_EXECUTABLE=release\win-unpacked\Vilausity.exe node tests/ui.mjs`（smoke 也认这个变量）启动打包的 exe（不带 app 目录），asar、fuse、`app.isPackaged` 的分支都测到。
+
 ## 加功能该改哪里
 
 - 插件调用了我们没实现的 VS Code API：在 `src/compat/vscode/` 对应的命名空间文件里实现。没实现的 API 会先返回一个会记日志的空桩，不会崩。插件执行的 VS Code 内置命令（`workbench.action.*` 这类）在 `src/host/exthost/workbenchCommands.ts`。

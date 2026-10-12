@@ -6,13 +6,13 @@
 
 ## 下一步
 
-1. M6 打包和发布（M5.5 2026-10-13 完成）
+1. M6 打包和发布：① 能跑的打包版已完成，接着是 ② 安装包
 
 2026-10-10 把视觉打磨和打包对调了：功能做完不直接发布，先把界面打磨好。
 
 每个阶段结束都要做：typecheck、`npm test`、`node tests/ui.mjs`（动了 bridge / compat 再跑 `npm run smoke`）；看最新一次的 `shim-unimplemented.log`；确认没往 `C:\Program Files\VSCodium` 写任何东西、git 里没有密钥；用屏幕工具截图，跟 VSCodium 里的同一界面对比；用 `run-dev.cmd` 试用。
 
-测试现状（2026-10-13，M5.5 完成）：单元 410/410，语言包 0 条缺译（插件界面对照表 1748 条），界面 55/55，smoke 14/14（用 DeepSeek 接口跑的）。
+测试现状（2026-10-13，M6 ①）：单元 410/410，语言包 0 条缺译（插件界面对照表 1748 条），界面 55/55，smoke 14/14（用 DeepSeek 接口跑的）；打包版（`VILAUS_EXECUTABLE`）界面 55/55、smoke 14/14。
 
 ## M0 技术验证：完成（2026-10-08）
 
@@ -318,7 +318,20 @@ Vilausity 多数时候拿来做简单的电脑任务，工作流基本在单个�
 
 - [x] 六块都试用过；typecheck、`npm test`、`node tests/ui.mjs`、`npm run smoke` 全过；看 `shim-unimplemented.log`（2026-10-13：单元 410/410，界面 55/55，smoke 14/14；真插件跑的时候 `shim-unimplemented.log` 是空的，只有测试里的假插件（9.0.0，没有命令）记下 `claude-vscode.editor.open`；git 的全部历史里没有密钥；没往 VSCodium 目录写东西）
 
-## M6 打包和发布：未开始
+## M6 打包和发布：进行中（2026-10-13 开始）
+
+2026-10-13 定：第一个发布版是 0.9.0，试用后再出 1.0.0；干净环境在本机模拟（临时数据目录、临时的 Claude 配置目录 = 没登录、不用别的编辑器里的插件，真从 Open VSX 下载），再加使用者各自的电脑；发布说明中英双语，中文在前；安装默认只装当前用户。发布前加做三项：ESLint + Prettier、关窗口 / 退出时问未保存的文件、插件新版本缺接口时提示退回。不做：`.sigzip` 签名校验、UAC 那一步的自动测试。
+
+分五块：① 能跑的打包版 ② 安装包 ③ 发布前补的功能 ④ 干净环境测试 ⑤ 发布。
+
+### ① 能跑的打包版：完成（2026-10-13）
+
+- [x] electron-builder 26（`electron-builder.config.ts`），`npm run package` / `npm run package:dir`；正式构建压缩、留住函数名；安装包只带 `dist/`（依赖全挪进 devDependencies）；asar 里的东西都能直接读，不用 `asarUnpack`。做法见 ARCHITECTURE"打包"
+- [x] fuse：关 `RunAsNode`、开 `OnlyLoadAppFromAsar`；安装版设 AppUserModelID（`platform/product.ts`）；exe 的版本信息和图标
+- [x] 第三方许可证：按 esbuild 的 metafile 生成 `ThirdPartyNotices.txt`，跟 `LICENSE.txt` 一起放在 exe 旁边
+- [x] 测试能跑在打包版上（`VILAUS_EXECUTABLE`）：界面 55/55、smoke 14/14；asar 里的窗口图标能读
+
+### 整个 M6 的清单
 
 - [ ] electron-builder 打 NSIS 安装包：可以选只装当前用户，或装到 Program Files 给所有用户；建开始菜单和桌面快捷方式；卸载时默认保留 `%APPDATA%\Vilausity`
 - [ ] 安装时可选"在资源管理器右键菜单里加'用 Vilausity 打开'"（默认不勾），卸载时删掉（用 M5.5 第三块的 `--register-context-menu` / `--unregister-context-menu`）

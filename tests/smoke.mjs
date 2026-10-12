@@ -8,11 +8,18 @@
 //   VILAUS_SMOKE_AUTH_TOKEN  sent as ANTHROPIC_AUTH_TOKEN (Bearer), e.g. for compatible APIs
 //   VILAUS_SMOKE_BASE_URL    optional, ANTHROPIC_BASE_URL of an Anthropic-compatible API
 //   VILAUS_SMOKE_MODEL       optional, default claude-haiku-4-5-20251001
+//   VILAUS_EXECUTABLE        optional, the packaged program (release\win-unpacked\Vilausity.exe)
+//                            instead of electron.exe with this checkout
 import { _electron as electron } from 'playwright-core';
 import electronPath from 'electron';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+const packaged = process.env.VILAUS_EXECUTABLE ? path.resolve(process.env.VILAUS_EXECUTABLE) : undefined;
+const executable = packaged ?? electronPath;
+// In development electron.exe needs the app's folder first.
+const appArgs = (...args) => (packaged ? args : ['.', ...args]);
 
 // Anthropic's consumer terms allow automated (scripted) access only through an API key, so
 // this test does not drive the signed-in Claude subscription unless told to explicitly.
@@ -97,9 +104,9 @@ async function step(name, fn) {
 }
 
 const app = await electron.launch({
-  executablePath: electronPath,
+  executablePath: executable,
   // On a second monitor, if there is one, out of the way of whoever started the run.
-  args: ['.', '--user-data-dir', dataDir, '--folder', workspace, '--secondary-display'],
+  args: appArgs('--user-data-dir', dataDir, '--folder', workspace, '--secondary-display'),
   cwd: root,
   env,
   timeout: 60_000,

@@ -12,6 +12,12 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..');
+// VILAUS_EXECUTABLE=release\win-unpacked\Vilausity.exe runs the steps against the packaged
+// program (npm run package:dir): its asar, its fuses, its paths. Otherwise electron.exe runs
+// this checkout's dist/, and needs the app's folder first.
+const packaged = process.env.VILAUS_EXECUTABLE ? path.resolve(process.env.VILAUS_EXECUTABLE) : undefined;
+const executable = packaged ?? electronPath;
+const appArgs = (...args) => (packaged ? args : ['.', ...args]);
 const runDir = path.join(root, '.test-data', `ui-${Date.now()}`);
 const dataDir = path.join(runDir, 'data');
 const workspace = path.join(runDir, 'workspace');
@@ -80,9 +86,9 @@ async function step(name, fn) {
 
 const launch = () =>
   electron.launch({
-    executablePath: electronPath,
+    executablePath: executable,
     // On a second monitor, if there is one, out of the way of whoever started the run.
-    args: ['.', '--user-data-dir', dataDir, '--folder', workspace, '--secondary-display'],
+    args: appArgs('--user-data-dir', dataDir, '--folder', workspace, '--secondary-display'),
     cwd: root,
     env,
     timeout: 60_000,
@@ -889,7 +895,7 @@ await step("File Explorer's context menu: the switch in the settings adds the en
   await page.keyboard.press('Escape');
   await waitFor(async () => (await page.locator('.settings-dialog').count()) === 0, 5000, 'the settings panel to close');
   // The installer's switches do the same and quit, with an instance running or not.
-  const cli = (flag) => execFileSync(electronPath, ['.', '--user-data-dir', dataDir, flag], { cwd: root, env, stdio: 'ignore', timeout: 60_000 });
+  const cli = (flag) => execFileSync(executable, appArgs('--user-data-dir', dataDir, flag), { cwd: root, env, stdio: 'ignore', timeout: 60_000 });
   cli('--register-context-menu');
   if (!registered()) throw new Error('--register-context-menu added nothing');
   cli('--unregister-context-menu');
@@ -1115,7 +1121,7 @@ await step('Ctrl+Shift+W closes a window; the others stay', async () => {
 /** Starts the app again with the same data folder, as a second start would; resolves when that process exits. */
 const startAgain = (...extra) =>
   new Promise((resolve, reject) => {
-    const child = spawn(electronPath, ['.', '--user-data-dir', dataDir, '--secondary-display', ...extra], {
+    const child = spawn(executable, appArgs('--user-data-dir', dataDir, '--secondary-display', ...extra), {
       cwd: root,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -1527,8 +1533,8 @@ await step('started without a folder, the windows open at quit come back', async
   await waitFor(async () => showsFolder(await newPage.title(), second), 30_000, 'the second window');
   await app.close();
   app = await electron.launch({
-    executablePath: electronPath,
-    args: ['.', '--user-data-dir', dataDir, '--secondary-display'],
+    executablePath: executable,
+    args: appArgs('--user-data-dir', dataDir, '--secondary-display'),
     cwd: root,
     env,
     timeout: 60_000,
@@ -1628,8 +1634,8 @@ await step('first run: no extension, no Git -> install from Open VSX without a r
   }
 
   const first = await electron.launch({
-    executablePath: electronPath,
-    args: ['.', '--user-data-dir', firstData, '--folder', firstWorkspace, '--secondary-display', '--ignore-other-editors'],
+    executablePath: executable,
+    args: appArgs('--user-data-dir', firstData, '--folder', firstWorkspace, '--secondary-display', '--ignore-other-editors'),
     cwd: root,
     env: noGit,
     timeout: 60_000,
@@ -1697,8 +1703,8 @@ await step('the session list: the filters are one drop-down, usage resets show t
     'utf8',
   );
   const other = await electron.launch({
-    executablePath: electronPath,
-    args: ['.', '--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'],
+    executablePath: executable,
+    args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'),
     cwd: root,
     env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
     timeout: 60_000,
@@ -1809,8 +1815,8 @@ await step('a session clicked in the list opens as a preview, its row left in pl
     'utf8',
   );
   const other = await electron.launch({
-    executablePath: electronPath,
-    args: ['.', '--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'],
+    executablePath: executable,
+    args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'),
     cwd: root,
     env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
     timeout: 60_000,
@@ -1971,8 +1977,8 @@ await step("a conversation of another folder, found by searching all folders, op
     'utf8',
   );
   const other = await electron.launch({
-    executablePath: electronPath,
-    args: ['.', '--user-data-dir', ownData, '--folder', here, '--secondary-display'],
+    executablePath: executable,
+    args: appArgs('--user-data-dir', ownData, '--folder', here, '--secondary-display'),
     cwd: root,
     env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
     timeout: 60_000,
@@ -2011,8 +2017,8 @@ await step('administrator instance: runs next to the normal one, says so, and re
   const adminWorkspace = path.join(runDir, 'admin-workspace');
   mkdirSync(adminWorkspace, { recursive: true });
   const admin = await electron.launch({
-    executablePath: electronPath,
-    args: ['.', '--user-data-dir', dataDir, '--folder', adminWorkspace, '--secondary-display'],
+    executablePath: executable,
+    args: appArgs('--user-data-dir', dataDir, '--folder', adminWorkspace, '--secondary-display'),
     cwd: root,
     env: { ...env, VILAUS_ELEVATED: '1' },
     timeout: 60_000,
@@ -2108,8 +2114,8 @@ await step('after a restart the update runs; Go Back and Restart returns to the 
   if (!backup) throw new Error(`nothing backed up: ${JSON.stringify(before)}`);
   const restart = async () => {
     app = await electron.launch({
-      executablePath: electronPath,
-      args: ['.', '--user-data-dir', dataDir, '--secondary-display'],
+      executablePath: executable,
+      args: appArgs('--user-data-dir', dataDir, '--secondary-display'),
       cwd: root,
       env,
       timeout: 60_000,

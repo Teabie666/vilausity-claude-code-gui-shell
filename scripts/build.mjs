@@ -1,9 +1,9 @@
 // Builds every process bundle into dist/ with esbuild.
 //   node scripts/build.mjs              development build (source maps)
 //   node scripts/build.mjs --watch      rebuild on change
-//   node scripts/build.mjs --production no source maps, minified
+//   node scripts/build.mjs --production no source maps, minified (what the installer ships)
 import * as esbuild from 'esbuild';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -20,7 +20,12 @@ const common = {
   logLevel: 'info',
   sourcemap: production ? false : 'linked',
   minify: production,
+  // Function and class names stay readable in the logs' stack traces, and code that looks at
+  // a name (the extension inspecting the API's classes) sees the real one.
+  keepNames: production,
+  // The licenses go into ThirdPartyNotices.txt instead (writeNotices).
   legalComments: 'none',
+  metafile: true,
   external: ['electron', 'vscode'],
   // Prefer ESM entry points: some dependencies (jsonc-parser) ship UMD as `main`, whose
   // internal dynamic requires cannot be bundled.
@@ -123,10 +128,82 @@ if (!watch) {
 }
 copyStatic();
 
+/** Packages whose files the build copies rather than bundles (copyStatic). */
+const COPIED_PACKAGES = ['monaco-editor', '@fontsource-variable/noto-sans-sc'];
+
+/** LICENSE, LICENSE.md, LICENSE-MPL, COPYING, NOTICE, ThirdPartyNotices.txt... (Apache-2.0 asks for NOTICE too). */
+const LICENSE_FILE = /^(licen[cs]e|copying|notice|thirdpartynotices)([-.]\w+)*$/i;
+
+/** `node_modules/@scope/name/lib/x.js` -> `node_modules/@scope/name` (the innermost package). */
+function packageDirOf(input) {
+  const parts = input.split('/');
+  const at = parts.lastIndexOf('node_modules');
+  if (at < 0) {
+    return undefined;
+  }
+  const length = parts[at + 1]?.startsWith('@') ? 3 : 2;
+  return parts.slice(0, at + length).join('/');
+}
+
+/** package.json's `repository` as a link: `owner/repo` and `github:owner/repo` mean GitHub. */
+function repositoryUrl(repository) {
+  const value = typeof repository === 'string' ? repository : repository?.url;
+  if (!value) {
+    return undefined;
+  }
+  const shorthand = /^(?:github:)?([\w.-]+\/[\w.-]+)$/.exec(value);
+  return shorthand ? `https://github.com/${shorthand[1]}` : value.replace(/^git\+/, '').replace(/\.git$/, '');
+}
+
+/**
+ * ThirdPartyNotices.txt: the license of every package whose code the bundles contain (from the
+ * metafiles, so nothing is missed or listed for nothing) or whose files the build copies.
+ * Bundling drops their license comments; the installer puts this file next to the program.
+ */
+function writeNotices(results) {
+  const dirs = new Set(COPIED_PACKAGES.map((name) => `node_modules/${name}`));
+  for (const result of results) {
+    for (const input of Object.keys(result.metafile.inputs)) {
+      const dir = packageDirOf(input);
+      if (dir) {
+        dirs.add(dir);
+      }
+    }
+  }
+  const packages = [...dirs]
+    .map((dir) => {
+      const manifest = JSON.parse(readFileSync(path.join(root, dir, 'package.json'), 'utf8'));
+      const files = readdirSync(path.join(root, dir))
+        .filter((name) => LICENSE_FILE.test(name))
+        .sort();
+      if (files.length === 0) {
+        throw new Error(`${dir} has no license file; add its license to ThirdPartyNotices by hand`);
+      }
+      const read = (name) => readFileSync(path.join(root, dir, name), 'utf8').replace(/\r\n/g, '\n').trim();
+      return {
+        title: `${manifest.name} ${manifest.version}, license: ${manifest.license ?? 'see below'}`,
+        url: manifest.homepage ?? repositoryUrl(manifest.repository),
+        text: files.length === 1 ? read(files[0]) : files.map((name) => `--- ${name}\n\n${read(name)}`).join('\n\n'),
+      };
+    })
+    .sort((a, b) => a.title.localeCompare(b.title));
+  const rule = '='.repeat(78);
+  const notices = [
+    'Vilausity includes the third-party software listed below, under the licenses that follow.',
+    'Electron and Chromium come with their own notices: LICENSE.electron.txt and LICENSES.chromium.html.',
+    '',
+    ...packages.map((entry) => `- ${entry.title}${entry.url ? `  ${entry.url}` : ''}`),
+    '',
+    ...packages.flatMap((entry) => [rule, entry.title, rule, '', entry.text, '']),
+  ].join('\n');
+  writeFileSync(path.join(dist, 'ThirdPartyNotices.txt'), notices, 'utf8');
+}
+
 if (watch) {
   const contexts = await Promise.all(builds.map((options) => esbuild.context({ ...common, ...options })));
   await Promise.all(contexts.map((context) => context.watch()));
   console.log('watching for changes (static files are copied once; restart to pick up HTML/CSS/theme edits)');
 } else {
-  await Promise.all(builds.map((options) => esbuild.build({ ...common, ...options })));
+  const results = await Promise.all(builds.map((options) => esbuild.build({ ...common, ...options })));
+  writeNotices(results);
 }

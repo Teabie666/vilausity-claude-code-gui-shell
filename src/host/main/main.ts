@@ -10,6 +10,7 @@ import { setUnexpectedErrorHandler } from '../../platform/event';
 import { targetPlatformOf } from '../../platform/extensionUpdates';
 import { Logger, LogLevel, NullLogger, parseLogLevel } from '../../platform/log';
 import { LANGUAGE_SETTING, resolveUiLanguage, setUiLanguage } from '../../platform/nls';
+import { APP_ID } from '../../platform/product';
 import { languagePack } from '../../nls/packs';
 import { FileLogSink } from '../node/fileLogSink';
 import { createAppPaths, pruneOldLogs, type AppPaths } from './appPaths';
@@ -106,6 +107,12 @@ function main(): void {
   registerCcwSchemePrivileges();
   // No application menu: it would bring Electron's default accelerators (Ctrl+W, Ctrl+R...).
   Menu.setApplicationMenu(null);
+  // The installer's Start menu shortcut carries this id: windows started any other way (File
+  // Explorer's menu, a link, a provider's shortcut) group with it and its pinned icon. Not in
+  // development, where they would group with an installed copy.
+  if (app.isPackaged) {
+    app.setAppUserModelId(APP_ID);
+  }
 
   // The administrator instance's own folder, so that it gets a lock of its own too.
   app.setPath('userData', paths.instanceRoot);

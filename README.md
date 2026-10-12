@@ -17,6 +17,7 @@ npm test             # 单元测试（esbuild 打包后用 node:test 跑），�
 npm run nls          # 语言包检查；-- --todo 输出还没翻译的条目
 npm run smoke        # 端到端冒烟测试：真实启动 + 真实 Claude 会话（用 Haiku，消耗少量额度）
 npm run capture-themes   # 从本机 VSCodium 重新抓取内置主题到 resources/themes/
+npm run package      # 正式构建并打包：release\win-unpacked\ 和 NSIS 安装包
 ```
 
 启动参数（M4 会补全）：

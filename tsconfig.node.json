@@ -5,6 +5,7 @@
     "types": ["node", "vscode"]
   },
   "include": [
+    "electron-builder.config.ts",
     "src/platform/**/*.ts",
     "src/nls/**/*.ts",
     "src/compat/**/*.ts",

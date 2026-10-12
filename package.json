@@ -1,10 +1,13 @@
 {
   "name": "vilaus",
   "productName": "Vilausity",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "private": true,
   "description": "A lightweight workbench built around the Claude Code extension.",
+  "author": "Teabie",
   "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/Teabie666/vilausity-claude-code-gui-shell",
+  "repository": "github:Teabie666/vilausity-claude-code-gui-shell",
   "main": "dist/main.js",
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -15,26 +18,28 @@
     "nls": "node scripts/nls.mjs",
     "smoke": "node tests/smoke.mjs",
     "capture-themes": "node tools/theme-capture/run.mjs",
-    "icons": "node scripts/icons.mjs"
+    "icons": "node scripts/icons.mjs",
+    "package": "node scripts/build.mjs --production && electron-builder --config electron-builder.config.ts --win",
+    "package:dir": "node scripts/build.mjs --production && electron-builder --config electron-builder.config.ts --win --dir"
   },
   "devDependencies": {
+    "@fontsource-variable/noto-sans-sc": "^5.3.1",
     "@types/node": "^24.0.0",
     "@types/vscode": "^1.140.0",
-    "electron": "44.7.0",
-    "esbuild": "^0.28.2",
-    "playwright-core": "^1.64.0",
-    "typescript": "^7.0.2"
-  },
-  "dependencies": {
-    "@fontsource-variable/noto-sans-sc": "^5.3.1",
     "dompurify": "^3.4.16",
+    "electron": "44.7.0",
+    "electron-builder": "^26.17.0",
+    "esbuild": "^0.28.2",
     "jsonc-parser": "^3.3.1",
     "marked": "^18.1.0",
     "monaco-editor": "^0.57.0",
+    "playwright-core": "^1.64.0",
     "shiki": "^4.5.0",
+    "typescript": "^7.0.2",
     "vscode-uri": "^3.2.0"
   },
   "allowScripts": {
+    "electron-winstaller@5.4.0": false,
     "esbuild@0.28.2": true
   }
 }
