@@ -13,6 +13,7 @@ import type { ILogger } from '../../platform/log';
 import type { SessionSearchRequest, SessionSearchResult } from '../../platform/protocol';
 import { normalizeForCompare } from '../node/paths';
 import { indexSession, parseTranscript, searchSessions, type IndexedSession } from './sessionTranscripts';
+import type { UsageRequest, UsageResults } from './sessionUsage';
 
 /** A search sooner than this after the last look at the files uses what is indexed. */
 const RESCAN_MS = 3000;
@@ -110,25 +111,29 @@ export function claudeProjectsDir(env: NodeJS.ProcessEnv, home: string): string 
   return env.VILAUS_SESSIONS_DIR || path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), 'projects');
 }
 
-/** Main's side: sends searches to the worker, started on the first one. */
+/**
+ * Main's side of the sessions worker (sessionSearchWorker.ts), started on the first question:
+ * searches, and the usage of API providers (sessionUsage.ts).
+ */
 export class SessionSearch implements IDisposable {
   private worker: Worker | undefined;
   private nextId = 0;
-  private readonly pending = new Map<number, { resolve(results: SessionSearchResult[]): void; reject(error: Error): void }>();
+  private readonly pending = new Map<number, { resolve(result: unknown): void; reject(error: Error): void }>();
 
   constructor(
     private readonly workerScript: string,
     private readonly projectsDir: string,
+    /** The sessions' provider tags (sessionProviders.ts). */
+    private readonly tagsFile: string,
     private readonly logger: ILogger,
   ) {}
 
-  search(request: SessionSearchRequest): Promise<SessionSearchResult[]> {
-    const worker = (this.worker ??= this.start());
-    const id = ++this.nextId;
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      worker.postMessage({ id, request });
-    });
+  async search(request: SessionSearchRequest): Promise<SessionSearchResult[]> {
+    return ((await this.ask('search', request)) as SessionSearchResult[] | undefined) ?? [];
+  }
+
+  async usage<K extends UsageRequest['kind']>(request: Extract<UsageRequest, { kind: K }>): Promise<UsageResults[K]> {
+    return (await this.ask('usage', request)) as UsageResults[K];
   }
 
   dispose(): void {
@@ -136,17 +141,26 @@ export class SessionSearch implements IDisposable {
     this.worker = undefined;
   }
 
+  private ask(kind: 'search' | 'usage', request: unknown): Promise<unknown> {
+    const worker = (this.worker ??= this.start());
+    const id = ++this.nextId;
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      worker.postMessage({ id, kind, request });
+    });
+  }
+
   private start(): Worker {
-    const worker = new Worker(this.workerScript, { workerData: { projectsDir: this.projectsDir } });
+    const worker = new Worker(this.workerScript, { workerData: { projectsDir: this.projectsDir, tagsFile: this.tagsFile } });
     // Quitting need not wait for it.
     worker.unref();
-    worker.on('message', (message: { id: number; results?: SessionSearchResult[]; error?: string }) => {
+    worker.on('message', (message: { id: number; result?: unknown; error?: string }) => {
       const request = this.pending.get(message.id);
       this.pending.delete(message.id);
       if (message.error !== undefined) {
         request?.reject(new Error(message.error));
       } else {
-        request?.resolve(message.results ?? []);
+        request?.resolve(message.result);
       }
     });
     worker.on('error', (error) => this.logger.error('session search worker failed', error));

@@ -155,6 +155,16 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **编辑页**是内容面板的标签页（"管理 API 接口"）：左边列表和"添加 API 接口…"（从预设选），右边表单，显式保存。强调色一栏没选时写着"供应商的颜色（默认）"，选了别的可以"恢复默认"；选的跟供应商的一样就不存。"为此接口创建桌面快捷方式"写一个 `.lnk`：`Vilausity.exe --provider <id>`（开发时是 electron.exe 加 app 目录），图标是这个接口的 logo 颜色（见"标题栏 logo 和窗口图标"）。
 - **测试**：界面测试在 127.0.0.1 起一个假的 Anthropic 接口，切到指向它的接口、重新加载窗口、新对话发一句话，检查假接口收到的 `Authorization: Bearer <key>` 和模型名；不花钱也不联网。
 
+## 用量和费用（M6）
+
+用兼容接口（DeepSeek 等）时，插件显示的费用不对：它的数是 Claude Code CLI 算的，CLI 不认识的模型一律按 Claude Opus 的价格算（对照插件 2.1.296、CLI 2.1.29x）。CLI 有个 `modelPricing` 设置能改价格，但只认托管设置（managed settings），用户设置和 `--settings` 里的都不认，而且只有美元。所以壳自己算：价格由用户填在 API 接口里，token 数从会话记录里读，币种按接口选。
+
+- **价格**：`ProviderConfig.pricing`（`platform/providers.ts`）：币种（CNY / USD）和按模型的单价（每百万 token：输入、输出、缓存读、缓存写，缓存的两项不填按输入价算）。模型名用 `modelKey` 规范化后比较：小写，去掉结尾的 `[1m]` 这类标记（Claude Code 发请求前会去掉它）。
+- **token 数**：会话记录 `projects/<文件夹>/<会话 id>.jsonl` 里每次 API 调用是一行（或几行，一个内容块一行）`type: "assistant"`，带 `message.id`、`message.model`、`message.usage` 的四种 token 数和 `timestamp`；按 `message.id` 去重。子代理的调用在 `<会话 id>/subagents/*.jsonl`。`input_tokens` 不含缓存读，四种按各自的价格相加。CLI 自己做的调用（生成标题等）不进会话记录，不算（实测约占 0.5%）。读取在 `host/main/sessionUsage.ts`，跑在搜索用的那个 worker 线程里（`sessionSearchWorker.ts`），跟搜索索引分开存，只留调用不留正文；会话记录只会变长，变长了就从上次读到的位置接着读。
+- **哪个接口的**：只看模型名分不开（订阅和 Anthropic API 的模型名一样，同一家开两个 key 也一样），所以每个会话打接口标签。插件把 CLI 的输出原样转给对话页（`io_message`），bridge 看到进程启动时的 `system/init`（带 `session_id`）就告诉主进程（`sessions.started`），主进程记下这个窗口当时的接口：CLI 每次起进程时才读环境变量，所以这就是这个进程用的接口。进程第一次有 API 回复（`assistant`）时（`sessions.used`）才写进标签文件 `<数据目录>\session-providers.jsonl`（`host/main/sessionProviders.ts`，普通实例和管理员实例共用，只追加），光打开、没发消息的不算。
+- **归属规则**（`platform/usage.ts` 的 `attributeCall`）：一次调用归它之前最近的那个标签的接口；如果那个接口的模型里没有这个模型、而另一个兼容接口明确写了它，就归那一个（会话后来在 Vilausity 外面换了接口接着聊）。没有标签的调用（有标签之前的历史、命令行和 VS Code 里跑的）按模型名推断：只有一个兼容接口写了这个模型才算它的；Claude 自己的模型名在只配了订阅时算订阅。推断不出的不算任何接口的。
+- **统计范围**：只算当前窗口所用接口的费用，不把各家加在一起；分本对话、本工作区、这台电脑上的全部会话（"Claude Code 历史消费"）。
+
 ## 插件管理（M4）
 
 - **找插件的顺序**（`host/main/extensionLocator.ts`）：`--extension-dir` → Vilausity 自己装的那份 → 本机 VSCodium / VS Code 装的。`LocatedExtension.kind` 记着来源（`cli` / `managed` / `external`）。

@@ -557,6 +557,7 @@ export class ProvidersEditorPane implements EditorPane {
       color:
         draft.color && draft.color !== providerAccentColor({ ...provider, type: draft.type, color: undefined }) ? draft.color : undefined,
       preset: provider.preset,
+      pricing: provider.pricing,
     };
     const saved = await this.call(() => this.context.native.call('providers.save', { provider: config }));
     if (saved) {

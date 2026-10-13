@@ -425,6 +425,12 @@ export interface BridgeOptions {
   readonly pinPreview?: (webviewId: string) => void;
   /** What the window's conversations are doing changed (see `observeToWebview`). */
   readonly onActivity?: (activity: SessionActivity) => void;
+  /** A Claude process started on a session in a conversation (see `observeOutput`). */
+  readonly onSessionStarted?: (sessionId: string) => void;
+  /** That process made its first API call. */
+  readonly onSessionUsed?: (sessionId: string) => void;
+  /** A turn ended in a conversation: what its session cost changed. */
+  readonly onTurnEnded?: (sessionId: string | undefined) => void;
 }
 
 export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
@@ -447,6 +453,8 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   private readonly ownPosts = new WeakSet<object>();
   /** The conversations at work and waiting, as last reported. */
   private activity: SessionActivity = { running: 0, waiting: 0 };
+  /** The session of each conversation's Claude process (by page and channel), and whether it made a call yet. */
+  private readonly processes = new Map<string, { sessionId: string; used: boolean }>();
 
   constructor(
     private readonly os: OsBackend,
@@ -601,6 +609,10 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
       return undefined;
     }
     const inner = isRecord(message) && message.type === 'from-extension' ? message.message : undefined;
+    if (isRecord(inner) && inner.type === 'io_message') {
+      this.observeOutput(webview, inner);
+      return undefined;
+    }
     // The session list's open is answered: panels from now on are not its.
     if (isRecord(inner) && inner.type === 'response' && this.listOpen && inner.requestId === this.listOpen.requestId) {
       this.listOpen = undefined;
@@ -645,6 +657,42 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   }
 
   /**
+   * What Claude Code says goes to the conversation's page as it comes (anthropic.claude-code
+   * 2.1.296: `{type: 'from-extension', message: {type: 'io_message', channelId, message}}`, the
+   * message as the CLI writes it; a resumed session's history comes another way). A process
+   * starts with `{type: 'system', subtype: 'init', session_id}`; each reply of the API is a
+   * `{type: 'assistant', session_id}`; a turn ends with `{type: 'result'}`. A process can go on
+   * with another session (a new one after /clear): its replies then name that one.
+   */
+  private observeOutput(webview: WebviewImpl, message: Record<string, unknown>): void {
+    const output = message.message;
+    if (!isRecord(output)) {
+      return;
+    }
+    const key = `${webview.id}|${typeof message.channelId === 'string' ? message.channelId : ''}`;
+    const sessionId = typeof output.session_id === 'string' && output.session_id ? output.session_id : undefined;
+    let process = this.processes.get(key);
+    if (output.type === 'system' && output.subtype === 'init' && sessionId) {
+      this.processes.set(key, { sessionId, used: false });
+      this.options.onSessionStarted?.(sessionId);
+      return;
+    }
+    if (output.type === 'assistant') {
+      if (sessionId && process?.sessionId !== sessionId) {
+        process = { sessionId, used: false };
+        this.processes.set(key, process);
+        this.options.onSessionStarted?.(sessionId);
+      }
+      if (process && !process.used) {
+        process.used = true;
+        this.options.onSessionUsed?.(process.sessionId);
+      }
+    } else if (output.type === 'result') {
+      this.options.onTurnEnded?.(sessionId ?? process?.sessionId);
+    }
+  }
+
+  /**
    * A preview became a tab of its own, kept here (double click, message) or in the shell (its
    * tab double-clicked): the session list is told again what is open, with its session now.
    */
@@ -664,6 +712,11 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   didDisposeWebview(webview: WebviewImpl): void {
     this.previews.delete(webview.id);
     this.listPages.delete(webview);
+    for (const key of this.processes.keys()) {
+      if (key.startsWith(`${webview.id}|`)) {
+        this.processes.delete(key);
+      }
+    }
   }
 
   /** The entries of `openSessionIds` that are no session in preview. */

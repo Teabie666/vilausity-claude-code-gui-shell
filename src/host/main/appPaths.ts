@@ -23,6 +23,8 @@ export interface AppPaths {
   readonly shellStateFile: string;
   /** The API providers; their keys are stored encrypted. */
   readonly providersFile: string;
+  /** Which provider each Claude Code session ran under (sessionProviders.ts). */
+  readonly sessionProvidersFile: string;
   /** The Claude Code extension as vilaus installs it (from Open VSX or a .vsix). */
   readonly extensionsDir: string;
   /** The app icon drawn in other colors (logoIcons.ts): windows' icons and providers' shortcuts point here. */
@@ -62,6 +64,7 @@ export function createAppPaths(root: string, startedAt = new Date(), elevated = 
     globalStateFile: path.join(instanceRoot, 'state', 'global.json'),
     shellStateFile: path.join(instanceRoot, 'state', 'shell.json'),
     providersFile: path.join(root, 'providers.json'),
+    sessionProvidersFile: path.join(root, 'session-providers.jsonl'),
     extensionsDir: path.join(root, 'extensions'),
     iconsDir: path.join(root, 'icons'),
     chromium: path.join(instanceRoot, 'chromium'),

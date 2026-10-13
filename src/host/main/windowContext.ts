@@ -62,6 +62,8 @@ export interface WindowHost {
   providersState(current: string): ProvidersState;
   /** The provider a folder's window starts with (remembered, else the default). */
   initialProvider(folder: string): string;
+  /** A Claude process that started on a session at `at` under a provider made its first call. */
+  tagSession(sessionId: string, providerId: string, at: number): void;
   /** This window's extension host changed a global state value; the other windows' hosts need it too. */
   globalStateChanged(source: WindowContext, key: string, value: unknown): void;
   /** The user closed the window (its close button, Alt+F4). */
@@ -93,6 +95,8 @@ export class WindowContext extends Disposable {
   private currentWorkspaceKey = '';
   private currentWorkspaceState: StateStore | undefined;
   private currentProvider: string;
+  /** The sessions whose Claude processes started here, under which provider and when. */
+  private readonly startedSessions = new Map<string, { provider: string; at: number }>();
   private extHost: ExtHostProcess | undefined;
   /** The extension host has its init data: it takes requests now. */
   private initialized = false;
@@ -483,6 +487,13 @@ export class WindowContext extends Disposable {
     });
     rpc.handle('settings.set', ({ key, value }) => host.settings.set(key, value));
     rpc.handle('sessions.activity', (activity) => this.setActivity(activity));
+    rpc.handle('sessions.started', ({ sessionId }) => {
+      this.startedSessions.set(sessionId, { provider: this.currentProvider, at: Date.now() });
+    });
+    rpc.handle('sessions.used', ({ sessionId }) => {
+      const started = this.startedSessions.get(sessionId) ?? { provider: this.currentProvider, at: Date.now() };
+      this.host.tagSession(sessionId, started.provider, started.at);
+    });
   }
 
   private createInitData(extension: LocatedExtension): ExtHostInitData {

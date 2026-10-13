@@ -577,6 +577,13 @@ export type MainApiForExtHost = {
   'settings.set': (p: { key: string; value: unknown }) => void;
   /** The window's conversations started or stopped working or waiting (the taskbar button and the title bar's logo show it). */
   'sessions.activity': (p: SessionActivity) => void;
+  /**
+   * A Claude process started on a session in one of the window's conversations: it runs under
+   * the provider the window uses now (Claude Code reads its variables as a process starts).
+   */
+  'sessions.started': (p: { sessionId: string }) => void;
+  /** That process made its first API call: the session is tagged with the provider it started under. */
+  'sessions.used': (p: { sessionId: string }) => void;
 };
 
 /** Served by the extension host, called by main. The `init` call carries the renderer port. */

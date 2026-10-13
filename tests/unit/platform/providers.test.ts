@@ -115,6 +115,7 @@ describe('parseProviderConfig', () => {
       env: { GOOD_NAME: 'v' },
       color: '#abcdef',
       preset: undefined,
+      pricing: undefined,
     });
   });
 

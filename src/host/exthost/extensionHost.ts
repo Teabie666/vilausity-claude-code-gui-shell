@@ -135,6 +135,8 @@ export class ExtensionHost {
         }
       },
       onActivity: (activity) => this.main.notify('sessions.activity', activity),
+      onSessionStarted: (sessionId) => this.main.notify('sessions.started', { sessionId }),
+      onSessionUsed: (sessionId) => this.main.notify('sessions.used', { sessionId }),
     });
     webviews.interceptor = bridge;
     this.bridge = bridge;

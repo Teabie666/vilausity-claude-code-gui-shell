@@ -60,6 +60,7 @@ import { findGit } from './gitLocator';
 import { t } from './messages';
 import { ProviderStore, type SecretCipher } from './providerStore';
 import { deleteSession, waitForSessionEnd } from './sessionFiles';
+import { SessionTagWriter } from './sessionProviders';
 import { claudeProjectsDir, SessionSearch } from './sessionSearch';
 import { KeybindingsStore } from './keybindingsStore';
 import { LogoIcons, systemIconColor } from './logoIcons';
@@ -138,6 +139,7 @@ export class ShellApp extends Disposable implements WindowHost {
   private readonly shellState: StateStore;
   private readonly history: WindowHistory;
   private readonly sessionSearch: SessionSearch;
+  private readonly sessionTags: SessionTagWriter;
   /** Claude Code's transcripts (`~/.claude/projects`), for the search and for deleting sessions. */
   private readonly projectsDir = claudeProjectsDir(process.env, os.homedir());
   /** File Explorer's "Open with Vilausity" entries. */
@@ -177,8 +179,14 @@ export class ShellApp extends Disposable implements WindowHost {
     }
     this.currentZoom = this.history.zoomLevel() ?? 0;
     this.providers = this.register(new ProviderStore(env.paths.providersFile, electronCipher, this.logger.child('providers')));
+    this.sessionTags = new SessionTagWriter(env.paths.sessionProvidersFile);
     this.sessionSearch = this.register(
-      new SessionSearch(path.join(env.appDir, 'sessionSearchWorker.js'), this.projectsDir, this.logger.child('sessionSearch')),
+      new SessionSearch(
+        path.join(env.appDir, 'sessionSearchWorker.js'),
+        this.projectsDir,
+        env.paths.sessionProvidersFile,
+        this.logger.child('sessionSearch'),
+      ),
     );
     this.extensionStore = new ExtensionStore(
       env.paths.extensionsDir,
@@ -445,6 +453,14 @@ export class ShellApp extends Disposable implements WindowHost {
   private logoIconFile(providerId: string): string | undefined {
     const color = systemIconColor(logoColor(this.windowAccent(providerId)), nativeTheme.shouldUseDarkColorsForSystemIntegratedUI);
     return color === LOGO_COLOR ? undefined : this.logoIcons.file(color);
+  }
+
+  tagSession(sessionId: string, providerId: string, at: number): void {
+    const name = this.providers.get(providerId)?.name ?? '';
+    this.sessionTags.add(sessionId, { provider: providerId, name, at }).then(
+      () => this.logger.info(`session ${sessionId} runs under provider ${providerId}`),
+      (error: unknown) => this.logger.error(`cannot tag session ${sessionId}`, error),
+    );
   }
 
   /** The folder's provider from last time, else the default setting's, else the subscription. */

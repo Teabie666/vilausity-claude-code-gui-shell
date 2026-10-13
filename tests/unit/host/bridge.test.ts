@@ -588,3 +588,85 @@ describe('ClaudeWebviewBridge, previews and the session list', () => {
     assert.equal(makePreviewBridge().pageHints(fakeWebview('list', 'claudeVSCodeSessionsList'))?.conversationEscapes, undefined);
   });
 });
+
+describe('ClaudeWebviewBridge and what Claude Code says', () => {
+  function makeOutputBridge() {
+    const events: string[] = [];
+    const bridge = new ClaudeWebviewBridge(makeOs().os, NullLogger, {
+      diffEditorAvailable: () => true,
+      comments: new CommentStore(),
+      workspaceFolders: [],
+      onSessionStarted: (sessionId) => events.push(`started ${sessionId}`),
+      onSessionUsed: (sessionId) => events.push(`used ${sessionId}`),
+      onTurnEnded: (sessionId) => events.push(`ended ${sessionId ?? '-'}`),
+    });
+    return { bridge, events };
+  }
+  const output = (channelId: string, message: Record<string, unknown>): unknown => ({
+    type: 'from-extension',
+    message: { type: 'io_message', channelId, message, done: false },
+  });
+  const init = (channelId: string, sessionId: string): unknown =>
+    output(channelId, { type: 'system', subtype: 'init', session_id: sessionId });
+  const reply = (channelId: string, sessionId?: string): unknown =>
+    output(channelId, { type: 'assistant', session_id: sessionId, message: { id: 'm', usage: { input_tokens: 1 } } });
+  const result = (channelId: string): unknown => output(channelId, { type: 'result', subtype: 'success' });
+
+  test('reports a process that starts on a session, its first reply once, and the end of each turn', () => {
+    const { bridge, events } = makeOutputBridge();
+    const panel = fakeWebview('panel', 'claudeVSCodePanel');
+    assert.equal(bridge.observeToWebview(panel, init('c1', 'S1')), undefined);
+    bridge.observeToWebview(panel, reply('c1', 'S1'));
+    bridge.observeToWebview(panel, reply('c1', 'S1'));
+    bridge.observeToWebview(panel, result('c1'));
+    bridge.observeToWebview(panel, reply('c1', 'S1'));
+    bridge.observeToWebview(panel, result('c1'));
+    assert.deepEqual(events, ['started S1', 'used S1', 'ended S1', 'ended S1']);
+  });
+
+  test('a process that only started (a session opened, nothing sent) is never reported used', () => {
+    const { bridge, events } = makeOutputBridge();
+    bridge.observeToWebview(fakeWebview('panel', 'claudeVSCodePanel'), init('c1', 'S1'));
+    assert.deepEqual(events, ['started S1']);
+  });
+
+  test('a new process on the same channel is reported used again', () => {
+    const { bridge, events } = makeOutputBridge();
+    const panel = fakeWebview('panel', 'claudeVSCodePanel');
+    bridge.observeToWebview(panel, init('c1', 'S1'));
+    bridge.observeToWebview(panel, reply('c1', 'S1'));
+    bridge.observeToWebview(panel, init('c1', 'S1'));
+    bridge.observeToWebview(panel, reply('c1', 'S1'));
+    assert.deepEqual(events, ['started S1', 'used S1', 'started S1', 'used S1']);
+  });
+
+  test('replies that name another session (after /clear) start that session', () => {
+    const { bridge, events } = makeOutputBridge();
+    const panel = fakeWebview('panel', 'claudeVSCodePanel');
+    bridge.observeToWebview(panel, init('c1', 'S1'));
+    bridge.observeToWebview(panel, reply('c1', 'S1'));
+    bridge.observeToWebview(panel, reply('c1', 'S2'));
+    bridge.observeToWebview(panel, reply('c1', 'S2'));
+    assert.deepEqual(events, ['started S1', 'used S1', 'started S2', 'used S2']);
+  });
+
+  test('keeps the processes of pages and channels apart, and forgets a page that is gone', () => {
+    const { bridge, events } = makeOutputBridge();
+    const one = fakeWebview('one', 'claudeVSCodePanel');
+    const two = fakeWebview('two', 'claudeVSCodePanel');
+    bridge.observeToWebview(one, init('c', 'S1'));
+    bridge.observeToWebview(two, init('c', 'S2'));
+    bridge.observeToWebview(two, reply('c'));
+    bridge.observeToWebview(one, reply('c'));
+    bridge.didDisposeWebview(one);
+    // Its process is forgotten: a reply without a session id names nothing.
+    bridge.observeToWebview(one, reply('c'));
+    assert.deepEqual(events, ['started S1', 'started S2', 'used S2', 'used S1']);
+  });
+
+  test('a reply on a channel whose start it missed starts its session there', () => {
+    const { bridge, events } = makeOutputBridge();
+    bridge.observeToWebview(fakeWebview('panel', 'claudeVSCodePanel'), reply('c1', 'S1'));
+    assert.deepEqual(events, ['started S1', 'used S1']);
+  });
+});

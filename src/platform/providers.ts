@@ -27,6 +27,25 @@ export interface ProviderModels {
   readonly subagent?: string;
 }
 
+export type Currency = 'CNY' | 'USD';
+
+/** What a model costs, in the provider's currency per million tokens. */
+export interface ModelPrice {
+  readonly input: number;
+  readonly output: number;
+  /** Tokens read from the prompt cache; the input price when not given. */
+  readonly cacheRead?: number;
+  /** Tokens written to the prompt cache; the input price when not given. */
+  readonly cacheWrite?: number;
+}
+
+/** The prices the user gave a provider's models, for working out what its conversations cost. */
+export interface ProviderPricing {
+  readonly currency: Currency;
+  /** By model, named as `modelKey` writes it. */
+  readonly models: Readonly<Record<string, ModelPrice>>;
+}
+
 export interface ProviderConfig {
   /** Stable id, as `--provider <id>` names it: lowercase letters, digits and dashes. */
   readonly id: string;
@@ -50,6 +69,7 @@ export interface ProviderConfig {
   readonly color?: string;
   /** The preset it started from: its documentation link. */
   readonly preset?: string;
+  readonly pricing?: ProviderPricing;
 }
 
 /** A provider as the renderer sees it: never the key, only whether there is one. */
@@ -275,7 +295,39 @@ export function parseProviderConfig(value: unknown): ProviderConfig | undefined 
     env: stringMap(value.env, (name) => ENV_NAME.test(name)),
     color: typeof value.color === 'string' && COLOR.test(value.color) ? value.color.toLowerCase() : undefined,
     preset: text(value.preset),
+    pricing: parsePricing(value.pricing),
   };
+}
+
+/**
+ * A model's name as prices and usage compare it: `deepseek-flash[1m]` (the 1M-context marker
+ * Claude Code strips before it sends the name) and `DeepSeek-Flash` are `deepseek-flash`.
+ */
+export function modelKey(model: string): string {
+  return model
+    .trim()
+    .replace(/\[[^\]]*\]$/, '')
+    .trim()
+    .toLowerCase();
+}
+
+function parsePricing(value: unknown): ProviderPricing | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const price = (field: unknown): number | undefined =>
+    typeof field === 'number' && Number.isFinite(field) && field >= 0 ? field : undefined;
+  const models: Record<string, ModelPrice> = {};
+  for (const [name, entry] of Object.entries(isRecord(value.models) ? value.models : {})) {
+    const key = modelKey(name);
+    const input = isRecord(entry) ? price(entry.input) : undefined;
+    const output = isRecord(entry) ? price(entry.output) : undefined;
+    if (!key || !isRecord(entry) || input === undefined || output === undefined) {
+      continue;
+    }
+    models[key] = { input, output, cacheRead: price(entry.cacheRead), cacheWrite: price(entry.cacheWrite) };
+  }
+  return { currency: value.currency === 'CNY' ? 'CNY' : 'USD', models };
 }
 
 function stringMap(value: unknown, validName: (name: string) => boolean): Record<string, string> | undefined {
