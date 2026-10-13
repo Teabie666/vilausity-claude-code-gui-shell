@@ -89,6 +89,9 @@ export const t = defineMessages('providers', {
   remove: 'Remove Provider',
   removeConfirm: 'Remove the provider {0} and its key?',
   setupGuide: 'Setup guide',
+  currentProviderOnlySetting:
+    "Show only the conversations of the window's API in the session list (and those whose API cannot be told). The square next to the list's filters switches it.",
+  reopenFailed: 'The conversation could not be opened again: its Claude process did not end. Open it from the session list.',
 
   presetGlm: 'Zhipu GLM',
   presetQwenCoding: 'Qwen (Model Studio Coding Plan)',

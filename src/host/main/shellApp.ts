@@ -32,6 +32,8 @@ import {
   type MainEventsForRenderer,
   type ProvidersState,
   type StartupNotices,
+  type ProviderNoticeDto,
+  type SessionProvidersDto,
   type ThemeData,
   type UsageViewDto,
 } from '../../platform/protocol';
@@ -44,8 +46,9 @@ import {
   providerSettingsOverlay,
   SUBSCRIPTION_ID,
   SUBSCRIPTION_PROVIDER,
+  type ProviderConfig,
 } from '../../platform/providers';
-import { attributedProvider, type AttributedProvider } from '../../platform/usage';
+import { attributedProvider, CURRENT_PROVIDER_ONLY_SETTING, type AttributedProvider } from '../../platform/usage';
 import { APP_ORIGIN } from '../../platform/webviewUrls';
 import { extensionTranslations } from '../../nls/extensionPacks';
 import { languagePack } from '../../nls/packs';
@@ -91,6 +94,8 @@ const GIT_NOTICE_KEY = 'gitNoticeShown';
 const LEGACY_WINDOW_STATE_KEY = 'vilaus.window';
 /** How long a session about to be deleted may take to stop running (its tab was just closed). */
 const SESSION_END_TIMEOUT_MS = 10_000;
+/** The session lists' mark of a provider with no accent of its own: the theme's muted text. */
+const NO_ACCENT = 'var(--vscode-descriptionForeground)';
 
 /** Provider keys at rest: Electron's safeStorage (DPAPI on Windows, for this Windows user). */
 const electronCipher: SecretCipher = {
@@ -493,6 +498,49 @@ export class ShellApp extends Disposable implements WindowHost {
     return this.providers.list().map(attributedProvider);
   }
 
+  private providerName(provider: ProviderConfig): string {
+    return provider.type === 'subscription' ? t('subscription') : provider.name || provider.id;
+  }
+
+  async sessionProviders(window: WindowContext): Promise<SessionProvidersDto> {
+    const sessions = await this.sessionSearch.usage({ kind: 'sessionProviders', providers: this.attributedProviders() });
+    const providers = Object.fromEntries(
+      this.providers
+        .list()
+        .map((provider) => [provider.id, { name: this.providerName(provider), color: providerAccentColor(provider) ?? NO_ACCENT }]),
+    );
+    const current = this.providers.get(window.provider) ?? SUBSCRIPTION_PROVIDER;
+    return {
+      sessions,
+      providers,
+      current: current.id,
+      onlyCurrent: this.settings.all[CURRENT_PROVIDER_ONLY_SETTING] === true,
+      filterTitle: t('providerFilter', this.providerName(current)),
+    };
+  }
+
+  /**
+   * A session the window opens ran under another provider last: going on with this one can
+   * fail (one API's replies are not always what another takes back), so the conversation says so.
+   */
+  async providerNotice(window: WindowContext, sessionId: string): Promise<ProviderNoticeDto | null> {
+    const last = await this.sessionSearch.usage({ kind: 'lastProvider', providers: this.attributedProviders(), sessionId });
+    if (last === undefined || last === window.provider) {
+      return null;
+    }
+    const provider = this.providers.get(last);
+    const name = provider ? this.providerName(provider) : last;
+    const current = this.providerName(this.providers.get(window.provider) ?? SUBSCRIPTION_PROVIDER);
+    this.logger.info(`session ${sessionId} last ran under ${last}, opened under ${window.provider}`);
+    return {
+      sessionId,
+      text: t('providerNotice', name, current),
+      switchTo: provider ? last : undefined,
+      switchLabel: provider ? t('providerNoticeSwitch', name) : undefined,
+      ignoreLabel: t('providerNoticeIgnore'),
+    };
+  }
+
   /** The folder's provider from last time, else the default setting's, else the subscription. */
   initialProvider(folder: string): string {
     const remembered = this.history.folderProvider(folder);
@@ -848,6 +896,15 @@ export class ShellApp extends Disposable implements WindowHost {
       'providers.remove': ({ id }) => this.providers.remove(id),
       'providers.setKey': ({ id, key }) => this.providers.setKey(id, key),
       'providers.createShortcut': ({ id }) => this.createShortcut(id),
+      'sessions.reopen': async ({ sessionId }, window) => {
+        // Its tab was just closed: a second Claude process on it would have to ask first.
+        if (!(await waitForSessionEnd(path.dirname(this.projectsDir), sessionId, SESSION_END_TIMEOUT_MS))) {
+          this.logger.warn(`session ${sessionId} still runs: not opened again`);
+          return false;
+        }
+        window.openConversation({ sessionId });
+        return true;
+      },
       'usage.models': ({ providerId }) =>
         this.sessionSearch.usage({ kind: 'models', providers: this.attributedProviders(), provider: providerId }),
       'extension.status': () => this.requireUpdater().status(),

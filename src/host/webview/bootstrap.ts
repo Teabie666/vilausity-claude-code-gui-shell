@@ -7,6 +7,8 @@
 
 import type {
   KeyEventDto,
+  ProviderNoticeDto,
+  SessionProvidersDto,
   ShellToWebviewControl,
   ThemeData,
   UsageViewDto,
@@ -16,6 +18,8 @@ import type {
 import { CommentsHost } from './comments';
 import { DEFAULT_WEBVIEW_STYLES } from './defaultStyles';
 import { InPageFinder } from './find';
+import { ProviderNotice } from './providerNotice';
+import { filterButtonOnly, SessionProviderMarks } from './sessionProviders';
 import { watchSessionRows } from './sessionRows';
 import { StatusFilter } from './statusFilter';
 import { PageTranslator } from './translate';
@@ -97,7 +101,8 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
   const translator = untranslated !== undefined ? new PageTranslator(untranslated) : undefined;
   translator?.set(data.translations);
   // The session list's filters as one drop-down; the count may come before the body.
-  const statusFilterHints = data.hints?.statusFilter;
+  const filterHints = data.hints?.statusFilter;
+  const statusFilterHints = filterHints && { ...filterHints, menuButton: filterButtonOnly(filterHints.menuButton) };
   let statusFilter: StatusFilter | undefined;
   let pendingNeedsInput: number | undefined;
   if (statusFilterHints && labels) {
@@ -130,6 +135,29 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
     onDomReady(() => {
       usageBlock = new UsageBlock(usageBlockHints, () => post({ kind: 'editPrices' }));
       usageBlock.set(pendingUsage);
+    });
+  }
+
+  // A session list marks each session with its API provider and can keep only the window's.
+  let marks: SessionProviderMarks | undefined;
+  let pendingMarks: SessionProvidersDto | null = null;
+  if (sessionRows && statusFilterHints) {
+    onDomReady(() => {
+      marks = new SessionProviderMarks(sessionRows, statusFilterHints.menuButton, () => post({ kind: 'toggleProviderFilter' }));
+      marks.set(pendingMarks);
+    });
+  }
+  // A conversation says when it last ran under another provider than the window's.
+  let notice: ProviderNotice | undefined;
+  let pendingNotice: ProviderNoticeDto | null = null;
+  if (anchor) {
+    onDomReady(() => {
+      notice = new ProviderNotice(anchor, ({ switchTo, sessionId }) => {
+        if (switchTo) {
+          post({ kind: 'switchProvider', providerId: switchTo, sessionId });
+        }
+      });
+      notice.set(pendingNotice);
     });
   }
 
@@ -184,6 +212,20 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
             usageBlock.set(control.view);
           } else {
             pendingUsage = control.view;
+          }
+          break;
+        case 'sessionProviders':
+          if (marks) {
+            marks.set(control.view);
+          } else {
+            pendingMarks = control.view;
+          }
+          break;
+        case 'providerNotice':
+          if (notice) {
+            notice.set(control.notice);
+          } else {
+            pendingNotice = control.notice;
           }
           break;
       }

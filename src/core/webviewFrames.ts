@@ -155,6 +155,12 @@ export class WebviewFrames {
   private readonly deleteSessionEmitter = new Emitter<{ sessionId: string; title: string }>();
   /** The delete button of a session list's row was clicked (pages with `hints.sessionRows`). */
   readonly onDidRequestSessionDelete = this.deleteSessionEmitter.event;
+  private readonly providerFilterEmitter = new Emitter<void>();
+  /** The session list's "this API only" toggle was clicked (pages with `hints.sessionRows`). */
+  readonly onDidToggleProviderFilter: Event<void> = this.providerFilterEmitter.event;
+  private readonly switchProviderEmitter = new Emitter<{ providerId: string; sessionId: string }>();
+  /** A conversation's provider notice asks to switch the window to the provider it ran under and reopen it. */
+  readonly onDidRequestProviderSwitch: Event<{ providerId: string; sessionId: string }> = this.switchProviderEmitter.event;
   private readonly editPricesEmitter = new Emitter<void>();
   /** The usage block's link to the provider's prices was clicked (pages with `hints.usageBlock`). */
   readonly onDidRequestEditPrices: Event<void> = this.editPricesEmitter.event;
@@ -346,6 +352,14 @@ export class WebviewFrames {
         break;
       case 'editPrices':
         this.editPricesEmitter.fire();
+        break;
+      case 'toggleProviderFilter':
+        this.providerFilterEmitter.fire();
+        break;
+      case 'switchProvider':
+        if (typeof data.providerId === 'string' && typeof data.sessionId === 'string') {
+          this.switchProviderEmitter.fire({ providerId: data.providerId, sessionId: data.sessionId });
+        }
         break;
       default:
         this.logger.warn(`unknown message kind from webview ${webviewId}`);

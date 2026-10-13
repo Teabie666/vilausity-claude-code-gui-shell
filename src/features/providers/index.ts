@@ -8,10 +8,11 @@
  */
 
 import type { ShellModule } from '../../core/module';
-import { ICommands, IDialogs, IEditors, ILayout, INative, ISettings, IWebviewFrames } from '../../core/serviceIds';
+import { ICommands, IDialogs, IEditors, IExtensionHost, ILayout, INative, ISettings, IWebviewFrames } from '../../core/serviceIds';
 import { DisposableStore } from '../../platform/lifecycle';
 import { DEFAULT_PROVIDER_SETTING, SUBSCRIPTION_ID, type ProviderSummary } from '../../platform/providers';
 import type { QuickPickItemDto } from '../../platform/protocol';
+import { CURRENT_PROVIDER_ONLY_SETTING } from '../../platform/usage';
 import { IContentPane } from '../contentPane';
 import { IConversations } from '../conversations';
 import { t } from './messages';
@@ -61,7 +62,28 @@ export const providersModule: ShellModule = {
       return pane;
     };
     // The session list's usage block links to the prices of the window's provider.
-    subscriptions.add(services.get(IWebviewFrames).onDidRequestEditPrices(() => openEditor(model.state.current)?.revealPrices()));
+    const frames = services.get(IWebviewFrames);
+    subscriptions.add(frames.onDidRequestEditPrices(() => openEditor(model.state.current)?.revealPrices()));
+    // Its toggle keeps only the sessions of the window's provider.
+    subscriptions.add(
+      frames.onDidToggleProviderFilter(() => {
+        void settings.update(CURRENT_PROVIDER_ONLY_SETTING, settings.get(CURRENT_PROVIDER_ONLY_SETTING, false) ? undefined : true);
+      }),
+    );
+    // A conversation that ran under another provider: the window switches to it and the
+    // conversation opens again, with a Claude process of that provider (the old one ends first).
+    subscriptions.add(
+      frames.onDidRequestProviderSwitch(({ providerId, sessionId }) => {
+        const reopen = async (): Promise<void> => {
+          await services.get(IExtensionHost).rpc?.call('sessions.close', { sessionId });
+          await native.call('providers.select', { id: providerId });
+          if (!(await native.call('sessions.reopen', { sessionId }))) {
+            await dialogs.showMessage({ severity: 'error', modal: false, message: t('reopenFailed'), items: [] });
+          }
+        };
+        reopen().catch((error: unknown) => logger.error(`switching session ${sessionId} to ${providerId} failed`, error));
+      }),
+    );
 
     const add = async (): Promise<ProviderSummary | undefined> => {
       const chosen = await dialogs.showQuickPick({
@@ -228,5 +250,15 @@ export const providersModule: ShellModule = {
     };
     registerSetting();
     subscriptions.add(model.onDidChange(registerSetting));
+    subscriptions.add(
+      settings.register([
+        {
+          key: CURRENT_PROVIDER_ONLY_SETTING,
+          section: settingsSection,
+          order: 2,
+          schema: { type: 'boolean', default: false, description: t('currentProviderOnlySetting') },
+        },
+      ]),
+    );
   },
 };

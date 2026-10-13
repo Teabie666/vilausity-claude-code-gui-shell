@@ -26,6 +26,14 @@ export const t = defineMessages('main', {
   usageNone: 'Nothing yet',
   /** {0}: model names. */
   usageUnpriced: 'No price for {0}',
+  /** The built-in API provider (a Claude plan), as the shell names it. */
+  subscription: 'Claude subscription',
+  /** Above a conversation's input ({0}: the provider it last ran under, {1}: the window's). */
+  providerNotice: 'This conversation last ran on {0}, and this window uses {1}. Going on with another API can fail.',
+  providerNoticeSwitch: 'Switch to {0} and Reopen',
+  providerNoticeIgnore: 'Ignore',
+  /** The session list's toggle ({0}: the window's provider). */
+  providerFilter: 'Only the conversations of {0}',
   /** File Explorer's context menu, on a folder, a folder's background or a drive. */
   explorerOpen: 'Open with Vilausity',
   explorerOpenAsAdministrator: 'Open with Vilausity (Administrator)',

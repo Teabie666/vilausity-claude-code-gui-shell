@@ -50,6 +50,9 @@ export type ModelTokens = Record<string, TokenCounts & { readonly calls: number 
 
 export const NO_TOKENS: TokenCounts = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
+/** The setting that keeps only the window's provider's sessions in the session list. */
+export const CURRENT_PROVIDER_ONLY_SETTING = 'vilaus.sessions.currentProviderOnly';
+
 /**
  * Claude's own model ids, as Claude's APIs answer with them (`claude-opus-5-5`, Bedrock's
  * `us.anthropic.claude-...`); not a gateway's names for them (OpenRouter's `anthropic/claude-...`).

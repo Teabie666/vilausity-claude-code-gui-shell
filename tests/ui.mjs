@@ -71,17 +71,36 @@ const registryTestKey = `HKCU\\Software\\Vilausity-test\\ui-${Date.now()}`;
 env.VILAUS_REGISTRY_ROOT = `${registryTestKey}\\Classes`;
 
 const results = [];
+/**
+ * A step still going by then hangs: a page whose script never yields does not answer Playwright,
+ * and waitFor cannot time out a call that never returns. The run stops there.
+ */
+const STEP_TIMEOUT_MS = 5 * 60_000;
+const HUNG = Symbol('hung');
 async function step(name, fn) {
   if (process.env.UI_ONLY && !new RegExp(process.env.UI_ONLY).test(name)) return;
   const started = Date.now();
+  let timer;
   try {
-    const detail = await fn();
+    const detail = await Promise.race([fn(), new Promise((resolve) => (timer = setTimeout(resolve, STEP_TIMEOUT_MS, HUNG)))]);
+    if (detail === HUNG) stopHungRun(name);
     results.push(true);
     console.log(`PASS  ${name} (${Date.now() - started} ms)${detail ? ` - ${detail}` : ''}`);
   } catch (error) {
     results.push(false);
     console.log(`FAIL  ${name}: ${error?.message ?? error}`);
+  } finally {
+    clearTimeout(timer);
   }
+}
+function stopHungRun(name) {
+  console.log(`FAIL  ${name}: still going after ${STEP_TIMEOUT_MS / 60_000} min, the run stops (a page or a process no longer answers)`);
+  console.log(`${results.filter((ok) => ok).length}/${results.length + 1} passed. Artifacts: ${runDir}`);
+  // Every process of the run has a folder of runDir on its command line; Playwright would wait on them.
+  if (!runDir.includes('.test-data')) throw new Error(`not a run's folder: "${runDir}"`);
+  const script = `Get-CimInstance Win32_Process -Filter "Name='electron.exe' or Name='claude.exe' or Name='node.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains('${runDir}') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
+  execFileSync('powershell.exe', ['-NoProfile', '-Command', script], { stdio: 'ignore', windowsHide: true });
+  process.exit(1);
 }
 
 const launch = () =>
@@ -1546,7 +1565,21 @@ await step(
         'a request for the main model at the mock API',
       );
       if (request.headers.authorization !== 'Bearer test-key-123') throw new Error(`authorization: ${request.headers.authorization}`);
-      if (request.headers['x-api-key']) throw new Error('an x-api-key went out too');
+      // Told at the end, once the conversation is closed: the later steps expect it closed.
+      const apiKeyToo = request.headers['x-api-key'] !== undefined;
+      // Its session is marked with the mock's color in the list; the toggle by the filters keeps
+      // only the window's provider's sessions.
+      const mark = list.locator('button[id^="sessions-list-row-"] .vilaus-provider-mark[title="Mock API"]');
+      await waitFor(async () => (await mark.count()) > 0, 15_000, 'the session marked with its provider');
+      const toggle = list.locator('.vilaus-provider-filter');
+      if ((await toggle.getAttribute('aria-pressed')) !== 'false') throw new Error('the provider filter starts on');
+      await toggle.click();
+      await waitFor(() => readSettings()['vilaus.sessions.currentProviderOnly'] === true, 5000, 'the filter setting');
+      await waitFor(async () => (await toggle.getAttribute('aria-pressed')) === 'true', 5000, 'the toggle pressed');
+      if ((await mark.count()) === 0) throw new Error("the window's provider's session went with the filter");
+      await page.screenshot({ path: path.join(runDir, 'usage.png') });
+      await toggle.click();
+      await waitFor(() => readSettings()['vilaus.sessions.currentProviderOnly'] === undefined, 5000, 'the filter setting removed');
       // While Claude worked, the logo said so (the extension's state, through the bridge and main).
       await waitFor(() => page.evaluate(() => window.logoStates.includes('running')), 10_000, 'the logo to show Claude at work');
       await press('Control+W');
@@ -1560,6 +1593,8 @@ await step(
       if ((await list.locator('.sectionLabel_djirOA', { hasText: 'Account & usage' }).count()) > 0) {
         throw new Error("the extension's own usage shows");
       }
+      // The CLI adds a key of its own login (an Anthropic API key) when it has one: see ROADMAP.
+      if (apiKeyToo) throw new Error('an x-api-key went out too (is Claude Code signed in with an API key?)');
       return `${mock.requests.length} requests at the mock; ${request.method} ${request.url}; logo ${await page.evaluate(() => window.logoStates.join(' > '))}; usage ${JSON.stringify(shown)}`;
     } finally {
       mock.server.close();
@@ -1591,6 +1626,68 @@ await step('back on the subscription, the session list has no usage block of the
   await page.waitForTimeout(1500);
   const blocks = await list.locator('[data-vilaus-usage]').count();
   if (blocks > 0) throw new Error(`${blocks} usage block element(s) on the subscription`);
+});
+
+await step('a conversation that ran on another API says so when it opens, and switches the window to it', async () => {
+  const tags = readFileSync(path.join(dataDir, 'session-providers.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  const sessionId = tags.find((tag) => tag.p === 'mock')?.s;
+  if (!sessionId) throw new Error(`no session tagged with the mock: ${JSON.stringify(tags)}`);
+  const row = `[id="sessions-list-row-${sessionId}"]`;
+  const list = await waitFor(
+    async () => {
+      for (const frame of webviewFrames()) {
+        if (
+          (await frame
+            .locator(row)
+            .count()
+            .catch(() => 0)) > 0
+        )
+          return frame;
+      }
+      return undefined;
+    },
+    30_000,
+    'the mock’s session in the list',
+  );
+  const before = await tabCount();
+  await list.locator(row).click();
+  const found = await waitFor(
+    async () => {
+      for (const frame of webviewFrames()) {
+        const notice = frame.locator('.vilaus-provider-notice');
+        if ((await notice.count().catch(() => 0)) > 0) return notice;
+      }
+      return undefined;
+    },
+    30_000,
+    'the provider notice',
+  );
+  const text = await found.locator('.vilaus-provider-notice-text').textContent();
+  if (!text.includes('Mock API') || !text.includes('Claude subscription')) throw new Error(`notice: ${text}`);
+  await page.screenshot({ path: path.join(runDir, 'provider-notice.png') });
+  await found.locator('.vilaus-provider-notice-switch').click();
+  await waitFor(async () => (await page.locator('.titlebar-provider-label').innerText()) === 'Mock API', 20_000, 'the window on the mock');
+  // The preview closed, the conversation opens again (its old Claude process ended first), under the mock now.
+  await waitFor(async () => (await tabCount()) === before + 1, 30_000, 'the conversation open again');
+  await page.waitForTimeout(1500);
+  for (const frame of webviewFrames()) {
+    if (
+      (await frame
+        .locator('.vilaus-provider-notice')
+        .count()
+        .catch(() => 0)) > 0
+    )
+      throw new Error('a notice under the right provider');
+  }
+  // As the run had it: the conversation closed, back on the subscription with fresh processes.
+  await press('Control+W');
+  await waitFor(async () => (await tabCount()) === before, 10_000, 'the reopened conversation to close');
+  await page.evaluate(() => window.vilausNative.invoke('providers.select', { id: 'subscription' }));
+  await reloadWindow();
+  return text;
 });
 
 await step('the providers editor adds a provider from a preset, saves edits and a key, and removes it', async () => {
@@ -1639,7 +1736,8 @@ await step('the providers editor adds a provider from a preset, saves edits and 
   return 'added, renamed, key stored encrypted, removed';
 });
 
-await page.screenshot({ path: path.join(runDir, 'final.png') });
+// Only a record of the run: a window that draws no frame (a display asleep) must not end it.
+await page.screenshot({ path: path.join(runDir, 'final.png'), timeout: 10_000 }).catch(() => {});
 
 await step('open conversations are restored after a restart', async () => {
   await press('Control+N');

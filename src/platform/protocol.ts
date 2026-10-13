@@ -101,6 +101,8 @@ export interface ExtHostInitData {
   readonly settingsOverlay?: Readonly<Record<string, unknown>>;
   /** The shell works out what the window's conversations cost, not the extension (`usage.changed`). */
   readonly shellPricing?: boolean;
+  /** The window's API provider (its id): new Claude processes take its variables. */
+  readonly provider?: string;
 }
 
 /** A conversation to open: a session to continue, and / or a prompt for it. */
@@ -223,6 +225,33 @@ export interface UsageViewDto {
   readonly rows: readonly { readonly label: string; readonly value: string; readonly detail: string }[];
   /** The models used that have no price, as a line to show; none when every one has. */
   readonly unpriced?: string;
+}
+
+/** The API provider of each session, for a session list's marks and its "this API only" toggle. */
+export interface SessionProvidersDto {
+  /** Session id -> provider id; sessions whose provider cannot be told are left out. */
+  readonly sessions: Readonly<Record<string, string>>;
+  /** The providers there are, with their names and accents. */
+  readonly providers: Readonly<Record<string, { readonly name: string; readonly color: string }>>;
+  /** The window's provider. */
+  readonly current: string;
+  /** Only the sessions of the window's provider show (and those whose provider cannot be told). */
+  readonly onlyCurrent: boolean;
+  /** The toggle's tooltip, in the display language. */
+  readonly filterTitle: string;
+}
+
+/**
+ * The bar above a conversation's message input when the conversation last ran under another
+ * API provider than the window uses now, in the display language.
+ */
+export interface ProviderNoticeDto {
+  readonly sessionId: string;
+  readonly text: string;
+  /** The provider the conversation ran under, to switch to; none when it was removed. */
+  readonly switchTo?: string;
+  readonly switchLabel?: string;
+  readonly ignoreLabel: string;
 }
 
 /**
@@ -617,12 +646,14 @@ export type MainApiForExtHost = {
   /** The window's conversations started or stopped working or waiting (the taskbar button and the title bar's logo show it). */
   'sessions.activity': (p: SessionActivity) => void;
   /**
-   * A Claude process started on a session in one of the window's conversations: it runs under
-   * the provider the window uses now (Claude Code reads its variables as a process starts).
+   * A Claude process made its first API call on a session: the session ran under `provider`
+   * from `at` (when the process started; Claude Code reads its variables then).
    */
-  'sessions.started': (p: { sessionId: string }) => void;
-  /** That process made its first API call: the session is tagged with the provider it started under. */
-  'sessions.used': (p: { sessionId: string }) => void;
+  'sessions.used': (p: { sessionId: string; provider: string; at: number }) => void;
+  /** A conversation opens a session that has a history: whether to warn that it ran under another provider. */
+  'sessions.opened': (p: { sessionId: string }) => ProviderNoticeDto | null;
+  /** The provider of every session, for the session lists. */
+  'usage.sessionProviders': (p: void) => SessionProvidersDto;
   /**
    * What the window's provider cost (`sessionId` the conversation in front), for the session
    * list's usage block; null when the shell does not work that out for this provider.
@@ -653,7 +684,7 @@ export type ExtHostApiForMain = {
    * The window's provider, or its prices, changed: whether the shell works out what the
    * conversations cost (a compatible API) and the session list shows its usage block.
    */
-  'usage.changed': (p: { shellPricing: boolean }) => void;
+  'usage.changed': (p: { shellPricing: boolean; provider: string }) => void;
   shutdown: (p: void) => void;
 };
 
@@ -865,6 +896,11 @@ export type MainApiForRenderer = {
   'providers.createShortcut': (p: { id: string }) => string;
   /** The models Claude Code's sessions used under a provider (`modelKey`), for its prices. */
   'usage.models': (p: { providerId: string }) => string[];
+  /**
+   * Opens a session again in the calling window, once the Claude process that ran it has ended
+   * (its tab was just closed); false when it does not end in time.
+   */
+  'sessions.reopen': (p: { sessionId: string }) => boolean;
 
   // ---- The Claude Code extension (vilaus's managed copies) ----
   'extension.status': (p: void) => ExtensionStatus;
@@ -1031,7 +1067,11 @@ export type WebviewToShellMessage =
   /** The mouse's back or forward button was released over the page. */
   | { readonly ccw: string; readonly kind: 'navigate'; readonly direction: 'back' | 'forward' }
   /** The usage block's link to the window's provider's prices. */
-  | { readonly ccw: string; readonly kind: 'editPrices' };
+  | { readonly ccw: string; readonly kind: 'editPrices' }
+  /** The session list's "this API only" toggle. */
+  | { readonly ccw: string; readonly kind: 'toggleProviderFilter' }
+  /** The provider notice's button: switch the window to `providerId` and open the session again. */
+  | { readonly ccw: string; readonly kind: 'switchProvider'; readonly providerId: string; readonly sessionId: string };
 
 export type FindDirection = 'restart' | 'next' | 'previous';
 
@@ -1059,4 +1099,8 @@ export type ShellToWebviewControl =
   /** Plays the page its own use of Escape that the shell took over (pages with `hints.conversationEscapes`). */
   | { readonly ccwControl: 'escape'; readonly action: 'interrupt' | 'rewind' }
   /** The session list's usage block (pages with `hints.usageBlock`); null: none, the extension's own shows. */
-  | { readonly ccwControl: 'usageView'; readonly view: UsageViewDto | null };
+  | { readonly ccwControl: 'usageView'; readonly view: UsageViewDto | null }
+  /** The sessions' providers (session lists: pages with `hints.sessionRows`). */
+  | { readonly ccwControl: 'sessionProviders'; readonly view: SessionProvidersDto | null }
+  /** The bar above the message input (pages with `commentsAnchor`); null: none. */
+  | { readonly ccwControl: 'providerNotice'; readonly notice: ProviderNoticeDto | null };

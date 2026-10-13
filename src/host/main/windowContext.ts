@@ -19,10 +19,13 @@ import type {
   ProvidersState,
   RendererInitData,
   SessionActivity,
+  ProviderNoticeDto,
+  SessionProvidersDto,
   ThemeData,
   UsageViewDto,
 } from '../../platform/protocol';
 import { ENVIRONMENT_SETTING } from '../../platform/providers';
+import { CURRENT_PROVIDER_ONLY_SETTING } from '../../platform/usage';
 import { URI } from 'vscode-uri';
 import { workspaceKey } from '../node/paths';
 import type { GotoTarget } from './cli';
@@ -69,6 +72,10 @@ export interface WindowHost {
   shellPricing(providerId: string): boolean;
   /** What the window's provider cost, for its session list (`usage.view`). */
   usageView(window: WindowContext, sessionId: string | undefined): Promise<UsageViewDto | null>;
+  /** The provider of every session, for the window's session list (`usage.sessionProviders`). */
+  sessionProviders(window: WindowContext): Promise<SessionProvidersDto>;
+  /** The notice for a session the window opens that ran under another provider (`sessions.opened`). */
+  providerNotice(window: WindowContext, sessionId: string): Promise<ProviderNoticeDto | null>;
   /** This window's extension host changed a global state value; the other windows' hosts need it too. */
   globalStateChanged(source: WindowContext, key: string, value: unknown): void;
   /** The user closed the window (its close button, Alt+F4). */
@@ -100,8 +107,6 @@ export class WindowContext extends Disposable {
   private currentWorkspaceKey = '';
   private currentWorkspaceState: StateStore | undefined;
   private currentProvider: string;
-  /** The sessions whose Claude processes started here, under which provider and when. */
-  private readonly startedSessions = new Map<string, { provider: string; at: number }>();
   private extHost: ExtHostProcess | undefined;
   /** The extension host has its init data: it takes requests now. */
   private initialized = false;
@@ -286,7 +291,7 @@ export class WindowContext extends Disposable {
   providersChanged(): void {
     if (this.extHost && this.initialized) {
       this.extHost.rpc.notify('settings.overlay', { values: this.host.providerOverlay(this.currentProvider) });
-      this.extHost.rpc.notify('usage.changed', { shellPricing: this.host.shellPricing(this.currentProvider) });
+      this.usageChanged();
     }
     this.window.emit('providersChanged', this.host.providersState(this.currentProvider));
     this.refreshTheme();
@@ -300,6 +305,19 @@ export class WindowContext extends Disposable {
     // The provider's variables are laid over the user's own: those changed, so did the result.
     if (keys.includes(ENVIRONMENT_SETTING) && this.extHost && this.initialized) {
       this.extHost.rpc.notify('settings.overlay', { values: this.host.providerOverlay(this.currentProvider) });
+    }
+    if (keys.includes(CURRENT_PROVIDER_ONLY_SETTING)) {
+      this.usageChanged();
+    }
+  }
+
+  /** The session lists show what the window's provider cost and whose sessions are whose again. */
+  private usageChanged(): void {
+    if (this.extHost && this.initialized) {
+      this.extHost.rpc.notify('usage.changed', {
+        provider: this.currentProvider,
+        shellPricing: this.host.shellPricing(this.currentProvider),
+      });
     }
   }
 
@@ -493,14 +511,10 @@ export class WindowContext extends Disposable {
     });
     rpc.handle('settings.set', ({ key, value }) => host.settings.set(key, value));
     rpc.handle('sessions.activity', (activity) => this.setActivity(activity));
-    rpc.handle('sessions.started', ({ sessionId }) => {
-      this.startedSessions.set(sessionId, { provider: this.currentProvider, at: Date.now() });
-    });
+    rpc.handle('sessions.used', ({ sessionId, provider, at }) => this.host.tagSession(sessionId, provider, at));
+    rpc.handle('sessions.opened', ({ sessionId }) => this.host.providerNotice(this, sessionId));
     rpc.handle('usage.view', ({ sessionId }) => this.host.usageView(this, sessionId));
-    rpc.handle('sessions.used', ({ sessionId }) => {
-      const started = this.startedSessions.get(sessionId) ?? { provider: this.currentProvider, at: Date.now() };
-      this.host.tagSession(sessionId, started.provider, started.at);
-    });
+    rpc.handle('usage.sessionProviders', () => this.host.sessionProviders(this));
   }
 
   private createInitData(extension: LocatedExtension): ExtHostInitData {
@@ -525,6 +539,7 @@ export class WindowContext extends Disposable {
       openConversation: this.takePendingConversation(),
       settingsOverlay: this.host.providerOverlay(this.currentProvider),
       shellPricing: this.host.shellPricing(this.currentProvider),
+      provider: this.currentProvider,
     };
   }
 

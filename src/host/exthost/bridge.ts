@@ -25,6 +25,8 @@ import type {
   ShellToWebviewControl,
   StatusFilterHints,
   UsageBarHints,
+  ProviderNoticeDto,
+  SessionProvidersDto,
   UsageBlockHints,
   UsageViewDto,
   WebviewPageHints,
@@ -309,6 +311,37 @@ const CONVERSATION_STYLES = `
 }
 .root_-a7MRw pre { line-height: 1.5; }
 .root_-a7MRw pre code { font-size: inherit; }
+
+.vilaus-provider-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0 0 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-inputValidation-warningBorder, var(--vscode-editorWarning-foreground, #cca700));
+  border-radius: 8px;
+  background: var(--vscode-inputValidation-warningBackground, var(--vscode-editorWidget-background));
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size, 13px);
+  line-height: 18px;
+  text-align: left;
+}
+.vilaus-provider-notice-text { flex: 1 1 200px; min-width: 0; }
+.vilaus-provider-notice button {
+  margin: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+.vilaus-provider-notice-switch { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+.vilaus-provider-notice-switch:hover { background: var(--vscode-button-hoverBackground); }
+.vilaus-provider-notice-switch[hidden] { display: none; }
+.vilaus-provider-notice-ignore { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+.vilaus-provider-notice-ignore:hover { background: var(--vscode-button-secondaryHoverBackground); }
 `;
 
 /**
@@ -341,6 +374,16 @@ const SESSION_LIST_STYLES = `
 .vilaus-usage-note[hidden] { display: none; }
 [data-vilaus-usage] .accountRow_JuUW3A { cursor: default; }
 [data-vilaus-usage][hidden] { display: none; }
+
+.vilaus-provider-mark { flex: none; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; }
+.sessionItem_OOQiHg > .vilaus-provider-mark { align-self: center; }
+[data-vilaus-other-provider] { display: none !important; }
+.vilaus-provider-filter { flex: none; justify-content: center; width: 24px; padding: 0; }
+.vilaus-provider-filter > .vilaus-provider-mark { width: 10px; height: 10px; margin: 0; }
+.vilaus-provider-filter[aria-pressed="true"] {
+  border-color: var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder));
+  background: var(--vscode-inputOption-activeBackground);
+}
 
 .headerRow_djirOA { gap: 6px; padding: 8px 12px 4px; border-bottom: none; }
 .newSessionButton_djirOA {
@@ -479,16 +522,22 @@ export interface BridgeOptions {
   readonly pinPreview?: (webviewId: string) => void;
   /** What the window's conversations are doing changed (see `observeToWebview`). */
   readonly onActivity?: (activity: SessionActivity) => void;
-  /** A Claude process started on a session in a conversation (see `observeOutput`). */
-  readonly onSessionStarted?: (sessionId: string) => void;
-  /** That process made its first API call. */
-  readonly onSessionUsed?: (sessionId: string) => void;
+  /**
+   * A Claude process made its first API call on a session: the session ran under `provider`,
+   * the window's provider when the process started (`at`); see `observeOutput`.
+   */
+  readonly onSessionUsed?: (usage: { sessionId: string; provider: string; at: number }) => void;
   /** A turn ended in a conversation: what its session cost changed. */
   readonly onTurnEnded?: (sessionId: string | undefined) => void;
-  /** Whether the shell works out what the conversations cost at first (see `setShellPricing`). */
+  /** The window's provider at first, and whether the shell works out what conversations cost (see `setProvider`). */
+  readonly provider?: string;
   readonly shellPricing?: boolean;
   /** What the window's provider cost, the conversation in front being `sessionId` (main's `usage.view`). */
   readonly usageView?: (sessionId: string | undefined) => Promise<UsageViewDto | null>;
+  /** The provider of every session, for the session lists' marks (main's `usage.sessionProviders`). */
+  readonly sessionProviders?: () => Promise<SessionProvidersDto>;
+  /** A conversation opens a session with a history: the notice to show if it ran under another provider (main's `sessions.opened`). */
+  readonly sessionOpened?: (sessionId: string) => Promise<ProviderNoticeDto | null>;
 }
 
 /** The usage block's view is asked for again at most this often. */
@@ -514,14 +563,23 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   private readonly ownPosts = new WeakSet<object>();
   /** The conversations at work and waiting, as last reported. */
   private activity: SessionActivity = { running: 0, waiting: 0 };
-  /** The session of each conversation's Claude process (by page and channel), and whether it made a call yet. */
-  private readonly processes = new Map<string, { sessionId: string; used: boolean }>();
+  /**
+   * Each conversation's Claude process (by page and channel): the provider it started under and
+   * when, the session it works on, and whether it made a call on that session yet.
+   */
+  private readonly processes = new Map<string, { provider: string; at: number; sessionId: string | undefined; used: boolean }>();
+  /** The pages that show a provider notice. */
+  private readonly noticed = new Set<WebviewImpl>();
+  /** The window's provider: what a Claude process that starts now runs under. */
+  private provider: string;
   /** Whether the shell works out what the conversations cost; the extension's own figures are then hidden. */
   private shellPricing: boolean;
   /** The conversation in front, as the extension last told its pages. */
   private activeSessionId: string | undefined;
   /** What the session lists' usage block shows (null: none), and when it was last asked for. */
   private usage: UsageViewDto | null = null;
+  /** What the session lists' marks show. */
+  private sessionProviderView: SessionProvidersDto | null = null;
   private usageAskedAt = 0;
   private usageTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -530,6 +588,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     private readonly logger: ILogger,
     private readonly options: BridgeOptions,
   ) {
+    this.provider = options.provider ?? 'subscription';
     this.shellPricing = options.shellPricing === true;
   }
 
@@ -561,6 +620,9 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
         return this.openUrl(webview, message);
       case OPEN_IN_EDITOR:
         this.noteListOpen(webview, message);
+        return false;
+      case 'get_session_request':
+        this.noteSessionOpened(webview, message);
         return false;
       default:
         return false;
@@ -736,8 +798,8 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     const newPage = !this.listPages.has(webview);
     const told = { ...request, openSessionIds: request.openSessionIds ?? this.listPages.get(webview)?.openSessionIds };
     this.listPages.set(webview, told);
-    if (newPage && this.shellPricing) {
-      this.postUsage(webview);
+    if (newPage) {
+      this.postSessionInfo(webview);
       this.refreshUsage();
     }
     const open = request.openSessionIds;
@@ -747,11 +809,13 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
 
   /**
    * What Claude Code says goes to the conversation's page as it comes (anthropic.claude-code
-   * 2.1.296: `{type: 'from-extension', message: {type: 'io_message', channelId, message}}`, the
-   * message as the CLI writes it; a resumed session's history comes another way). A process
-   * starts with `{type: 'system', subtype: 'init', session_id}`; each reply of the API is a
-   * `{type: 'assistant', session_id}`; a turn ends with `{type: 'result'}`. A process can go on
-   * with another session (a new one after /clear): its replies then name that one.
+   * 2.1.296: `{type: 'from-extension', message: {type: 'io_message', channelId, message}}`; a
+   * resumed session's history comes another way). Once Claude Code has started, the extension
+   * says so with `{type: 'system', subtype: 'status', launchTiming}`: the process runs under the
+   * provider the window uses then (Claude Code reads its variables as it starts). Every turn
+   * starts with `{type: 'system', subtype: 'init', session_id}`, each reply of the API is an
+   * `{type: 'assistant', session_id}`, a turn ends with `{type: 'result'}`. A process can go on
+   * with another session (a new one after /clear): its messages then name that one.
    */
   private observeOutput(webview: WebviewImpl, message: Record<string, unknown>): void {
     const output = message.message;
@@ -759,39 +823,86 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
       return;
     }
     const key = `${webview.id}|${typeof message.channelId === 'string' ? message.channelId : ''}`;
-    const sessionId = typeof output.session_id === 'string' && output.session_id ? output.session_id : undefined;
-    let process = this.processes.get(key);
-    if (output.type === 'system' && output.subtype === 'init' && sessionId) {
-      this.processes.set(key, { sessionId, used: false });
-      this.options.onSessionStarted?.(sessionId);
+    if (output.type === 'system' && output.subtype === 'status' && isRecord(output.launchTiming)) {
+      this.processes.set(key, { provider: this.provider, at: Date.now(), sessionId: undefined, used: false });
       return;
     }
-    if (output.type === 'assistant') {
-      if (sessionId && process?.sessionId !== sessionId) {
-        process = { sessionId, used: false };
-        this.processes.set(key, process);
-        this.options.onSessionStarted?.(sessionId);
-      }
-      if (process && !process.used) {
-        process.used = true;
-        this.options.onSessionUsed?.(process.sessionId);
-      }
-    } else if (output.type === 'result') {
-      this.options.onTurnEnded?.(sessionId ?? process?.sessionId);
+    const named = typeof output.session_id === 'string' && output.session_id ? output.session_id : undefined;
+    if (output.type === 'result') {
+      this.options.onTurnEnded?.(named ?? this.processes.get(key)?.sessionId);
       this.refreshUsage();
+      return;
+    }
+    const isInit = output.type === 'system' && output.subtype === 'init';
+    if (!isInit && output.type !== 'assistant') {
+      return;
+    }
+    // A process whose start went unseen (an extension that does not say) runs under the provider of now.
+    let process = this.processes.get(key);
+    if (!process) {
+      process = { provider: this.provider, at: Date.now(), sessionId: undefined, used: false };
+      this.processes.set(key, process);
+    }
+    if (named && named !== process.sessionId) {
+      process.sessionId = named;
+      process.used = false;
+    }
+    const sessionId = process.sessionId;
+    if (output.type === 'assistant' && sessionId && !process.used) {
+      process.used = true;
+      this.options.onSessionUsed?.({ sessionId, provider: process.provider, at: process.at });
+      // The conversation goes on here: the notice has had its say.
+      if (this.noticed.delete(webview)) {
+        const control: ShellToWebviewControl = { ccwControl: 'providerNotice', notice: null };
+        void webview.postMessage(control);
+      }
     }
   }
 
   /**
-   * The window's provider changed: whether the shell works out what the conversations cost
-   * (a compatible API's) and shows it in the session lists, the extension's figures hidden.
+   * A conversation's page asks for a session's history (`get_session_request`, purpose
+   * `transcript_open` or none; `diff_refresh` only reloads its changes): it opens a session that
+   * ran before. If that was under another provider, a notice shows above the message input,
+   * unless the conversation went on here before the answer came.
    */
-  setShellPricing(on: boolean): void {
-    this.shellPricing = on;
+  private noteSessionOpened(webview: WebviewImpl, message: WebviewRequest): void {
+    const { sessionId, purpose } = message.request;
+    if (
+      webview.viewType !== CHAT_PANEL_VIEW_TYPE ||
+      typeof sessionId !== 'string' ||
+      purpose === 'diff_refresh' ||
+      !this.options.sessionOpened
+    ) {
+      return;
+    }
+    this.options.sessionOpened(sessionId).then(
+      (notice) => {
+        const used = [...this.processes].some(
+          ([key, process]) => key.startsWith(`${webview.id}|`) && process.sessionId === sessionId && process.used,
+        );
+        if (!notice || used) {
+          return;
+        }
+        this.noticed.add(webview);
+        const control: ShellToWebviewControl = { ccwControl: 'providerNotice', notice };
+        void webview.postMessage(control);
+      },
+      (error: unknown) => this.logger.warn('the provider notice failed', error),
+    );
+  }
+
+  /**
+   * The window's provider changed (or its prices, or which sessions the lists show): new Claude
+   * processes run under `provider`; `shellPricing`: the shell works out what the conversations
+   * cost (a compatible API's), the extension's figures hidden.
+   */
+  setProvider(provider: string, shellPricing: boolean): void {
+    this.provider = provider;
+    this.shellPricing = shellPricing;
     this.refreshUsage();
   }
 
-  /** Asks main for the usage block's view again, at most once a second (the last ask wins). */
+  /** Asks main for the session lists' usage block and marks again, at most once a second (the last ask wins). */
   private refreshUsage(): void {
     if (this.usageTimer !== undefined) {
       return;
@@ -809,27 +920,34 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     if (this.listPages.size === 0) {
       return;
     }
-    let view: UsageViewDto | null = null;
-    if (this.shellPricing && this.options.usageView) {
-      try {
-        view = await this.options.usageView(this.activeSessionId);
-      } catch (error) {
-        this.logger.warn('the usage view failed', error);
-        return;
-      }
-    }
-    if (JSON.stringify(view) === JSON.stringify(this.usage)) {
+    let usage: UsageViewDto | null;
+    let marks: SessionProvidersDto | null;
+    try {
+      [usage, marks] = await Promise.all([
+        this.shellPricing && this.options.usageView ? this.options.usageView(this.activeSessionId) : null,
+        this.options.sessionProviders ? this.options.sessionProviders() : null,
+      ]);
+    } catch (error) {
+      this.logger.warn('the usage view failed', error);
       return;
     }
-    this.usage = view;
-    for (const page of this.listPages.keys()) {
-      this.postUsage(page);
+    const changed =
+      JSON.stringify(usage) !== JSON.stringify(this.usage) || JSON.stringify(marks) !== JSON.stringify(this.sessionProviderView);
+    this.usage = usage;
+    this.sessionProviderView = marks;
+    if (changed) {
+      for (const page of this.listPages.keys()) {
+        this.postSessionInfo(page);
+      }
     }
   }
 
-  private postUsage(page: WebviewImpl): void {
-    const control: ShellToWebviewControl = { ccwControl: 'usageView', view: this.usage };
-    void page.postMessage(control);
+  /** The usage block and the sessions' providers, to a session list. */
+  private postSessionInfo(page: WebviewImpl): void {
+    const usage: ShellToWebviewControl = { ccwControl: 'usageView', view: this.usage };
+    const marks: ShellToWebviewControl = { ccwControl: 'sessionProviders', view: this.sessionProviderView };
+    void page.postMessage(usage);
+    void page.postMessage(marks);
   }
 
   /**
@@ -852,6 +970,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   didDisposeWebview(webview: WebviewImpl): void {
     this.previews.delete(webview.id);
     this.listPages.delete(webview);
+    this.noticed.delete(webview);
     for (const key of this.processes.keys()) {
       if (key.startsWith(`${webview.id}|`)) {
         this.processes.delete(key);

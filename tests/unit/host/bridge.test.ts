@@ -12,7 +12,7 @@ import { CommentStore } from '../../../src/host/exthost/comments';
 import { NullLogger } from '../../../src/platform/log';
 import type { WebviewImpl } from '../../../src/compat/vscode/webviews';
 import type { OsBackend } from '../../../src/compat/vscode/host';
-import type { UsageViewDto } from '../../../src/platform/protocol';
+import type { ProviderNoticeDto, SessionProvidersDto, UsageViewDto } from '../../../src/platform/protocol';
 
 function makeWebview(): { webview: WebviewImpl; messages: unknown[] } {
   const messages: unknown[] = [];
@@ -597,15 +597,26 @@ describe('ClaudeWebviewBridge, previews and the session list', () => {
 });
 
 describe('ClaudeWebviewBridge and what Claude Code says', () => {
-  function makeOutputBridge() {
+  beforeEach(() => {
+    mock.timers.enable({ apis: ['Date'], now: 1000 });
+  });
+  afterEach(() => {
+    mock.timers.reset();
+  });
+
+  function makeOutputBridge(notice: ProviderNoticeDto | null = null) {
     const events: string[] = [];
     const bridge = new ClaudeWebviewBridge(makeOs().os, NullLogger, {
       diffEditorAvailable: () => true,
       comments: new CommentStore(),
       workspaceFolders: [],
-      onSessionStarted: (sessionId) => events.push(`started ${sessionId}`),
-      onSessionUsed: (sessionId) => events.push(`used ${sessionId}`),
+      provider: 'deepseek',
+      onSessionUsed: ({ sessionId, provider, at }) => events.push(`used ${sessionId} ${provider} ${at}`),
       onTurnEnded: (sessionId) => events.push(`ended ${sessionId ?? '-'}`),
+      sessionOpened: (sessionId) => {
+        events.push(`opened ${sessionId}`);
+        return Promise.resolve(notice);
+      },
     });
     return { bridge, events };
   }
@@ -613,48 +624,59 @@ describe('ClaudeWebviewBridge and what Claude Code says', () => {
     type: 'from-extension',
     message: { type: 'io_message', channelId, message, done: false },
   });
+  const launched = (channelId: string): unknown =>
+    output(channelId, { type: 'system', subtype: 'status', launchTiming: { spawnToReadyMs: 900 } });
   const init = (channelId: string, sessionId: string): unknown =>
     output(channelId, { type: 'system', subtype: 'init', session_id: sessionId });
   const reply = (channelId: string, sessionId?: string): unknown =>
     output(channelId, { type: 'assistant', session_id: sessionId, message: { id: 'm', usage: { input_tokens: 1 } } });
   const result = (channelId: string): unknown => output(channelId, { type: 'result', subtype: 'success' });
 
-  test('reports a process that starts on a session, its first reply once, and the end of each turn', () => {
+  test('a process is tagged once, with the provider and time it started with, however many turns it takes', () => {
     const { bridge, events } = makeOutputBridge();
     const panel = fakeWebview('panel', 'claudeVSCodePanel');
-    assert.equal(bridge.observeToWebview(panel, init('c1', 'S1')), undefined);
-    bridge.observeToWebview(panel, reply('c1', 'S1'));
-    bridge.observeToWebview(panel, reply('c1', 'S1'));
-    bridge.observeToWebview(panel, result('c1'));
-    bridge.observeToWebview(panel, reply('c1', 'S1'));
-    bridge.observeToWebview(panel, result('c1'));
-    assert.deepEqual(events, ['started S1', 'used S1', 'ended S1', 'ended S1']);
+    assert.equal(bridge.observeToWebview(panel, launched('c1')), undefined);
+    mock.timers.tick(500);
+    // Every turn starts with an init.
+    for (let turn = 0; turn < 2; turn++) {
+      bridge.observeToWebview(panel, init('c1', 'S1'));
+      bridge.observeToWebview(panel, reply('c1', 'S1'));
+      bridge.observeToWebview(panel, reply('c1', 'S1'));
+      bridge.observeToWebview(panel, result('c1'));
+    }
+    assert.deepEqual(events, ['used S1 deepseek 1000', 'ended S1', 'ended S1']);
   });
 
-  test('a process that only started (a session opened, nothing sent) is never reported used', () => {
-    const { bridge, events } = makeOutputBridge();
-    bridge.observeToWebview(fakeWebview('panel', 'claudeVSCodePanel'), init('c1', 'S1'));
-    assert.deepEqual(events, ['started S1']);
-  });
-
-  test('a new process on the same channel is reported used again', () => {
+  test('a process that started before the window switched provider keeps the provider it started with', () => {
     const { bridge, events } = makeOutputBridge();
     const panel = fakeWebview('panel', 'claudeVSCodePanel');
+    bridge.observeToWebview(panel, launched('c1'));
+    bridge.setProvider('subscription', false);
     bridge.observeToWebview(panel, init('c1', 'S1'));
     bridge.observeToWebview(panel, reply('c1', 'S1'));
-    bridge.observeToWebview(panel, init('c1', 'S1'));
+    // A process the extension starts after it takes the new one.
+    bridge.observeToWebview(panel, launched('c1'));
     bridge.observeToWebview(panel, reply('c1', 'S1'));
-    assert.deepEqual(events, ['started S1', 'used S1', 'started S1', 'used S1']);
+    assert.deepEqual(events, ['used S1 deepseek 1000', 'used S1 subscription 1000']);
   });
 
-  test('replies that name another session (after /clear) start that session', () => {
+  test('a session only opened, nothing sent, is never reported used', () => {
     const { bridge, events } = makeOutputBridge();
     const panel = fakeWebview('panel', 'claudeVSCodePanel');
+    bridge.observeToWebview(panel, launched('c1'));
     bridge.observeToWebview(panel, init('c1', 'S1'));
+    assert.deepEqual(events, []);
+  });
+
+  test('replies that name another session (after /clear) tag that session under the same process', () => {
+    const { bridge, events } = makeOutputBridge();
+    const panel = fakeWebview('panel', 'claudeVSCodePanel');
+    bridge.observeToWebview(panel, launched('c1'));
     bridge.observeToWebview(panel, reply('c1', 'S1'));
+    mock.timers.tick(100);
     bridge.observeToWebview(panel, reply('c1', 'S2'));
-    bridge.observeToWebview(panel, reply('c1', 'S2'));
-    assert.deepEqual(events, ['started S1', 'used S1', 'started S2', 'used S2']);
+    bridge.observeToWebview(panel, reply('c1'));
+    assert.deepEqual(events, ['used S1 deepseek 1000', 'used S2 deepseek 1000']);
   });
 
   test('keeps the processes of pages and channels apart, and forgets a page that is gone', () => {
@@ -668,13 +690,62 @@ describe('ClaudeWebviewBridge and what Claude Code says', () => {
     bridge.didDisposeWebview(one);
     // Its process is forgotten: a reply without a session id names nothing.
     bridge.observeToWebview(one, reply('c'));
-    assert.deepEqual(events, ['started S1', 'started S2', 'used S2', 'used S1']);
+    assert.deepEqual(events, ['used S2 deepseek 1000', 'used S1 deepseek 1000']);
   });
 
-  test('a reply on a channel whose start it missed starts its session there', () => {
-    const { bridge, events } = makeOutputBridge();
-    bridge.observeToWebview(fakeWebview('panel', 'claudeVSCodePanel'), reply('c1', 'S1'));
-    assert.deepEqual(events, ['started S1', 'used S1']);
+  test('a conversation that opens a session asks for a notice and shows it until the conversation goes on there', async () => {
+    const notice: ProviderNoticeDto = {
+      sessionId: 'S1',
+      text: 'ran on DeepSeek',
+      switchTo: 'deepseek',
+      switchLabel: 'Switch',
+      ignoreLabel: 'Ignore',
+    };
+    const { bridge, events } = makeOutputBridge(notice);
+    const posted: unknown[] = [];
+    const panel = {
+      id: 'panel',
+      viewType: 'claudeVSCodePanel',
+      postMessage: (message: unknown) => {
+        posted.push(message);
+        return Promise.resolve(true);
+      },
+    } as unknown as WebviewImpl;
+    const getSession = (purpose?: string): unknown => ({
+      type: 'request',
+      channelId: 'c1',
+      requestId: 'r',
+      request: { type: 'get_session_request', sessionId: 'S1', purpose },
+    });
+    assert.equal(bridge.interceptFromWebview(panel, getSession('diff_refresh')), false);
+    assert.equal(bridge.interceptFromWebview(fakeWebview('list', 'claudeVSCodeSessionsList'), getSession()), false);
+    assert.equal(bridge.interceptFromWebview(panel, getSession('transcript_open')), false);
+    await Promise.resolve();
+    assert.deepEqual(events, ['opened S1']);
+    assert.deepEqual(posted, [{ ccwControl: 'providerNotice', notice }]);
+
+    bridge.observeToWebview(panel, launched('c1'));
+    bridge.observeToWebview(panel, reply('c1', 'S1'));
+    assert.deepEqual(posted.at(-1), { ccwControl: 'providerNotice', notice: null });
+  });
+
+  test('a notice that comes after the conversation went on is not shown', async () => {
+    const { bridge } = makeOutputBridge({ sessionId: 'S1', text: 't', ignoreLabel: 'Ignore' });
+    const posted: unknown[] = [];
+    const panel = {
+      id: 'panel',
+      viewType: 'claudeVSCodePanel',
+      postMessage: (message: unknown) => Promise.resolve(posted.push(message) > 0),
+    } as unknown as WebviewImpl;
+    bridge.interceptFromWebview(panel, {
+      type: 'request',
+      channelId: 'c1',
+      requestId: 'r',
+      request: { type: 'get_session_request', sessionId: 'S1' },
+    });
+    bridge.observeToWebview(panel, reply('c1', 'S1'));
+    await Promise.resolve();
+    assert.deepEqual(posted, []);
   });
 });
 
@@ -710,6 +781,14 @@ describe('ClaudeWebviewBridge and the usage block', () => {
 
   const VIEW: UsageViewDto = { title: 'Usage · DeepSeek', tooltip: '', editPrices: 'Prices', editPricesTitle: '', rows: [] };
 
+  const MARKS: SessionProvidersDto = {
+    sessions: { S1: 'mock' },
+    providers: { mock: { name: 'Mock', color: '#ff0000' } },
+    current: 'mock',
+    onlyCurrent: false,
+    filterTitle: 'Only Mock',
+  };
+
   function makeUsageBridge(shellPricing: boolean) {
     const asked: (string | undefined)[] = [];
     const bridge = new ClaudeWebviewBridge(makeOs().os, NullLogger, {
@@ -717,6 +796,7 @@ describe('ClaudeWebviewBridge and the usage block', () => {
       comments: new CommentStore(),
       workspaceFolders: [],
       shellPricing,
+      sessionProviders: () => Promise.resolve(MARKS),
       usageView: (sessionId) => {
         asked.push(sessionId);
         return Promise.resolve(VIEW);
@@ -779,6 +859,17 @@ describe('ClaudeWebviewBridge and the usage block', () => {
     assert.deepEqual(asked, ['S1', 'S3']);
   });
 
+  test('session lists are told every session’s provider, whatever the provider of the window', async () => {
+    const { bridge } = makeUsageBridge(false);
+    const { page, posted } = listPage();
+    bridge.observeToWebview(page, states('S1'));
+    await settle();
+    const marks = posted.flatMap((message) =>
+      (message as { ccwControl?: string }).ccwControl === 'sessionProviders' ? [(message as { view: unknown }).view] : [],
+    );
+    assert.deepEqual(marks, [null, MARKS]);
+  });
+
   test('a turn that ends asks again', async () => {
     const { bridge, asked } = makeUsageBridge(true);
     const { page } = listPage();
@@ -809,16 +900,17 @@ describe('ClaudeWebviewBridge and the usage block', () => {
     bridge.observeToWebview(page, states('S1'));
     await settle();
     assert.deepEqual(asked, []);
-    assert.deepEqual(usageViews(posted), []);
+    // No block (the marks come with it).
+    assert.deepEqual(usageViews(posted), [null, null]);
 
-    bridge.setShellPricing(true);
+    bridge.setProvider('mock', true);
     await settle(1000);
-    assert.deepEqual(usageViews(posted), [VIEW]);
+    assert.deepEqual(usageViews(posted), [null, null, VIEW]);
     assert.deepEqual(bridge.observeToWebview(page, message), withoutExtensionCosts(message));
 
-    bridge.setShellPricing(false);
+    bridge.setProvider('subscription', false);
     await settle(1000);
-    assert.deepEqual(usageViews(posted), [VIEW, null]);
+    assert.deepEqual(usageViews(posted), [null, null, VIEW, null]);
     assert.equal(bridge.observeToWebview(page, message), undefined);
   });
 
