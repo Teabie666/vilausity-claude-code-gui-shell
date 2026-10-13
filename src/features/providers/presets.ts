@@ -7,13 +7,16 @@
  * compatibility is deprecated; OpenRouter reaches their models. Each preset's accent color
  * is in platform/providers.ts (PRESET_ACCENTS).
  *
- * Prices are not here: they change too often to ship. A preset billed per token links to its
- * price list (checked 2026-10-13) and says the currency it bills in; the coding plans are flat
- * fees.
+ * A preset billed per token links to its price list (checked 2026-10-13) and says the currency
+ * it bills in; the coding plans are flat fees. The mainland China sites ship default prices
+ * (presetPrices.json, read from their price pages by tools/prices/ on the date its sources
+ * say): a provider added from one starts with them, and the editor offers them again later.
  */
 
+import { readPricing, type ProviderPricing } from '../../platform/pricing';
 import type { Currency, ProviderConfig } from '../../platform/providers';
 import { t } from './messages';
+import PRESET_PRICES from './presetPrices.json';
 
 export interface ProviderPreset {
   readonly id: string;
@@ -262,4 +265,11 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
 
 export function presetById(id: string | undefined): ProviderPreset | undefined {
   return PROVIDER_PRESETS.find((preset) => preset.id === id);
+}
+
+/** The prices a preset ships, if any: read as providers.json is (what does not hold is left out). */
+export function presetPricing(id: string | undefined): ProviderPricing | undefined {
+  const value: unknown = id === undefined ? undefined : (PRESET_PRICES as Record<string, unknown>)[id];
+  const pricing = value === undefined ? undefined : readPricing(value, false).answer?.pricing;
+  return pricing && Object.keys(pricing.models).length > 0 ? pricing : undefined;
 }

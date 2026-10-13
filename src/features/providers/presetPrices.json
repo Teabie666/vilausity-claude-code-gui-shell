@@ -1,0 +1,128 @@
+{
+  "deepseek": {
+    "currency": "CNY",
+    "models": {
+      "deepseek-flash": {
+        "input": 1,
+        "output": 4,
+        "cacheRead": 0.02,
+        "rules": [
+          {
+            "label": "高峰 09:00-12:00（工作日）",
+            "when": {
+              "zone": "Asia/Shanghai",
+              "days": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "from": "09:00",
+              "to": "12:00"
+            },
+            "input": 2,
+            "output": 8,
+            "cacheRead": 0.04
+          },
+          {
+            "label": "高峰 14:00-18:00（工作日）",
+            "when": {
+              "zone": "Asia/Shanghai",
+              "days": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "from": "14:00",
+              "to": "18:00"
+            },
+            "input": 2,
+            "output": 8,
+            "cacheRead": 0.04
+          }
+        ]
+      }
+    },
+    "sources": [
+      {
+        "url": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
+        "checked": "2026-10-13"
+      }
+    ],
+    "notes": [
+      "页面价格以「百万 tokens」为单位，无需换算。",
+      "高峰时段为北京时间周一至周五 9:00-12:00、14:00-18:00，其余时段（含周末）为空闲时段；高峰时段不含中国法定节假日，节假日应计为空闲时段（规则无法表达节假日，故未建模）。",
+      "缓存命中即 cacheRead；缓存未命中按 input 计费，缓存写入未单独计价。",
+      "输出价格已含思考（thinking）模式，无单独计价。"
+    ]
+  },
+  "glm": {
+    "currency": "CNY",
+    "models": {
+      "glm-5.2": {
+        "input": 8,
+        "output": 28,
+        "cacheRead": 2
+      }
+    },
+    "sources": [
+      {
+        "url": "https://docs.bigmodel.cn/cn/guide/start/pricing",
+        "checked": "2026-10-13"
+      }
+    ],
+    "notes": [
+      "缓存存储当前限时免费（页面标注「限时免费」），未单独计费，故未设 cacheWrite。",
+      "Batch API 按对应标准调用价格的 5 折计费，本表为按量标准价。"
+    ]
+  },
+  "qwen": {
+    "currency": "CNY",
+    "models": {
+      "qwen3.7-max": {
+        "input": 12,
+        "output": 36,
+        "cacheRead": 1.2,
+        "cacheWrite": 15
+      },
+      "qwen3.6-flash": {
+        "input": 1.2,
+        "output": 7.2,
+        "cacheRead": 0.12,
+        "cacheWrite": 1.5,
+        "rules": [
+          {
+            "label": "输入 256K–1M",
+            "when": {
+              "inputOver": 256000,
+              "inputUpTo": 1000000
+            },
+            "input": 4.8,
+            "output": 28.8,
+            "cacheRead": 0.48,
+            "cacheWrite": 6
+          }
+        ]
+      }
+    },
+    "sources": [
+      {
+        "url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+        "checked": "2026-10-13"
+      },
+      {
+        "url": "https://help.aliyun.com/zh/model-studio/context-cache",
+        "checked": "2026-10-13"
+      }
+    ],
+    "notes": [
+      "上下文缓存：qwen3.7-max、qwen3.6-flash 均在支持显式缓存的模型列表内。显式缓存创建（cacheWrite）按标准输入单价的 125% 计费、命中（cacheRead）按 10% 计费，按各档输入单价折算；非 10% 的例外仅限 qwen3.8-max、qwen3.8-flash、qwen3.8-2.4t-a95b。Claude Code 走显式缓存（cache_control），故取显式价格；隐式缓存命中为 20%，未采用。",
+      "Batch 调用的输入和输出单价均按实时推理价格的 50% 计费；本表为按量计费标准价。",
+      "思考模式（思维链+回答）与非思考模式单价相同，输出价已含思维链。",
+      "仅华北2（北京）地域有 100 万 Token 免费额度（90 天有效），其他地域无。"
+    ]
+  }
+}

@@ -1734,6 +1734,16 @@ await step('the providers editor adds a provider from a preset, saves edits and 
   await waitFor(async () => (await selected.innerText().catch(() => '')) === 'DeepSeek', 5000, 'the new provider selected');
   const baseUrl = await editor.locator('.setting-input[placeholder="ANTHROPIC_BASE_URL"]').inputValue();
   if (baseUrl !== 'https://api.deepseek.com/anthropic') throw new Error(`base URL ${baseUrl}`);
+  // It starts with the prices the preset ships (rules by the time of day among them), and
+  // offers them again through the paste's preview.
+  const flashPrices = editor.locator('.providers-price-row[data-model="deepseek-flash"]');
+  if ((await flashPrices.locator('.providers-price[data-field="input"]').inputValue()) === '')
+    throw new Error('no default price for deepseek-flash');
+  if ((await flashPrices.locator('.providers-price-rules').count()) !== 1)
+    throw new Error('the default rules of deepseek-flash are not marked');
+  await editor.locator('.providers-prices-defaults').click();
+  await waitFor(async () => (await editor.locator('.providers-pricing-rule').count()) > 0, 5000, 'the default prices previewed');
+  await editor.locator('.providers-pricing-paste .providers-prices-bar .button.secondary').click();
 
   const name = editor.locator('.providers-row').first().locator('.setting-input');
   await name.fill('DeepSeek Work');

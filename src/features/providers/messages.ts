@@ -76,6 +76,9 @@ export const t = defineMessages('providers', {
   pricesExport: 'Copy Prices',
   pricesExportTitle: 'Copies these prices and their rules as JSON, in the form Paste Answer reads',
   pricesExported: 'Prices copied as JSON.',
+  pricesDefaults: 'Default Prices',
+  /** {0}: the date they were read from the price page. */
+  pricesDefaultsTitle: 'The prices Vilausity comes with for this provider, read from its price page on {0}: shown for a look first',
   pricesPasteHint: 'The AI’s answer: its JSON (with a code block and words around it is fine)',
   pricesApply: 'Use These Prices',
   pricesCancel: 'Cancel',

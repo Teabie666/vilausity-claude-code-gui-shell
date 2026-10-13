@@ -378,6 +378,8 @@
   "providers.pricesCancel": "取消",
   "providers.pricesCopyPrompt": "复制给 AI 的提示词",
   "providers.pricesCopyPromptTitle": "复制一段提示词，向能上网的 AI 对话要这些模型的价格，包括随调用变化的价格（按时段、按输入长度等）。拿到回答后用“粘贴回答”填回来。",
+  "providers.pricesDefaults": "默认价格",
+  "providers.pricesDefaultsTitle": "Vilausity 自带的这个接口的价格，{0} 从它的价格页读取；先预览再决定用不用",
   "providers.pricesDropped": "将没有价格：{0}",
   "providers.pricesExport": "复制价格",
   "providers.pricesExportTitle": "把这些价格和规则复制成 JSON，格式跟“粘贴回答”读的一样",

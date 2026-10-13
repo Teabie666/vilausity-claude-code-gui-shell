@@ -36,7 +36,7 @@ import {
   type ProviderType,
 } from '../../platform/providers';
 import { t } from './messages';
-import { presetById, URL_PLACEHOLDER } from './presets';
+import { presetById, presetPricing, URL_PLACEHOLDER } from './presets';
 import { pricesText, problemText, ruleText } from './pricingText';
 
 /** The providers as main last reported them, for every view of this window. */
@@ -92,7 +92,8 @@ export async function addFromPreset(presetId: string, model: ProvidersModel, nat
     preset.id,
     model.state.providers.map((provider) => provider.id),
   );
-  return native.call('providers.save', { provider: { ...preset.config, id, name, preset: preset.id } });
+  // It starts with the prices the preset ships, when it has some.
+  return native.call('providers.save', { provider: { ...preset.config, id, name, preset: preset.id, pricing: presetPricing(preset.id) } });
 }
 
 interface ProvidersEditorContext {
@@ -860,6 +861,20 @@ export class ProvidersEditorPane implements EditorPane {
     );
     exportButton.title = t('pricesExportTitle');
     bar.append(copyPrompt, pasteButton, exportButton);
+    // The prices the preset ships, through the same preview as a paste.
+    const defaults = presetPricing(provider.preset);
+    if (defaults) {
+      const checked = defaults.sources?.find((source) => source.checked)?.checked ?? '';
+      const defaultsButton = this.button(t('pricesDefaults'), 'secondary', () => {
+        paste.hidden = false;
+        pasted.value = pricingJson(defaults);
+        pasted.dispatchEvent(new globalThis.Event('input'));
+        pasted.focus();
+      });
+      defaultsButton.title = t('pricesDefaultsTitle', checked);
+      defaultsButton.classList.add('providers-prices-defaults');
+      bar.append(defaultsButton);
+    }
     const table = doc.createElement('div');
     table.className = 'providers-prices-table';
     table.setAttribute('role', 'table');
