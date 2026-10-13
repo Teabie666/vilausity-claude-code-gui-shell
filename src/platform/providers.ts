@@ -10,6 +10,8 @@
  * extension host instead of writing a key into settings.json.
  */
 
+import { readPricing, type ProviderPricing } from './pricing';
+
 export type ProviderType = 'subscription' | 'anthropic-api' | 'compatible' | 'bedrock' | 'vertex' | 'foundry';
 
 /** How the key goes out: `apiKey` as ANTHROPIC_API_KEY (x-api-key), `bearer` as ANTHROPIC_AUTH_TOKEN. */
@@ -27,24 +29,8 @@ export interface ProviderModels {
   readonly subagent?: string;
 }
 
-export type Currency = 'CNY' | 'USD';
-
-/** What a model costs, in the provider's currency per million tokens. */
-export interface ModelPrice {
-  readonly input: number;
-  readonly output: number;
-  /** Tokens read from the prompt cache; the input price when not given. */
-  readonly cacheRead?: number;
-  /** Tokens written to the prompt cache; the input price when not given. */
-  readonly cacheWrite?: number;
-}
-
-/** The prices the user gave a provider's models, for working out what its conversations cost. */
-export interface ProviderPricing {
-  readonly currency: Currency;
-  /** By model, named as `modelKey` writes it. */
-  readonly models: Readonly<Record<string, ModelPrice>>;
-}
+// Prices and their rules live in pricing.ts; the providers carry them.
+export { modelKey, type Currency, type ModelPrice, type ProviderPricing } from './pricing';
 
 export interface ProviderConfig {
   /** Stable id, as `--provider <id>` names it: lowercase letters, digits and dashes. */
@@ -299,35 +285,9 @@ export function parseProviderConfig(value: unknown): ProviderConfig | undefined 
   };
 }
 
-/**
- * A model's name as prices and usage compare it: `deepseek-flash[1m]` (the 1M-context marker
- * Claude Code strips before it sends the name) and `DeepSeek-Flash` are `deepseek-flash`.
- */
-export function modelKey(model: string): string {
-  return model
-    .trim()
-    .replace(/\[[^\]]*\]$/, '')
-    .trim()
-    .toLowerCase();
-}
-
 function parsePricing(value: unknown): ProviderPricing | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  const price = (field: unknown): number | undefined =>
-    typeof field === 'number' && Number.isFinite(field) && field >= 0 ? field : undefined;
-  const models: Record<string, ModelPrice> = {};
-  for (const [name, entry] of Object.entries(isRecord(value.models) ? value.models : {})) {
-    const key = modelKey(name);
-    const input = isRecord(entry) ? price(entry.input) : undefined;
-    const output = isRecord(entry) ? price(entry.output) : undefined;
-    if (!key || !isRecord(entry) || input === undefined || output === undefined) {
-      continue;
-    }
-    models[key] = { input, output, cacheRead: price(entry.cacheRead), cacheWrite: price(entry.cacheWrite) };
-  }
-  return { currency: value.currency === 'CNY' ? 'CNY' : 'USD', models };
+  // Leniently: a model or rule that does not hold is left out, the rest kept.
+  return isRecord(value) ? readPricing(value, false).answer?.pricing : undefined;
 }
 
 function stringMap(value: unknown, validName: (name: string) => boolean): Record<string, string> | undefined {

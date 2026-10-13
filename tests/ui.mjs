@@ -1539,6 +1539,37 @@ await step(
       const priceInput = page.locator('#content-pane .providers-price-row[data-model="mock-model"] .providers-price[data-field="input"]');
       await priceInput.waitFor({ timeout: 5000 });
       if ((await priceInput.inputValue()) !== '2') throw new Error(`the mock model's input price: ${await priceInput.inputValue()}`);
+      // An AI chat's answer pasted back, with a rule: calls with a long input cost twice as much.
+      // An answer with problems is told and cannot be used; a good one is previewed, used, saved.
+      const editor = page.locator('#content-pane .providers-editor');
+      await editor.locator('.providers-prices-paste').click();
+      const answerBox = editor.locator('.providers-pricing-text');
+      await answerBox.fill('{"currency": "CNY", "models": {"mock-model": {"input": 2, "output": -8}}}');
+      await waitFor(async () => (await editor.locator('.providers-pricing-problem').count()) > 0, 5000, 'the problem of the answer');
+      if (await editor.locator('.providers-pricing-apply').isEnabled()) throw new Error('an answer with problems can be used');
+      const answer = {
+        vilausPricing: 1,
+        currency: 'CNY',
+        models: {
+          'mock-model': {
+            input: 2,
+            cacheRead: 0.2,
+            output: 8,
+            rules: [{ label: 'Long', when: { inputOver: 1_500_000 }, input: 4, cacheRead: 0.4, output: 16 }],
+          },
+        },
+        sources: [{ url: 'https://example.com/prices', checked: '2026-10-13' }],
+      };
+      await answerBox.fill(`Here you go:\n\`\`\`json\n${JSON.stringify(answer)}\n\`\`\``);
+      await waitFor(async () => (await editor.locator('.providers-pricing-rule').count()) === 1, 5000, 'the preview of the rule');
+      await editor.locator('.providers-pricing-apply').click();
+      await editor.locator('.providers-price-row[data-model="mock-model"] .providers-price-rules').waitFor({ timeout: 5000 });
+      await editor.locator('.providers-save').click();
+      await waitFor(() => readFileSync(path.join(dataDir, 'providers.json'), 'utf8').includes('"Long"'), 5000, 'the rule saved');
+      // The workspace's call had 3M input tokens, cache hits included: all at the rule's prices now.
+      await waitFor(async () => (await usageRows())['This workspace'] === '¥12.80', 10_000, 'the workspace’s cost by the rule');
+      const ruled = await usageRows();
+      if (ruled['Claude Code history'] !== '≥ ¥14.80') throw new Error(`usage by the rule: ${JSON.stringify(ruled)}`);
       await page.locator('#content-pane .content-tab.active .tab-close').click();
 
       // A new conversation (the first one holds comments that later steps expect).

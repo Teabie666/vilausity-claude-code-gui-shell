@@ -55,7 +55,7 @@ describe('parseProviderConfig pricing', () => {
     });
     assert.deepEqual(parsed?.pricing, {
       currency: 'CNY',
-      models: { 'deepseek-flash': { input: 2, output: 3, cacheRead: 0.2, cacheWrite: undefined } },
+      models: { 'deepseek-flash': { input: 2, output: 3, cacheRead: 0.2 } },
     });
   });
 
@@ -95,7 +95,7 @@ describe('parseProviderConfig pricing', () => {
       },
     });
     assert.deepEqual(parsed?.pricing?.models, {
-      good: { input: 1, output: 2, cacheRead: undefined, cacheWrite: undefined },
+      good: { input: 1, output: 2 },
     });
   });
 

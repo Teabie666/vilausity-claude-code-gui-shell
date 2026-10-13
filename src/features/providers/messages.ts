@@ -68,6 +68,63 @@ export const t = defineMessages('providers', {
   /** In an empty cache price field. */
   priceAsInput: 'As input',
   badPrices: 'Give {0} an input and an output price (numbers of 0 or more).',
+  pricesCopyPrompt: 'Copy Prompt for AI',
+  pricesCopyPromptTitle:
+    'Copies a request for these models’ prices, the ones that change by the call too (time of day, input length...), for an AI chat that can open web pages. Paste its answer back with Paste Answer.',
+  pricesPromptCopied: 'Prompt copied. Paste it into an AI chat that can open web pages, then paste its answer into Paste Answer.',
+  pricesPaste: 'Paste Answer...',
+  pricesExport: 'Copy Prices',
+  pricesExportTitle: 'Copies these prices and their rules as JSON, in the form Paste Answer reads',
+  pricesExported: 'Prices copied as JSON.',
+  pricesPasteHint: 'The AI’s answer: its JSON (with a code block and words around it is fine)',
+  pricesApply: 'Use These Prices',
+  pricesCancel: 'Cancel',
+  pricesProblems: 'This answer cannot be used:',
+  /** {0}: how many problems are not listed. */
+  pricesMoreProblems: '...and {0} more',
+  /** Above the preview of a pasted answer: the order of the four prices of each line. */
+  pricesPreviewOrder: 'Input / cache hit / cache write / output, per million tokens. These replace the prices above.',
+  /** {0}: a model, {1}: why the answer has no price for it. */
+  pricesMissing: 'No price for {0}: {1}',
+  /** {0}: models that have prices now and none in the answer. */
+  pricesDropped: 'Will have no price: {0}',
+  /** {0}: the pages, with the dates they were read. */
+  pricesSources: 'Prices read from {0}',
+  pricesRemoveRules: 'Remove Price Rules',
+  /** The first line of a model's rules on hover. */
+  pricesRulesTitle: 'Its prices change by the call (the first rule that holds; else the prices of the row):',
+  /** Monday to Sunday, short, comma-separated. */
+  weekdays: 'Mon,Tue,Wed,Thu,Fri,Sat,Sun',
+  /** {0} to {1}: dates. */
+  ruleDates: '{0} to {1}',
+  ruleSince: 'from {0}',
+  ruleUntil: 'until {0}',
+  /** {0}: a range of tokens ("> 32,000 ≤ 128,000"). */
+  ruleInput: 'input {0}',
+  ruleOutput: 'output {0}',
+  ruleThinking: 'thinking',
+  ruleNotThinking: 'not thinking',
+  problemCannotBrowse: 'The AI says it cannot open web pages: ask one that can.',
+  problemNoJson: 'There is no JSON in it.',
+  /** {0}: the parser's message. */
+  problemBadJson: 'Not valid JSON: {0}',
+  problemNotObject: 'not the right kind of value',
+  problemUnknownKey: 'unknown key "{0}"',
+  problemMissing: 'missing',
+  problemNotNumber: 'not a price (a number of 0 or more): {0}',
+  problemNotInteger: 'not a whole number of tokens: {0}',
+  problemNotString: 'not a text: {0}',
+  problemNotBoolean: 'not true or false: {0}',
+  problemBadCurrency: 'not CNY or USD: {0}',
+  problemBadZone: 'not a time zone: {0}',
+  problemZoneNeeded: 'days, times and dates need a "zone"',
+  problemBadDays: 'not days from 1 (Monday) to 7 (Sunday): {0}',
+  problemBadTime: 'not a time of day (HH:MM): {0}',
+  problemTimePair: '"from" and "to" go together, and differ',
+  problemBadDate: 'not a date (YYYY-MM-DD): {0}',
+  problemBadRange: 'no value fits: {0}',
+  problemEmptyWhen: 'no condition',
+  problemNoModels: 'no model has prices',
   headers: 'Request headers',
   headersHint: 'One per line: Name: value',
   timeout: 'Request timeout (ms)',

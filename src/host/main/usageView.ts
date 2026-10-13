@@ -6,7 +6,7 @@
 
 import type { UsageViewDto } from '../../platform/protocol';
 import type { Currency, ProviderPricing } from '../../platform/providers';
-import { costOf, totalCost, type ModelTokens, type UsageScopes } from '../../platform/usage';
+import { modelCost, totalCost, type ModelTokens, type UsageScopes } from '../../platform/usage';
 import { t } from './messages';
 
 const SCOPES = [
@@ -55,8 +55,10 @@ function scopeDetail(models: ModelTokens, pricing: ProviderPricing | undefined, 
         formatTokens(tokens.cacheWrite),
         String(tokens.calls),
       );
-      const price = pricing?.models[model];
-      return `${model}: ${counts} · ${price ? formatCost(costOf(tokens, price), currency) : t('usageNoPrice')}`;
+      const cost = modelCost(model, tokens, pricing);
+      // The calls its rules priced (the rest at its own prices).
+      const rules = Object.entries(tokens.rules ?? {}).map(([label, calls]) => `  ${t('usageRuleCalls', label, String(calls))}`);
+      return [`${model}: ${counts} · ${cost === undefined ? t('usageNoPrice') : formatCost(cost, currency)}`, ...rules].join('\n');
     });
   return lines.length > 0 ? lines.join('\n') : t('usageNone');
 }

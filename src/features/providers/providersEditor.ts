@@ -11,6 +11,17 @@ import type { NativeApi } from '../../core/native';
 import { Emitter, type Event } from '../../platform/event';
 import { DisposableStore } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
+import { getUiLanguage } from '../../platform/nls';
+import {
+  pricingJson,
+  pricingPrompt,
+  readPricingAnswer,
+  type PriceRule,
+  type PricingAnswer,
+  type PricingProblem,
+  type PricingSource,
+  type ProviderPricing,
+} from '../../platform/pricing';
 import type { ProvidersState } from '../../platform/protocol';
 import {
   modelKey,
@@ -26,6 +37,7 @@ import {
 } from '../../platform/providers';
 import { t } from './messages';
 import { presetById, URL_PLACEHOLDER } from './presets';
+import { pricesText, problemText, ruleText } from './pricingText';
 
 /** The providers as main last reported them, for every view of this window. */
 export class ProvidersModel {
@@ -109,6 +121,11 @@ interface Draft {
   currency: Currency;
   /** By model (`modelKey`). */
   prices: Record<string, PriceDraft>;
+  /** The price rules of the models, as a pasted answer had them; kept while a model has prices. */
+  rules: Record<string, readonly PriceRule[]>;
+  /** Where the pasted prices were read, and what they leave out. */
+  sources: readonly PricingSource[];
+  notes: readonly string[];
 }
 
 /** A model's prices as typed (per million tokens). */
@@ -123,6 +140,33 @@ const PRICE_FIELDS = ['input', 'cacheRead', 'cacheWrite', 'output'] as const;
 
 function priceText(value: number | undefined): string {
   return value === undefined ? '' : String(value);
+}
+
+function priceDraft(price: ModelPrice): PriceDraft {
+  return {
+    input: priceText(price.input),
+    output: priceText(price.output),
+    cacheRead: priceText(price.cacheRead),
+    cacheWrite: priceText(price.cacheWrite),
+  };
+}
+
+/** The prices to save: the typed ones, each with its model's rules, and where they came from. */
+export function draftPricing(
+  draft: Pick<Draft, 'currency' | 'rules' | 'sources' | 'notes'>,
+  models: Readonly<Record<string, ModelPrice>>,
+): ProviderPricing {
+  return {
+    currency: draft.currency,
+    models: Object.fromEntries(
+      Object.entries(models).map(([model, price]) => {
+        const rules = draft.rules[model];
+        return [model, rules && rules.length > 0 ? { ...price, rules } : price];
+      }),
+    ),
+    ...(draft.sources.length > 0 ? { sources: draft.sources } : {}),
+    ...(draft.notes.length > 0 ? { notes: draft.notes } : {}),
+  };
 }
 
 /**
@@ -192,18 +236,15 @@ function draftOf(provider: ProviderConfig): Draft {
       .join('\n'),
     color: provider.color ?? '',
     currency: provider.pricing?.currency ?? presetById(provider.preset)?.currency ?? 'USD',
-    prices: Object.fromEntries(
-      Object.entries(provider.pricing?.models ?? {}).map(([model, price]) => [
-        model,
-        {
-          input: priceText(price.input),
-          output: priceText(price.output),
-          cacheRead: priceText(price.cacheRead),
-          cacheWrite: priceText(price.cacheWrite),
-        },
-      ]),
-    ),
+    prices: Object.fromEntries(Object.entries(provider.pricing?.models ?? {}).map(([model, price]) => [model, priceDraft(price)])),
+    rules: rulesOf(provider.pricing),
+    sources: provider.pricing?.sources ?? [],
+    notes: provider.pricing?.notes ?? [],
   };
+}
+
+function rulesOf(pricing: ProviderPricing | undefined): Record<string, readonly PriceRule[]> {
+  return Object.fromEntries(Object.entries(pricing?.models ?? {}).flatMap(([model, price]) => (price.rules ? [[model, price.rules]] : [])));
 }
 
 /** `Name: value` or `NAME=value` lines; the lines that do not parse are reported. */
@@ -647,7 +688,7 @@ export class ProvidersEditorPane implements EditorPane {
       color:
         draft.color && draft.color !== providerAccentColor({ ...provider, type: draft.type, color: undefined }) ? draft.color : undefined,
       preset: provider.preset,
-      pricing: draft.type === 'compatible' ? { currency: draft.currency, models: prices.models } : provider.pricing,
+      pricing: draft.type === 'compatible' ? draftPricing(draft, prices.models) : provider.pricing,
     };
     const saved = await this.call(() => this.context.native.call('providers.save', { provider: config }));
     if (saved) {
@@ -800,6 +841,25 @@ export class ProvidersEditorPane implements EditorPane {
     if (url) {
       bar.append(this.button(t('officialPrices'), 'secondary', () => this.context.native.call('os.openExternal', { url })));
     }
+    // Prices that change by the call (the time of day, the input's length...) come from an AI
+    // chat: the prompt asks for them in the format a paste is read in.
+    const copyPrompt = this.button(t('pricesCopyPrompt'), 'secondary', () =>
+      this.copy(this.promptFor(provider, draft, wanted()), t('pricesPromptCopied')),
+    );
+    copyPrompt.title = t('pricesCopyPromptTitle');
+    copyPrompt.classList.add('providers-prices-prompt');
+    const pasteButton = this.button(t('pricesPaste'), 'secondary', () => {
+      paste.hidden = !paste.hidden;
+      if (!paste.hidden) {
+        pasted.focus();
+      }
+    });
+    pasteButton.classList.add('providers-prices-paste');
+    const exportButton = this.button(t('pricesExport'), 'secondary', () =>
+      this.copy(pricingJson(draftPricing(draft, parsePrices(draft.prices).models)), t('pricesExported')),
+    );
+    exportButton.title = t('pricesExportTitle');
+    bar.append(copyPrompt, pasteButton, exportButton);
     const table = doc.createElement('div');
     table.className = 'providers-prices-table';
     table.setAttribute('role', 'table');
@@ -815,24 +875,32 @@ export class ProvidersEditorPane implements EditorPane {
     }
     const empty = this.description(t('pricesNone'));
     table.append(header);
-    control.append(bar, table, empty);
+    const { panel: paste, text: pasted } = this.pastePanel(draft, () => {
+      changed();
+      this.renderForm();
+      this.revealPrices();
+    });
+    control.append(bar, table, empty, this.pricingInfo(draft, changed), paste);
 
+    // The models its fields name, it has prices for, or its conversations used.
+    const wanted = (): string[] => [
+      ...new Set(
+        [...Object.values(draft.models).map(modelKey), ...Object.keys(draft.prices), ...(this.usedModels.get(provider.id) ?? [])].filter(
+          (model) => model !== '',
+        ),
+      ),
+    ];
     const rows = new Map<string, HTMLElement>();
     const sync = (): void => {
-      const named = [
-        ...Object.values(draft.models).map(modelKey),
-        ...Object.keys(draft.prices),
-        ...(this.usedModels.get(provider.id) ?? []),
-      ].filter((model) => model !== '');
-      const wanted = [...new Set(named)];
+      const models = wanted();
       for (const [model, row] of rows) {
         const price = draft.prices[model];
-        if (!wanted.includes(model) && (!price || PRICE_FIELDS.every((field) => price[field].trim() === ''))) {
+        if (!models.includes(model) && (!price || PRICE_FIELDS.every((field) => price[field].trim() === ''))) {
           row.remove();
           rows.delete(model);
         }
       }
-      for (const model of wanted) {
+      for (const model of models) {
         if (!rows.has(model)) {
           const row = this.priceRow(model, draft, changed);
           rows.set(model, row);
@@ -864,6 +932,16 @@ export class ProvidersEditorPane implements EditorPane {
     name.setAttribute('role', 'cell');
     name.textContent = model;
     name.title = model;
+    const rules = draft.rules[model] ?? [];
+    if (rules.length > 0) {
+      // Its prices change by the call: the rules on hover, as pasted.
+      const badge = doc.createElement('span');
+      badge.className = 'providers-price-rules';
+      badge.textContent = `+${rules.length}`;
+      badge.title = [t('pricesRulesTitle'), ...rules.map((rule) => ruleText(rule, draft.currency))].join('\n');
+      name.title = `${model}\n${badge.title}`;
+      name.append(badge);
+    }
     row.append(name);
     for (const field of PRICE_FIELDS) {
       const placeholder = field === 'cacheRead' || field === 'cacheWrite' ? t('priceAsInput') : '';
@@ -883,6 +961,154 @@ export class ProvidersEditorPane implements EditorPane {
       row.append(input);
     }
     return row;
+  }
+
+  /** What to ask an AI chat for the provider's prices (`pricingPrompt`). */
+  private promptFor(provider: ProviderSummary, draft: Draft, models: readonly string[]): string {
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return pricingPrompt({
+      provider: draft.name.trim() || providerLabel(provider),
+      baseUrl: draft.baseUrl.trim() || undefined,
+      pricesUrl: presetById(provider.preset)?.prices,
+      currency: draft.currency,
+      models,
+      language: getUiLanguage() === 'zh-cn' ? 'Simplified Chinese' : 'English',
+      today,
+    });
+  }
+
+  private copy(text: string, done: string): void {
+    this.root.ownerDocument.defaultView?.navigator.clipboard.writeText(text).then(
+      () => this.toast('info', done),
+      (error: unknown) => this.context.logger.error('cannot copy to the clipboard', error),
+    );
+  }
+
+  /** Where the pasted prices were read and what they leave out; a way to drop their rules. */
+  private pricingInfo(draft: Draft, changed: () => void): HTMLElement {
+    const doc = this.root.ownerDocument;
+    const info = doc.createElement('div');
+    info.className = 'providers-pricing-info';
+    const ruled = Object.values(draft.rules).some((rules) => rules.length > 0);
+    info.hidden = !ruled && draft.sources.length === 0 && draft.notes.length === 0;
+    if (draft.sources.length > 0) {
+      const sources = draft.sources.map((source) => (source.checked ? `${source.url} (${source.checked})` : source.url));
+      info.append(this.description(t('pricesSources', sources.join(', '))));
+    }
+    for (const note of draft.notes) {
+      info.append(this.description(note));
+    }
+    if (ruled) {
+      const remove = this.button(t('pricesRemoveRules'), 'secondary', () => {
+        draft.rules = {};
+        draft.sources = [];
+        draft.notes = [];
+        changed();
+        this.renderForm();
+        this.revealPrices();
+      });
+      remove.classList.add('providers-prices-remove-rules');
+      info.append(remove);
+    }
+    return info;
+  }
+
+  /**
+   * The box an AI chat's answer is pasted into: read as it is typed (`readPricingAnswer`), its
+   * problems or a preview below, and only "Use These Prices" puts it into the form (which is
+   * then saved as any edit). It replaces the prices of every model.
+   */
+  private pastePanel(draft: Draft, applied: () => void): { panel: HTMLElement; text: HTMLTextAreaElement } {
+    const doc = this.root.ownerDocument;
+    const panel = doc.createElement('div');
+    panel.className = 'providers-pricing-paste';
+    panel.hidden = true;
+    const text = doc.createElement('textarea');
+    text.className = 'setting-input providers-textarea providers-pricing-text';
+    text.rows = 8;
+    text.spellcheck = false;
+    text.placeholder = t('pricesPasteHint');
+    const result = doc.createElement('div');
+    result.className = 'providers-pricing-result';
+    let answer: PricingAnswer | undefined;
+    const use = this.button(t('pricesApply'), 'primary', () => {
+      if (!answer) {
+        return;
+      }
+      const { pricing } = answer;
+      draft.currency = pricing.currency;
+      draft.prices = Object.fromEntries(Object.entries(pricing.models).map(([model, price]) => [model, priceDraft(price)]));
+      draft.rules = rulesOf(pricing);
+      draft.sources = pricing.sources ?? [];
+      draft.notes = pricing.notes ?? [];
+      applied();
+    });
+    use.classList.add('providers-pricing-apply');
+    const cancel = this.button(t('pricesCancel'), 'secondary', () => {
+      text.value = '';
+      check();
+      panel.hidden = true;
+    });
+    const actions = doc.createElement('div');
+    actions.className = 'providers-prices-bar';
+    actions.append(use, cancel);
+    const check = (): void => {
+      const read = text.value.trim() === '' ? undefined : readPricingAnswer(text.value);
+      answer = read?.answer;
+      use.disabled = !answer;
+      result.replaceChildren(...(read ? this.pastePreview(read, draft) : []));
+    };
+    text.addEventListener('input', check);
+    check();
+    panel.append(text, result, actions);
+    return { panel, text };
+  }
+
+  private pastePreview(read: { answer: PricingAnswer | undefined; problems: PricingProblem[] }, draft: Draft): HTMLElement[] {
+    const doc = this.root.ownerDocument;
+    const line = (className: string, content: string, title?: string): HTMLElement => {
+      const element = doc.createElement('div');
+      element.className = className;
+      element.textContent = content;
+      if (title) {
+        element.title = title;
+      }
+      return element;
+    };
+    const { answer } = read;
+    if (!answer) {
+      const shown = read.problems.slice(0, 12).map((problem) => line('providers-pricing-problem', problemText(problem)));
+      const more = read.problems.length - shown.length;
+      return [
+        line('setting-validation', t('pricesProblems')),
+        ...shown,
+        ...(more > 0 ? [line('providers-pricing-problem', t('pricesMoreProblems', String(more)))] : []),
+      ];
+    }
+    const { pricing } = answer;
+    const elements = [line('setting-description', t('pricesPreviewOrder'))];
+    for (const [model, price] of Object.entries(pricing.models)) {
+      elements.push(line('providers-pricing-model', `${model}: ${pricesText(price, pricing.currency)}`, answer.evidence[model]));
+      for (const rule of price.rules ?? []) {
+        elements.push(line('providers-pricing-rule', ruleText(rule, pricing.currency)));
+      }
+    }
+    for (const [model, reason] of Object.entries(answer.missing)) {
+      elements.push(line('providers-pricing-problem', t('pricesMissing', model, reason)));
+    }
+    const dropped = Object.keys(parsePrices(draft.prices).models).filter((model) => !(model in pricing.models));
+    if (dropped.length > 0) {
+      elements.push(line('providers-pricing-problem', t('pricesDropped', dropped.join(', '))));
+    }
+    if (pricing.sources) {
+      const sources = pricing.sources.map((source) => (source.checked ? `${source.url} (${source.checked})` : source.url));
+      elements.push(line('setting-description', t('pricesSources', sources.join(', '))));
+    }
+    for (const note of pricing.notes ?? []) {
+      elements.push(line('setting-description', note));
+    }
+    return elements;
   }
 
   /** The accent: picked, or the vendor's (or none: the theme's own) until one is. */

@@ -1525,8 +1525,56 @@ body.resizing {
 
 .providers-prices-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+/* A model whose prices change by the call: how many rules it has. */
+.providers-price-rules {
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--vscode-badge-background);
+  border-radius: var(--vscode-cornerRadius-small);
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-font-family);
+  font-size: 11px;
+}
+
+.providers-pricing-info,
+.providers-pricing-paste,
+.providers-pricing-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.providers-pricing-info[hidden],
+.providers-pricing-paste[hidden] {
+  display: none;
+}
+
+.providers-pricing-text {
+  width: 100%;
+  max-width: none;
+}
+
+.providers-pricing-model,
+.providers-pricing-rule,
+.providers-pricing-problem {
+  font-family: var(--vscode-editor-font-family);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.providers-pricing-rule {
+  padding-left: 16px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.providers-pricing-problem {
+  color: var(--vscode-errorForeground);
 }
 
 .providers-prices-bar > .setting-select {

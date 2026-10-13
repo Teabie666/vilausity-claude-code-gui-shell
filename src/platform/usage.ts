@@ -9,6 +9,7 @@
  * down to the one provider whose models include the call's model, when there is exactly one.
  */
 
+import { costAt, ruleFor, type Prices } from './pricing';
 import { modelKey, type ModelPrice, type ProviderConfig, type ProviderPricing, type ProviderType } from './providers';
 
 /** The tokens of one API call (or of many, added up). */
@@ -27,6 +28,8 @@ export interface UsageCall extends TokenCounts {
   readonly at: number;
   /** The model as the transcript names it. */
   readonly model: string;
+  /** The reply thought (some APIs price thinking apart). */
+  readonly thinking?: boolean;
 }
 
 /** A Claude process of a session ran under `provider` from `at` on (and made calls). */
@@ -45,8 +48,15 @@ export interface AttributedProvider {
   readonly models: readonly string[];
 }
 
+/** A model's tokens and calls; what they cost when it has a price, and how many calls each of its rules priced. */
+export interface ModelUsage extends TokenCounts {
+  readonly calls: number;
+  readonly cost?: number;
+  readonly rules?: Readonly<Record<string, number>>;
+}
+
 /** The tokens by model (`modelKey`), and how many calls. */
-export type ModelTokens = Record<string, TokenCounts & { readonly calls: number }>;
+export type ModelTokens = Record<string, ModelUsage>;
 
 export const NO_TOKENS: TokenCounts = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
@@ -132,6 +142,8 @@ export interface UsageQuery {
   readonly sessionId?: string;
   /** Whether a session's folder is the one asked about. */
   readonly inFolder?: (folder: string) => boolean;
+  /** The provider's prices: each call priced by its own rule. */
+  readonly pricing?: ProviderPricing;
 }
 
 /** The tokens of the calls that ran under `query.provider`, by model, in the three scopes. */
@@ -141,9 +153,9 @@ export function summarizeUsage(
   providers: readonly AttributedProvider[],
   query: UsageQuery,
 ): UsageScopes {
-  const session: Record<string, TokenCounts & { calls: number }> = {};
-  const folder: Record<string, TokenCounts & { calls: number }> = {};
-  const all: Record<string, TokenCounts & { calls: number }> = {};
+  const session: ModelTokens = {};
+  const folder: ModelTokens = {};
+  const all: ModelTokens = {};
   for (const usage of sessions) {
     const tags = tagsOf(usage.sessionId);
     const isSession = usage.sessionId === query.sessionId;
@@ -152,12 +164,13 @@ export function summarizeUsage(
       if (attributeCall(call, tags, providers) !== query.provider) {
         continue;
       }
-      addTokens(all, call);
+      const priced = priceCall(call, query.pricing);
+      addTokens(all, call, priced);
       if (inFolder) {
-        addTokens(folder, call);
+        addTokens(folder, call, priced);
       }
       if (isSession) {
-        addTokens(session, call);
+        addTokens(session, call, priced);
       }
     }
   }
@@ -197,28 +210,47 @@ export function lastProvider(
   return latest ? attributeCall(latest, tags, providers) : tags.at(-1)?.provider;
 }
 
-/** Adds a call's tokens to the totals of its model. */
-export function addTokens(totals: Record<string, TokenCounts & { calls: number }>, call: UsageCall): void {
+/** What a call cost and the label of the rule that priced it; undefined when its model has no price. */
+export function priceCall(call: UsageCall, pricing: ProviderPricing | undefined): { cost: number; rule?: string } | undefined {
+  const price = pricing?.models[modelKey(call.model)];
+  if (!price) {
+    return undefined;
+  }
+  const rule = ruleFor(price, call);
+  return { cost: costAt(call, rule ?? price), rule: rule?.label };
+}
+
+/** Adds a call's tokens (and what it cost, `priceCall`) to the totals of its model. */
+export function addTokens(totals: ModelTokens, call: UsageCall, priced?: { cost: number; rule?: string }): void {
   const model = modelKey(call.model);
   const sum = totals[model] ?? { ...NO_TOKENS, calls: 0 };
+  const rules = priced?.rule === undefined ? sum.rules : { ...sum.rules, [priced.rule]: (sum.rules?.[priced.rule] ?? 0) + 1 };
   totals[model] = {
     input: sum.input + call.input,
     output: sum.output + call.output,
     cacheRead: sum.cacheRead + call.cacheRead,
     cacheWrite: sum.cacheWrite + call.cacheWrite,
     calls: sum.calls + 1,
+    ...(priced || sum.cost !== undefined ? { cost: (sum.cost ?? 0) + (priced?.cost ?? 0) } : {}),
+    ...(rules ? { rules } : {}),
   };
 }
 
-/** What tokens cost at a model's price (per million tokens); the cache prices default to the input price. */
-export function costOf(tokens: TokenCounts, price: ModelPrice): number {
-  return (
-    (tokens.input * price.input +
-      tokens.output * price.output +
-      tokens.cacheRead * (price.cacheRead ?? price.input) +
-      tokens.cacheWrite * (price.cacheWrite ?? price.input)) /
-    1e6
-  );
+/** What tokens cost at a model's own prices (per million tokens); the cache prices default to the input price. */
+export function costOf(tokens: TokenCounts, price: Prices): number {
+  return costAt(tokens, price);
+}
+
+/**
+ * What a model's tokens cost: as `summarizeUsage` priced its calls (by their rules), else at
+ * the model's own prices; undefined when it has none.
+ */
+export function modelCost(model: string, tokens: ModelUsage, pricing: ProviderPricing | undefined): number | undefined {
+  const price: ModelPrice | undefined = pricing?.models[model];
+  if (!price) {
+    return undefined;
+  }
+  return tokens.cost ?? costOf(tokens, price);
 }
 
 /** What the models' tokens cost, and the models that have no price (their tokens cost nothing here). */
@@ -226,11 +258,11 @@ export function totalCost(models: ModelTokens, pricing: ProviderPricing | undefi
   let cost = 0;
   const unpriced: string[] = [];
   for (const [model, tokens] of Object.entries(models)) {
-    const price = pricing?.models[model];
-    if (price) {
-      cost += costOf(tokens, price);
-    } else {
+    const priced = modelCost(model, tokens, pricing);
+    if (priced === undefined) {
       unpriced.push(model);
+    } else {
+      cost += priced;
     }
   }
   return { cost, unpriced: unpriced.sort() };

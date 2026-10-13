@@ -23,6 +23,8 @@ export const t = defineMessages('main', {
   /** A row's tooltip, one line per model ({0} input tokens, {1} output, {2} cache reads, {3} cache writes, {4} calls). */
   usageTokens: '{0} input, {1} output, {2} cache read, {3} cache write ({4} calls)',
   usageNoPrice: 'no price',
+  /** Under a model's line: how many of its calls a price rule priced ({0}: the rule's label, {1}: calls). */
+  usageRuleCalls: '{0}: {1} calls',
   usageNone: 'Nothing yet',
   /** {0}: model names. */
   usageUnpriced: 'No price for {0}',

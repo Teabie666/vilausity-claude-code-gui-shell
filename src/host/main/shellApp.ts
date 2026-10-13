@@ -490,6 +490,7 @@ export class ShellApp extends Disposable implements WindowHost {
       provider: provider.id,
       sessionId,
       folder: window.folder,
+      pricing: provider.pricing,
     });
     return usageView(scopes, provider.name || provider.id, provider.pricing, sessionId !== undefined);
   }

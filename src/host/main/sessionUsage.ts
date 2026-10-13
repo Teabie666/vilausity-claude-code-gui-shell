@@ -15,6 +15,7 @@
 
 import { open, readdir, stat } from 'node:fs/promises';
 import * as path from 'node:path';
+import type { ProviderPricing } from '../../platform/pricing';
 import type { AttributedProvider, SessionTag, SessionUsage, UsageCall, UsageScopes } from '../../platform/usage';
 import { lastProvider, modelsUsed, summarizeUsage } from '../../platform/usage';
 import { normalizeForCompare } from '../node/paths';
@@ -36,6 +37,8 @@ export type UsageRequest =
       readonly provider: string;
       readonly sessionId?: string;
       readonly folder?: string;
+      /** The provider's prices, for each call to be priced by its own rule. */
+      readonly pricing?: ProviderPricing;
     }
   /** The models of the calls that ran under `provider`. */
   | { readonly kind: 'models'; readonly providers: readonly AttributedProvider[]; readonly provider: string }
@@ -77,7 +80,7 @@ export function parseUsageLines(text: string, calls: Map<string, UsageCall>): st
     if (!isRecord(entry) || entry.type !== 'assistant' || !isRecord(entry.message)) {
       continue;
     }
-    const { id, model, usage } = entry.message;
+    const { id, model, usage, content } = entry.message;
     const at = typeof entry.timestamp === 'string' ? Date.parse(entry.timestamp) : Number.NaN;
     if (
       typeof id !== 'string' ||
@@ -89,9 +92,14 @@ export function parseUsageLines(text: string, calls: Map<string, UsageCall>): st
     ) {
       continue;
     }
+    // One line a content block: the reply thought when any of its lines is a thinking block.
+    const thought =
+      Array.isArray(content) &&
+      content.some((block) => isRecord(block) && (block.type === 'thinking' || block.type === 'redacted_thinking'));
     calls.set(id, {
       at,
       model,
+      ...(thought || calls.get(id)?.thinking ? { thinking: true } : {}),
       input: tokens(usage.input_tokens),
       output: tokens(usage.output_tokens),
       cacheRead: tokens(usage.cache_read_input_tokens),
@@ -183,6 +191,7 @@ export class UsageIndex {
           provider: request.provider,
           sessionId: request.sessionId,
           inFolder: folder === undefined ? undefined : (candidate) => normalizeForCompare(candidate) === folder,
+          pricing: request.pricing,
         });
       }
       case 'models':
