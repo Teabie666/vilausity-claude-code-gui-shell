@@ -160,6 +160,9 @@ export function providerIdFor(name: string, taken: readonly string[]): string {
   return id;
 }
 
+/** A compatible API's ANTHROPIC_API_KEY while it has no key: anything but empty (`providerEnvironment`). */
+export const NO_KEY = 'vilaus-no-key';
+
 /** The Claude processes' variables for a provider, with its key. The subscription sets none. */
 export function providerEnvironment(provider: ProviderConfig, key: string | undefined): Record<string, string> {
   const env: Record<string, string> = {};
@@ -179,9 +182,16 @@ export function providerEnvironment(provider: ProviderConfig, key: string | unde
     env.CLAUDE_CODE_USE_FOUNDRY = '1';
   } else {
     set('ANTHROPIC_BASE_URL', provider.baseUrl);
-    const bearer = (provider.auth ?? (provider.type === 'compatible' ? 'bearer' : 'apiKey')) === 'bearer';
-    // The other one is emptied: left over in the user's environment, it would win over ours.
-    env.ANTHROPIC_API_KEY = bearer ? '' : (key ?? '');
+    const compatible = provider.type === 'compatible';
+    const bearer = (provider.auth ?? (compatible ? 'bearer' : 'apiKey')) === 'bearer';
+    // With no ANTHROPIC_API_KEY it takes (empty, or not approved: see the headers below), the CLI
+    // sends the Anthropic API key of its own login (Claude Code signed in with a Console account)
+    // as x-api-key, to whatever this base URL is. So a compatible API always gets one: its own
+    // key, next to the bearer token too (both go to its own server), or a placeholder while it
+    // has none. An Anthropic API provider falling back to the login stays with Anthropic.
+    const apiKey = key || (compatible ? NO_KEY : '');
+    // Either is set here: left over in the user's environment, it would win over ours.
+    env.ANTHROPIC_API_KEY = bearer && !compatible ? '' : apiKey;
     env.ANTHROPIC_AUTH_TOKEN = bearer ? (key ?? '') : '';
   }
   const models = provider.models ?? {};
@@ -192,6 +202,12 @@ export function providerEnvironment(provider: ProviderConfig, key: string | unde
   set('ANTHROPIC_DEFAULT_FABLE_MODEL', models.fable);
   set('CLAUDE_CODE_SUBAGENT_MODEL', models.subagent);
   const headers = Object.entries(provider.headers ?? {});
+  // Under the extension (entry point claude-vscode) the CLI takes an ANTHROPIC_API_KEY only once
+  // the user approved it in its own terminal UI; else it sends its login's key as x-api-key all
+  // the same. A custom header wins over the SDK's own (seen with CLI 2.1.282 and 2.1.296).
+  if (provider.type === 'compatible' && !headers.some(([name]) => name.toLowerCase() === 'x-api-key')) {
+    headers.push(['x-api-key', key || NO_KEY]);
+  }
   if (headers.length > 0) {
     env.ANTHROPIC_CUSTOM_HEADERS = headers.map(([name, value]) => `${name}: ${value}`).join('\n');
   }

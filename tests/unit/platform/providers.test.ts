@@ -4,6 +4,7 @@ import {
   DISABLE_LOGIN_SETTING,
   ENVIRONMENT_SETTING,
   parseProviderConfig,
+  NO_KEY,
   providerEnvironment,
   providerIdFor,
   providerSettingsOverlay,
@@ -26,18 +27,34 @@ describe('providerEnvironment', () => {
     assert.deepEqual(providerEnvironment(SUBSCRIPTION_PROVIDER, undefined), {});
   });
 
-  test('a compatible API: base URL, the key as a bearer token, models, limits, no login', () => {
+  test('a compatible API: base URL, the key as a bearer token (and x-api-key), models, limits, no login', () => {
     assert.deepEqual(providerEnvironment(compatible, 'sk-1'), {
       ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
-      ANTHROPIC_API_KEY: '',
+      ANTHROPIC_API_KEY: 'sk-1',
       ANTHROPIC_AUTH_TOKEN: 'sk-1',
       ANTHROPIC_MODEL: 'deepseek-flash[1m]',
       ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-flash',
       CLAUDE_CODE_SUBAGENT_MODEL: 'deepseek-flash',
+      ANTHROPIC_CUSTOM_HEADERS: 'x-api-key: sk-1',
       API_TIMEOUT_MS: '600000',
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
       CLAUDE_CODE_SKIP_AUTH_LOGIN: '1',
     });
+  });
+
+  test("a compatible API never leaves ANTHROPIC_API_KEY empty: the CLI would send its login's Anthropic key there", () => {
+    assert.equal(providerEnvironment(compatible, undefined).ANTHROPIC_API_KEY, NO_KEY);
+    const apiKey = providerEnvironment({ ...compatible, auth: 'apiKey' }, undefined);
+    assert.equal(apiKey.ANTHROPIC_API_KEY, NO_KEY);
+    assert.equal(apiKey.ANTHROPIC_AUTH_TOKEN, '');
+    assert.equal(providerEnvironment({ ...compatible, auth: 'apiKey' }, 'k').ANTHROPIC_API_KEY, 'k');
+  });
+
+  test("a compatible API's own key goes out as an x-api-key header, which wins over the login's (an x-api-key of its own stays)", () => {
+    assert.equal(providerEnvironment(compatible, undefined).ANTHROPIC_CUSTOM_HEADERS, `x-api-key: ${NO_KEY}`);
+    assert.equal(providerEnvironment({ ...compatible, headers: { 'X-Api-Key': 'mine' } }, 'k').ANTHROPIC_CUSTOM_HEADERS, 'X-Api-Key: mine');
+    const anthropic = providerEnvironment({ id: 'anthropic', name: 'Anthropic', type: 'anthropic-api' }, 'sk-ant');
+    assert.equal(anthropic.ANTHROPIC_CUSTOM_HEADERS, undefined);
   });
 
   test("Anthropic's API sends the key as x-api-key and empties the bearer token", () => {
@@ -52,7 +69,7 @@ describe('providerEnvironment', () => {
       { ...compatible, headers: { 'X-A': '1', 'X-B': 'two' }, env: { API_TIMEOUT_MS: '5', FOO: 'bar' } },
       'k',
     );
-    assert.equal(env.ANTHROPIC_CUSTOM_HEADERS, 'X-A: 1\nX-B: two');
+    assert.equal(env.ANTHROPIC_CUSTOM_HEADERS, 'X-A: 1\nX-B: two\nx-api-key: k');
     assert.equal(env.API_TIMEOUT_MS, '5');
     assert.equal(env.FOO, 'bar');
   });

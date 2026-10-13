@@ -1597,7 +1597,8 @@ await step(
       );
       if (request.headers.authorization !== 'Bearer test-key-123') throw new Error(`authorization: ${request.headers.authorization}`);
       // Told at the end, once the conversation is closed: the later steps expect it closed.
-      const apiKeyToo = request.headers['x-api-key'] !== undefined;
+      // As x-api-key too, only its own key: never the Anthropic key of Claude Code's own login.
+      const otherKey = request.headers['x-api-key'] !== undefined && request.headers['x-api-key'] !== 'test-key-123';
       // Its session is marked with the mock's color in the list; the toggle by the filters keeps
       // only the window's provider's sessions.
       const mark = list.locator('button[id^="sessions-list-row-"] .vilaus-provider-mark[title="Mock API"]');
@@ -1624,8 +1625,7 @@ await step(
       if ((await list.locator('.sectionLabel_djirOA', { hasText: 'Account & usage' }).count()) > 0) {
         throw new Error("the extension's own usage shows");
       }
-      // The CLI adds a key of its own login (an Anthropic API key) when it has one: see ROADMAP.
-      if (apiKeyToo) throw new Error('an x-api-key went out too (is Claude Code signed in with an API key?)');
+      if (otherKey) throw new Error('another key went out as x-api-key');
       return `${mock.requests.length} requests at the mock; ${request.method} ${request.url}; logo ${await page.evaluate(() => window.logoStates.join(' > '))}; usage ${JSON.stringify(shown)}`;
     } finally {
       mock.server.close();
