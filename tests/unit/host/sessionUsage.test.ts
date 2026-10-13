@@ -4,9 +4,9 @@ import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSyn
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { parseUsageLines, readUsageFile, UsageIndex } from '../../../src/host/main/sessionUsage';
+import { newUsageLines, parseUsageLines, readUsageFile, UsageIndex } from '../../../src/host/main/sessionUsage';
 import { parseTags, SessionTagReader, SessionTagWriter, tagLine } from '../../../src/host/main/sessionProviders';
-import type { AttributedProvider, UsageCall } from '../../../src/platform/usage';
+import type { AttributedProvider } from '../../../src/platform/usage';
 
 const FOLDER = 'C:\\work\\shop';
 const OTHER_FOLDER = 'C:\\work\\other';
@@ -68,7 +68,8 @@ function writeSession(root: string, folder: string, id: string, lines: readonly 
 
 describe('parseUsageLines', () => {
   test('counts only assistant lines with a model, a usage and a valid timestamp', () => {
-    const calls = new Map<string, UsageCall>();
+    const lines = newUsageLines();
+    const calls = lines.calls;
     parseUsageLines(
       [
         callLine(ID_A, { id: 'msg-ok', model: 'deepseek-flash', input: 100 }),
@@ -84,7 +85,7 @@ describe('parseUsageLines', () => {
         }),
         line({ type: 'assistant', cwd: FOLDER, message: { id: 'msg-no-time', model: 'deepseek-flash', usage: { input_tokens: 1 } } }),
       ].join('\n'),
-      calls,
+      lines,
     );
     assert.equal(calls.size, 1);
     assert.deepEqual(calls.get('msg-ok'), {
@@ -99,16 +100,17 @@ describe('parseUsageLines', () => {
   });
 
   test('the last line of a reply replaces the earlier ones, and the first line sets the folder', () => {
-    const calls = new Map<string, UsageCall>();
-    const cwd = parseUsageLines(
+    const lines = newUsageLines();
+    const calls = lines.calls;
+    parseUsageLines(
       [
         callLine(ID_A, { id: 'msg-1', model: 'deepseek-flash', input: 100, output: 20, cacheRead: 300 }),
         callLine(ID_A, { id: 'msg-1', model: 'deepseek-flash', input: 5, output: 6 }),
         callLine(ID_A, { id: 'msg-2', model: 'deepseek-flash', input: 7, cwd: OTHER_FOLDER }),
       ].join('\n'),
-      calls,
+      lines,
     );
-    assert.equal(cwd, FOLDER);
+    assert.equal(lines.cwd, FOLDER);
     assert.equal(calls.size, 2);
     assert.deepEqual(calls.get('msg-1'), {
       id: 'msg-1',
@@ -131,7 +133,8 @@ describe('parseUsageLines', () => {
   });
 
   test('negative or non-numeric token counts become zero', () => {
-    const calls = new Map<string, UsageCall>();
+    const lines = newUsageLines();
+    const calls = lines.calls;
     parseUsageLines(
       [
         line({
@@ -145,7 +148,7 @@ describe('parseUsageLines', () => {
           },
         }),
       ].join('\n'),
-      calls,
+      lines,
     );
     assert.deepEqual(calls.get('msg-1'), {
       id: 'msg-1',
@@ -159,9 +162,51 @@ describe('parseUsageLines', () => {
   });
 
   test('a synthetic reply is not counted', () => {
-    const calls = new Map<string, UsageCall>();
-    parseUsageLines([callLine(ID_A, { id: 'msg-1', model: '<synthetic>', input: 10 })].join('\n'), calls);
+    const lines = newUsageLines();
+    const calls = lines.calls;
+    parseUsageLines([callLine(ID_A, { id: 'msg-1', model: '<synthetic>', input: 10 })].join('\n'), lines);
     assert.equal(calls.size, 0);
+  });
+
+  test("keeps Claude Code's own counts (cost-state lines), at the time of the line before, by model", () => {
+    const lines = newUsageLines();
+    const costState = (models: Record<string, [number, number, number]>) =>
+      line({
+        type: 'cost-state',
+        sessionId: ID_A,
+        startTime: 0,
+        totalDuration: 5,
+        modelUsage: Object.fromEntries(
+          Object.entries(models).map(([model, [input, output, cacheRead]]) => [
+            model,
+            { inputTokens: input, outputTokens: output, cacheReadInputTokens: cacheRead, cacheCreationInputTokens: 0, costUSD: 1 },
+          ]),
+        ),
+      });
+    parseUsageLines(
+      [
+        // None before the first line with a time: when it was written is not known.
+        costState({ 'deepseek-flash': [1, 1, 1] }),
+        callLine(ID_A, { id: 'msg-1', model: 'deepseek-flash', input: 100, at: '2026-10-13T08:00:00.000Z' }),
+        // A tool result with a timestamp of its own, after the line's (as Claude Code writes them).
+        line({ type: 'user', timestamp: '2026-10-13T08:01:00.000Z', toolUseResult: { timestamp: '2027-01-01T00:00:00.000Z' } }),
+        // A line written out of order does not take the time back.
+        line({ type: 'system', subtype: 'turn_duration', timestamp: '2026-10-13T07:00:00.000Z' }),
+        costState({ 'deepseek-flash[1m]': [100, 50, 0], 'deepseek-flash': [10, 5, 0], 'claude-haiku-4-5': [3, 2, 0] }),
+      ].join('\n'),
+      lines,
+    );
+    parseUsageLines(costState({ 'deepseek-flash': [200, 60, 0] }), lines);
+    assert.deepEqual(lines.snapshots, [
+      {
+        at: Date.parse('2026-10-13T08:01:00.000Z'),
+        models: {
+          'deepseek-flash': { input: 110, output: 55, cacheRead: 0, cacheWrite: 0 },
+          'claude-haiku-4-5': { input: 3, output: 2, cacheRead: 0, cacheWrite: 0 },
+        },
+      },
+      { at: Date.parse('2026-10-13T08:01:00.000Z'), models: { 'deepseek-flash': { input: 200, output: 60, cacheRead: 0, cacheWrite: 0 } } },
+    ]);
   });
 });
 
@@ -182,7 +227,7 @@ describe('readUsageFile', () => {
       writeFileSync(file, callLine(ID_A, { id: 'msg-1', model: 'deepseek-flash', input: 100 }) + '\n');
       const first = await readUsageFile(file, undefined);
       assert.ok(first);
-      assert.equal(first.calls.size, 1);
+      assert.equal(first.lines.calls.size, 1);
       assert.equal(first.offset, first.size);
 
       assert.equal(await readUsageFile(file, first), first);
@@ -193,9 +238,9 @@ describe('readUsageFile', () => {
       const second = await readUsageFile(file, first);
       assert.ok(second);
       assert.notEqual(second, first);
-      assert.equal(second.calls.size, 2);
-      assert.ok(second.calls.has('msg-1'));
-      assert.ok(second.calls.has('msg-2'));
+      assert.equal(second.lines.calls.size, 2);
+      assert.ok(second.lines.calls.has('msg-1'));
+      assert.ok(second.lines.calls.has('msg-2'));
       assert.equal(second.offset, second.size);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -214,16 +259,16 @@ describe('readUsageFile', () => {
       utimesSync(file, new Date(Date.now() + 60_000), new Date(Date.now() + 60_000));
       const partial = await readUsageFile(file, first);
       assert.ok(partial);
-      assert.equal(partial.calls.size, 1);
-      assert.ok(!partial.calls.has('msg-2'));
+      assert.equal(partial.lines.calls.size, 1);
+      assert.ok(!partial.lines.calls.has('msg-2'));
       assert.ok(partial.offset < partial.size);
 
       appendFileSync(file, '\n');
       utimesSync(file, new Date(Date.now() + 120_000), new Date(Date.now() + 120_000));
       const done = await readUsageFile(file, partial);
       assert.ok(done);
-      assert.equal(done.calls.size, 2);
-      assert.ok(done.calls.has('msg-2'));
+      assert.equal(done.lines.calls.size, 2);
+      assert.ok(done.lines.calls.has('msg-2'));
       assert.equal(done.offset, done.size);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -243,15 +288,15 @@ describe('readUsageFile', () => {
       );
       const first = await readUsageFile(file, undefined);
       assert.ok(first);
-      assert.equal(first.calls.size, 2);
+      assert.equal(first.lines.calls.size, 2);
 
       writeFileSync(file, callLine(ID_A, { id: 'msg-3', model: 'deepseek-flash', input: 300 }) + '\n');
       utimesSync(file, new Date(Date.now() + 60_000), new Date(Date.now() + 60_000));
       const second = await readUsageFile(file, first);
       assert.ok(second);
-      assert.equal(second.calls.size, 1);
-      assert.ok(second.calls.has('msg-3'));
-      assert.ok(!second.calls.has('msg-1'));
+      assert.equal(second.lines.calls.size, 1);
+      assert.ok(second.lines.calls.has('msg-3'));
+      assert.ok(!second.lines.calls.has('msg-1'));
       assert.equal(second.offset, second.size);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -266,14 +311,14 @@ describe('readUsageFile', () => {
       writeFileSync(file, callLine(ID_A, { id: 'msg-1', model: 'deepseek-flash', input: 100, cwd }) + '\n');
       const first = await readUsageFile(file, undefined);
       assert.ok(first);
-      assert.equal(first.cwd, cwd);
+      assert.equal(first.lines.cwd, cwd);
 
       appendFileSync(file, callLine(ID_A, { id: 'msg-2', model: 'deepseek-flash', input: 200, cwd }) + '\n');
       utimesSync(file, new Date(Date.now() + 60_000), new Date(Date.now() + 60_000));
       const second = await readUsageFile(file, first);
       assert.ok(second);
-      assert.equal(second.calls.size, 2);
-      assert.equal(second.cwd, cwd);
+      assert.equal(second.lines.calls.size, 2);
+      assert.equal(second.lines.cwd, cwd);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -419,6 +464,61 @@ describe('UsageIndex', () => {
       assert.equal(flash?.calls, 2);
       assert.ok(Math.abs((flash?.cost ?? 0) - (150 * 1 + 30 * 2 + 300 * 0.1) / 1e6) < 1e-12);
       assert.deepEqual(await index.answer({ kind: 'session' as const, providers, sessionId: ID_D, pricing }), {});
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('a forked conversation counts only its own calls: the copied ones belong to the older transcript', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'vilaus-usage-'));
+    try {
+      const original = callLine(ID_B, { id: 'msg-old', model: 'deepseek-flash', input: 100 });
+      writeSession(root, 'shop', ID_B, [original]);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Listed first (its id sorts first), made later: the fork.
+      writeSession(root, 'shop', ID_A, [original, callLine(ID_A, { id: 'msg-new', model: 'deepseek-flash', input: 10 })]);
+      const index = new UsageIndex(root, path.join(root, 'tags.jsonl'));
+      const fork = await index.answer({ kind: 'summary' as const, providers, provider: 'deepseek', sessionId: ID_A });
+      assert.equal(fork.session['deepseek-flash']?.input, 10);
+      assert.equal(fork.all['deepseek-flash']?.input, 110);
+      const old = await index.answer({ kind: 'summary' as const, providers, provider: 'deepseek', sessionId: ID_B });
+      assert.equal(old.session['deepseek-flash']?.input, 100);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("Claude Code's own counts add the calls the transcripts leave out, its subagents' calls counted in", async () => {
+    const { root, tagsFile } = makeProject();
+    const ledgerFile = path.join(root, 'usage-ledger.jsonl');
+    try {
+      // Session A's calls (its subagent's too): 150 in, 30 out, 300 cache reads. Its process
+      // counted 1000 more output (compacting the conversation) and a title's 20 in, 5 out.
+      appendFileSync(
+        path.join(root, 'shop', `${ID_A}.jsonl`),
+        line({
+          type: 'cost-state',
+          sessionId: ID_A,
+          startTime: 0,
+          totalDuration: 1,
+          modelUsage: {
+            'deepseek-flash[1m]': { inputTokens: 150, outputTokens: 1030, cacheReadInputTokens: 300, cacheCreationInputTokens: 0 },
+            'deepseek-flash': { inputTokens: 20, outputTokens: 5, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+          },
+        }) + '\n',
+      );
+      const index = new UsageIndex(root, tagsFile, ledgerFile);
+      const summary = await index.answer({ kind: 'summary' as const, providers, provider: 'deepseek', sessionId: ID_A });
+      assert.deepEqual(summary.session['deepseek-flash'], {
+        input: 170,
+        output: 1035,
+        cacheRead: 300,
+        cacheWrite: 0,
+        calls: 2,
+        unrecorded: { input: 20, output: 1005, cacheRead: 0, cacheWrite: 0 },
+      });
+      // Kept in the ledger with the rest.
+      assert.equal((await index.answer({ kind: 'total' as const, providers, provider: 'deepseek' }))['deepseek-flash']?.output, 1038);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

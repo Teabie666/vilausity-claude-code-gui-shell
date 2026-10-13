@@ -7,8 +7,17 @@
  * `message.{id, model, usage.{input_tokens, output_tokens, cache_read_input_tokens,
  * cache_creation_input_tokens}}` and `timestamp`. The CLI writes one line per content block
  * of a reply, each with the reply's usage, so calls are told apart by `message.id`. A
- * subagent's calls are in `<session id>/subagents/*.jsonl`. Calls the CLI makes for itself
- * (titles...) are not in the transcripts; they are a small share and not counted.
+ * subagent's calls are in `<session id>/subagents/*.jsonl`.
+ *
+ * Calls the CLI makes for itself (a title, compacting the conversation, WebFetch's summary of a
+ * page) are not in the transcripts, but its own running count is: the `cost-state` line each
+ * process writes as a turn ends, `{modelUsage: {<model>: {inputTokens, outputTokens,
+ * cacheReadInputTokens, cacheCreationInputTokens, ...}}}`, counting every call it made and
+ * those of the processes before it on the session. What it has beyond the transcripts is
+ * added as unrecorded calls (platform/usage.ts `unrecordedCalls`), at the time of the line
+ * before it (its own times count only the processes' running time). Checked against what
+ * DeepSeek charged (2.1.296): the transcripts alone missed a compaction, a quarter of that
+ * session's cost; with these added, the cost was right.
  *
  * Transcripts only grow: a file that got longer is read from where the last read stopped.
  * Each call read is put in the ledger too (usageLedger.ts), which keeps it once its transcript
@@ -18,8 +27,18 @@
 import { open, readdir, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { ProviderPricing } from '../../platform/pricing';
-import type { AttributedProvider, ModelTokens, SessionTag, SessionUsage, UsageCall, UsageScopes } from '../../platform/usage';
-import { lastProvider, modelsUsed, sessionUsageByProvider, summarizeUsage } from '../../platform/usage';
+import { modelKey } from '../../platform/pricing';
+import type {
+  AttributedProvider,
+  ModelTokens,
+  SessionTag,
+  SessionUsage,
+  TokenCounts,
+  UsageCall,
+  UsageScopes,
+  UsageSnapshot,
+} from '../../platform/usage';
+import { lastProvider, modelsUsed, sessionUsageByProvider, summarizeUsage, unrecordedCalls } from '../../platform/usage';
 import { normalizeForCompare } from '../node/paths';
 import { SessionTagReader, type SessionTags } from './sessionProviders';
 import { UsageLedger } from './usageLedger';
@@ -82,15 +101,77 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const tokens = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0);
 
-/**
- * Adds the calls of complete transcript lines to `calls` (by message id: a later line of the
- * same reply replaces the earlier). Returns the folder the lines say the session ran in.
- */
-export function parseUsageLines(text: string, calls: Map<string, UsageCall>): string | undefined {
-  let cwd: string | undefined;
+/** What a transcript's lines tell, added to as more of them are read. */
+export interface UsageLines {
+  /** By message id: a later line of the same reply replaces the earlier. */
+  readonly calls: Map<string, UsageCall>;
+  /** Claude Code's own counts (`cost-state` lines), in the order written. */
+  readonly snapshots: UsageSnapshot[];
+  /** The folder the lines say the session ran in (the first that says). */
+  cwd?: string;
+  /** The time of the last line read that has one (epoch ms). */
+  lastAt?: number;
+}
+
+export const newUsageLines = (): UsageLines => ({ calls: new Map(), snapshots: [] });
+
+/** Lines up to this long are parsed for their time: a tool's long result is not. */
+const TIMED_LINE_MAX = 4096;
+
+/** A parsed line's own time (not one in its content: a tool result may have such). */
+function entryTime(entry: unknown): number | undefined {
+  const time = isRecord(entry) && typeof entry.timestamp === 'string' ? Date.parse(entry.timestamp) : Number.NaN;
+  return Number.isNaN(time) ? undefined : time;
+}
+
+/** The time of a short line that has one (a turn's end, a compaction's mark...). */
+function lineTime(line: string): number | undefined {
+  if (line.length > TIMED_LINE_MAX || !line.includes('"timestamp"')) {
+    return undefined;
+  }
+  try {
+    return entryTime(JSON.parse(line));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Times only go on: a line written out of order does not take a snapshot back. */
+function later(lines: UsageLines, time: number | undefined): void {
+  if (time !== undefined && (lines.lastAt === undefined || time > lines.lastAt)) {
+    lines.lastAt = time;
+  }
+}
+
+/** A `cost-state` line's counts by model (`modelKey`: "deepseek-flash[1m]" and "deepseek-flash" add up). */
+function snapshotModels(entry: Record<string, unknown>): Record<string, TokenCounts> | undefined {
+  if (!isRecord(entry.modelUsage)) {
+    return undefined;
+  }
+  const models: Record<string, TokenCounts> = {};
+  for (const [name, usage] of Object.entries(entry.modelUsage)) {
+    const model = modelKey(name);
+    if (!isRecord(usage) || !model) {
+      continue;
+    }
+    const sum = models[model] ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+    models[model] = {
+      input: sum.input + tokens(usage.inputTokens),
+      output: sum.output + tokens(usage.outputTokens),
+      cacheRead: sum.cacheRead + tokens(usage.cacheReadInputTokens),
+      cacheWrite: sum.cacheWrite + tokens(usage.cacheCreationInputTokens),
+    };
+  }
+  return models;
+}
+
+/** Adds what complete transcript lines tell to `lines`. */
+export function parseUsageLines(text: string, lines: UsageLines): void {
+  const calls = lines.calls;
   for (const line of text.split('\n')) {
     // Most lines are something else: skip them before parsing.
-    if (!line.includes('"usage"')) {
+    if (!line.includes('"usage"') && !line.includes('"type":"cost-state"')) {
+      later(lines, lineTime(line));
       continue;
     }
     let entry: unknown;
@@ -99,18 +180,26 @@ export function parseUsageLines(text: string, calls: Map<string, UsageCall>): st
     } catch {
       continue;
     }
+    if (isRecord(entry) && entry.type === 'cost-state') {
+      const models = snapshotModels(entry);
+      if (models && lines.lastAt !== undefined) {
+        lines.snapshots.push({ at: lines.lastAt, models });
+      }
+      continue;
+    }
+    const at = entryTime(entry);
+    later(lines, at);
     if (!isRecord(entry) || entry.type !== 'assistant' || !isRecord(entry.message)) {
       continue;
     }
     const { id, model, usage, content } = entry.message;
-    const at = typeof entry.timestamp === 'string' ? Date.parse(entry.timestamp) : Number.NaN;
     if (
       typeof id !== 'string' ||
       typeof model !== 'string' ||
       !model ||
       model === SYNTHETIC_MODEL ||
       !isRecord(usage) ||
-      Number.isNaN(at)
+      at === undefined
     ) {
       continue;
     }
@@ -129,19 +218,19 @@ export function parseUsageLines(text: string, calls: Map<string, UsageCall>): st
       cacheWrite: tokens(usage.cache_creation_input_tokens),
     });
     if (typeof entry.cwd === 'string' && entry.cwd) {
-      cwd ??= entry.cwd;
+      lines.cwd ??= entry.cwd;
     }
   }
-  return cwd;
 }
 
 interface FileState {
   readonly mtimeMs: number;
   readonly size: number;
+  /** When the file was made: of two sessions with the same calls, the forked one is the later. */
+  readonly createdMs: number;
   /** Where the last complete line read ends. */
   readonly offset: number;
-  readonly calls: Map<string, UsageCall>;
-  readonly cwd: string | undefined;
+  readonly lines: UsageLines;
 }
 
 /**
@@ -178,9 +267,11 @@ export async function readUsageFile(file: string, known: FileState | undefined):
   }
   // Up to the last newline: a byte that is never part of another character in UTF-8.
   const end = buffer.subarray(0, read).lastIndexOf(NEWLINE) + 1;
-  const calls = from?.calls ?? new Map<string, UsageCall>();
-  const cwd = parseUsageLines(buffer.toString('utf8', 0, end), calls);
-  return { mtimeMs: stats.mtimeMs, size: stats.size, offset: offset + end, calls, cwd: from?.cwd ?? cwd };
+  const lines = from?.lines ?? newUsageLines();
+  parseUsageLines(buffer.toString('utf8', 0, end), lines);
+  // A file system that keeps no creation time gives 0: the first look at it stands in.
+  const createdMs = from?.createdMs ?? (stats.birthtimeMs > 0 ? stats.birthtimeMs : stats.mtimeMs);
+  return { mtimeMs: stats.mtimeMs, size: stats.size, createdMs, offset: offset + end, lines };
 }
 
 interface SessionFiles {
@@ -243,9 +334,13 @@ export class UsageIndex {
     }
   }
 
-  /** Every session's calls, its subagents' with them. */
+  /**
+   * Every session's calls, its subagents' with them. A conversation forked from another starts
+   * with a copy of its transcript (the same calls, by their ids): a call belongs to the session
+   * whose transcript is the oldest of those it is in, the one that made it, and counts there only.
+   */
   private sessions(): SessionUsage[] {
-    return this.sessionFiles.flatMap((files) => {
+    const sessions = this.sessionFiles.flatMap((files) => {
       const transcript = this.files.get(files.transcript);
       if (!transcript) {
         return [];
@@ -254,9 +349,22 @@ export class UsageIndex {
         const state = this.files.get(file);
         return state ? [state] : [];
       });
-      const calls = [transcript, ...subagents].flatMap((state) => [...state.calls.values()]);
-      const folder = transcript.cwd ?? subagents.find((state) => state.cwd !== undefined)?.cwd;
-      return [{ sessionId: files.sessionId, folder, calls }];
+      return [{ files, transcript, calls: [transcript, ...subagents].flatMap((state) => [...state.lines.calls.values()]), subagents }];
+    });
+    const owner = new Map<string, string>();
+    for (const { files, calls } of [...sessions].sort((a, b) => a.transcript.createdMs - b.transcript.createdMs)) {
+      for (const call of calls) {
+        if (call.id !== undefined && !owner.has(call.id)) {
+          owner.set(call.id, files.sessionId);
+        }
+      }
+    }
+    return sessions.map(({ files, transcript, calls, subagents }) => {
+      const own = calls.filter((call) => call.id === undefined || owner.get(call.id) === files.sessionId);
+      const folder = transcript.lines.cwd ?? subagents.find((state) => state.lines.cwd !== undefined)?.lines.cwd;
+      // The process writes its counts into the session's own transcript, its subagents' calls among them.
+      const unrecorded = unrecordedCalls(files.sessionId, transcript.lines.snapshots, own);
+      return { sessionId: files.sessionId, folder, calls: [...own, ...unrecorded] };
     });
   }
 

@@ -35,6 +35,24 @@ export interface UsageCall extends TokenCounts {
   readonly model: string;
   /** The reply thought (some APIs price thinking apart). */
   readonly thinking?: boolean;
+  /**
+   * Not in the transcript: calls Claude Code made for itself (a title, compacting the
+   * conversation, WebFetch's summary of a page), from its own count (`unrecordedCalls`).
+   * Possibly several calls added up, so not counted as a call.
+   */
+  readonly unrecorded?: boolean;
+}
+
+/**
+ * Claude Code's own count of a session's calls at one point, by model (`modelKey`): the
+ * transcript's `cost-state` line, which each Claude process writes as a turn ends. It counts
+ * every call the process made (and those of the processes before it on the session), the
+ * ones the transcript leaves out too.
+ */
+export interface UsageSnapshot {
+  /** When it was written: the time of the last transcript line before it (epoch ms). */
+  readonly at: number;
+  readonly models: Readonly<Record<string, TokenCounts>>;
 }
 
 /** A Claude process of a session ran under `provider` from `at` on (and made calls). */
@@ -55,9 +73,12 @@ export interface AttributedProvider {
 
 /** A model's tokens and calls; what they cost when it has a price, and how many calls each of its rules priced. */
 export interface ModelUsage extends TokenCounts {
+  /** The calls in the transcripts. */
   readonly calls: number;
   readonly cost?: number;
   readonly rules?: Readonly<Record<string, number>>;
+  /** Of the tokens, those of calls the transcripts leave out (`UsageCall.unrecorded`). */
+  readonly unrecorded?: TokenCounts;
 }
 
 /** The tokens by model (`modelKey`), and how many calls. */
@@ -153,8 +174,9 @@ export interface UsageQuery {
 
 /**
  * The tokens of the calls that ran under `query.provider`, by model, in the three scopes. A
- * call in more than one session (copied into a forked conversation) counts in each of their
- * own scopes, but once in the folder's and once in all: where it is first come to.
+ * call in more than one session (copied into a forked conversation) counts once, in the session
+ * it is first come to: give the sessions oldest first (the usage index gives each call to its
+ * session already).
  */
 export function summarizeUsage(
   sessions: Iterable<SessionUsage>,
@@ -170,23 +192,20 @@ export function summarizeUsage(
     const tags = tagsOf(usage.sessionId);
     const isSession = usage.sessionId === query.sessionId;
     const inFolder = usage.folder !== undefined && query.inFolder?.(usage.folder) === true;
-    const own = new Set<string>();
     for (const call of usage.calls) {
-      const first = call.id === undefined || !seen.has(call.id);
-      const again = call.id !== undefined && own.has(call.id);
       if (call.id !== undefined) {
+        if (seen.has(call.id)) {
+          continue;
+        }
         seen.add(call.id);
-        own.add(call.id);
       }
-      if (again || (!first && !isSession) || attributeCall(call, tags, providers) !== query.provider) {
+      if (attributeCall(call, tags, providers) !== query.provider) {
         continue;
       }
       const priced = priceCall(call, query.pricing);
-      if (first) {
-        addTokens(all, call, priced);
-        if (inFolder) {
-          addTokens(folder, call, priced);
-        }
+      addTokens(all, call, priced);
+      if (inFolder) {
+        addTokens(folder, call, priced);
       }
       if (isSession) {
         addTokens(session, call, priced);
@@ -266,20 +285,96 @@ export function priceCall(call: UsageCall, pricing: ProviderPricing | undefined)
   return { cost: costAt(call, rule ?? price), rule: rule?.label };
 }
 
+const plus = (a: TokenCounts, b: TokenCounts): TokenCounts => ({
+  input: a.input + b.input,
+  output: a.output + b.output,
+  cacheRead: a.cacheRead + b.cacheRead,
+  cacheWrite: a.cacheWrite + b.cacheWrite,
+});
+
 /** Adds a call's tokens (and what it cost, `priceCall`) to the totals of its model. */
 export function addTokens(totals: ModelTokens, call: UsageCall, priced?: { cost: number; rule?: string }): void {
   const model = modelKey(call.model);
   const sum = totals[model] ?? { ...NO_TOKENS, calls: 0 };
-  const rules = priced?.rule === undefined ? sum.rules : { ...sum.rules, [priced.rule]: (sum.rules?.[priced.rule] ?? 0) + 1 };
+  const rules =
+    priced?.rule === undefined || call.unrecorded ? sum.rules : { ...sum.rules, [priced.rule]: (sum.rules?.[priced.rule] ?? 0) + 1 };
+  const unrecorded = call.unrecorded ? plus(sum.unrecorded ?? NO_TOKENS, call) : sum.unrecorded;
   totals[model] = {
-    input: sum.input + call.input,
-    output: sum.output + call.output,
-    cacheRead: sum.cacheRead + call.cacheRead,
-    cacheWrite: sum.cacheWrite + call.cacheWrite,
-    calls: sum.calls + 1,
+    ...plus(sum, call),
+    calls: sum.calls + (call.unrecorded ? 0 : 1),
     ...(priced || sum.cost !== undefined ? { cost: (sum.cost ?? 0) + (priced?.cost ?? 0) } : {}),
     ...(rules ? { rules } : {}),
+    ...(unrecorded ? { unrecorded } : {}),
   };
+}
+
+const TOKEN_KINDS = ['input', 'output', 'cacheRead', 'cacheWrite'] as const;
+
+type MutableCounts = { -readonly [K in keyof TokenCounts]: number };
+
+/**
+ * The calls a session's transcripts leave out, from Claude Code's own counts (its snapshots,
+ * in the order written): what a snapshot has beyond the session's calls up to its time, by
+ * model and kind of token, as far as that is more than earlier snapshots had. A snapshot
+ * that counts less than the transcripts (a process that did not see another one's calls, a
+ * forked conversation's copied calls) adds nothing. Nor more than it has beyond them in all:
+ * Claude Code counts a model by the name it asked for, the transcript by the name the API
+ * answered with, and a gateway may answer with another (OpenRouter). So this can count too
+ * little, never twice.
+ */
+export function unrecordedCalls(sessionId: string, snapshots: readonly UsageSnapshot[], calls: readonly UsageCall[]): UsageCall[] {
+  const sorted = calls.filter((call) => !call.unrecorded).sort((a, b) => a.at - b.at);
+  const recorded: Record<string, TokenCounts> = {};
+  let recordedAll: TokenCounts = NO_TOKENS;
+  const added: Record<string, TokenCounts> = {};
+  const result: UsageCall[] = [];
+  let next = 0;
+  snapshots.forEach((snapshot, index) => {
+    for (; next < sorted.length && (sorted[next]?.at ?? Infinity) <= snapshot.at; next++) {
+      const call = sorted[next];
+      if (call) {
+        const model = modelKey(call.model);
+        recorded[model] = plus(recorded[model] ?? NO_TOKENS, call);
+        recordedAll = plus(recordedAll, call);
+      }
+    }
+    const models = Object.entries(snapshot.models);
+    const counted = models.reduce<TokenCounts>((sum, [, tokens]) => plus(sum, tokens), NO_TOKENS);
+    const beyond = new Map<string, MutableCounts>(
+      models.map(([model, tokens]) => [
+        model,
+        {
+          input: Math.max(0, tokens.input - (recorded[model]?.input ?? 0)),
+          output: Math.max(0, tokens.output - (recorded[model]?.output ?? 0)),
+          cacheRead: Math.max(0, tokens.cacheRead - (recorded[model]?.cacheRead ?? 0)),
+          cacheWrite: Math.max(0, tokens.cacheWrite - (recorded[model]?.cacheWrite ?? 0)),
+        },
+      ]),
+    );
+    for (const kind of TOKEN_KINDS) {
+      const room = Math.max(0, counted[kind] - recordedAll[kind]);
+      const wanted = [...beyond.values()].reduce((sum, tokens) => sum + tokens[kind], 0);
+      if (wanted > room) {
+        for (const tokens of beyond.values()) {
+          tokens[kind] = Math.floor((tokens[kind] * room) / wanted);
+        }
+      }
+    }
+    for (const [model, tokens] of beyond) {
+      const before = added[model] ?? NO_TOKENS;
+      const extra = {
+        input: Math.max(0, tokens.input - before.input),
+        output: Math.max(0, tokens.output - before.output),
+        cacheRead: Math.max(0, tokens.cacheRead - before.cacheRead),
+        cacheWrite: Math.max(0, tokens.cacheWrite - before.cacheWrite),
+      };
+      if (TOKEN_KINDS.some((kind) => extra[kind] > 0)) {
+        added[model] = plus(before, extra);
+        result.push({ id: `${sessionId}:unrecorded:${index}:${model}`, at: snapshot.at, model, ...extra, unrecorded: true });
+      }
+    }
+  });
+  return result;
 }
 
 /** What tokens cost at a model's own prices (per million tokens); the cache prices default to the input price. */

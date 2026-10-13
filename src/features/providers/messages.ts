@@ -58,7 +58,7 @@ export const t = defineMessages('providers', {
   /** Under the prices ({0}: "¥12.34"): what this API cost in all, conversations deleted since too. */
   pricesTotal: 'All of Claude Code on this API: {0}, deleted conversations included',
   pricesTotalTitle:
-    "Every call of Claude Code's sessions on this computer that ran on this API, at the prices saved here. Conversations deleted since still count. Calls Claude Code makes for itself (titles, web fetches) are not in its transcripts and are not counted.",
+    "Every call of Claude Code's sessions on this computer that ran on this API, at the prices saved here. Conversations deleted since still count. Calls Claude Code makes for itself (titles, compacting the conversation, reading web pages) are added from its own running count.",
   currencyCny: 'CNY (¥)',
   currencyUsd: 'USD ($)',
   officialPrices: 'Official Prices',

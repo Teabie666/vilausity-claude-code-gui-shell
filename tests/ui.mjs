@@ -843,6 +843,25 @@ await step('the title bar button toggles the empty content pane', async () => {
 const readSettings = () => JSON.parse(readFileSync(settingsFile, 'utf8'));
 const settingRow = (key) => page.locator(`.settings-dialog .setting-item[data-key="${key}"]`);
 
+await step("Keep Forever sets Claude Code's cleanupPeriodDays when it is not set; turned off, it takes it out", async () => {
+  // This instance's Claude Code folder is its sessions folder's parent (VILAUS_SESSIONS_DIR).
+  const claudeSettings = path.join(path.dirname(sessionsDir), 'settings.json');
+  const period = () => (existsSync(claudeSettings) ? JSON.parse(readFileSync(claudeSettings, 'utf8')).cleanupPeriodDays : undefined);
+  await waitFor(() => period() === 36500, 10_000, 'the period set at the start');
+  writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.sessions.keepForever': false }, null, 2), 'utf8');
+  await waitFor(() => period() === undefined, 10_000, 'the period taken out');
+  const { 'vilaus.sessions.keepForever': _keep, ...rest } = readSettings();
+  writeFileSync(settingsFile, JSON.stringify(rest, null, 2), 'utf8');
+  await waitFor(() => period() === 36500, 10_000, 'the period set again');
+  // A period of the user's own stays.
+  writeFileSync(claudeSettings, JSON.stringify({ cleanupPeriodDays: 90 }), 'utf8');
+  writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.sessions.keepForever': false }, null, 2), 'utf8');
+  await page.waitForTimeout(1000);
+  if (period() !== 90) throw new Error(`the user's own period: ${period()}`);
+  writeFileSync(settingsFile, JSON.stringify(rest, null, 2), 'utf8');
+  return 'set at the start, taken out when off, set again when on; a value of the user left alone';
+});
+
 await step('Ctrl+, opens the settings panel; Editor: Font Size applies to the editor and resets', async () => {
   await press('Control+,');
   await page.locator('.settings-dialog .settings-editor').waitFor({ timeout: 10_000 });

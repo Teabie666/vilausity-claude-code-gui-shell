@@ -58,7 +58,19 @@ function scopeDetail(models: ModelTokens, pricing: ProviderPricing | undefined, 
       const cost = modelCost(model, tokens, pricing);
       // The calls its rules priced (the rest at its own prices).
       const rules = Object.entries(tokens.rules ?? {}).map(([label, calls]) => `  ${t('usageRuleCalls', label, String(calls))}`);
-      return [`${model}: ${counts} · ${cost === undefined ? t('usageNoPrice') : formatCost(cost, currency)}`, ...rules].join('\n');
+      // Of its tokens, those of the calls Claude Code made for itself.
+      const own = tokens.unrecorded
+        ? [
+            `  ${t(
+              'usageUnrecorded',
+              formatTokens(tokens.unrecorded.input),
+              formatTokens(tokens.unrecorded.output),
+              formatTokens(tokens.unrecorded.cacheRead),
+              formatTokens(tokens.unrecorded.cacheWrite),
+            )}`,
+          ]
+        : [];
+      return [`${model}: ${counts} · ${cost === undefined ? t('usageNoPrice') : formatCost(cost, currency)}`, ...own, ...rules].join('\n');
     });
   return lines.length > 0 ? lines.join('\n') : t('usageNone');
 }

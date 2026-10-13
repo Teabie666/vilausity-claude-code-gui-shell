@@ -18,6 +18,8 @@ import {
   type TokenCounts,
   type UsageCall,
   type UsageQuery,
+  type UsageSnapshot,
+  unrecordedCalls,
 } from '../../../src/platform/usage';
 import { modelKey, parseProviderConfig, type ProviderConfig, type ProviderPricing } from '../../../src/platform/providers';
 
@@ -319,7 +321,7 @@ describe('summarizeUsage', () => {
     assert.equal(withFolder.folder['deepseek-flash']?.input, 5);
   });
 
-  test('a call copied into a forked conversation counts once in the folder and all, and in each session', () => {
+  test('a call copied into a forked conversation counts once, in the session it is first come to', () => {
     const providers: AttributedProvider[] = [subscription, deepseek];
     const copied = { ...call('deepseek-flash', 100, { input: 100 }), id: 'msg-1' };
     const sessions: SessionUsage[] = [
@@ -337,7 +339,7 @@ describe('summarizeUsage', () => {
     ];
     const scopes = (sessionId: string) =>
       summarizeUsage(sessions, () => [], providers, { provider: 'deepseek', sessionId, inFolder: () => true });
-    assert.equal(scopes('fork').session['deepseek-flash']?.input, 110);
+    assert.equal(scopes('fork').session['deepseek-flash']?.input, 10);
     assert.equal(scopes('original').session['deepseek-flash']?.input, 100);
     assert.equal(scopes('fork').folder['deepseek-flash']?.input, 110);
     assert.deepEqual(scopes('fork').all['deepseek-flash'], { input: 110, output: 0, cacheRead: 0, cacheWrite: 0, calls: 2 });
@@ -420,5 +422,114 @@ describe('addTokens', () => {
       'deepseek-flash': { input: 11, output: 22, cacheRead: 33, cacheWrite: 44, calls: 2 },
       'deepseek-v4': { input: 5, output: 6, cacheRead: 7, cacheWrite: 8, calls: 1 },
     });
+  });
+});
+
+describe('addTokens, unrecorded', () => {
+  test("an unrecorded call's tokens count, and are told apart, but it is no call; its rule is not counted", () => {
+    const totals: ModelTokens = {};
+    addTokens(totals, call('deepseek-flash', 1, { input: 10 }), { cost: 1, rule: 'peak' });
+    addTokens(totals, { ...call('deepseek-flash', 2, { input: 5, output: 7 }), unrecorded: true }, { cost: 2, rule: 'peak' });
+    assert.deepEqual(totals['deepseek-flash'], {
+      input: 15,
+      output: 7,
+      cacheRead: 0,
+      cacheWrite: 0,
+      calls: 1,
+      cost: 3,
+      rules: { peak: 1 },
+      unrecorded: { input: 5, output: 7, cacheRead: 0, cacheWrite: 0 },
+    });
+  });
+});
+
+describe('unrecordedCalls', () => {
+  const snapshot = (at: number, models: Record<string, Partial<TokenCounts>>): UsageSnapshot => ({
+    at,
+    models: Object.fromEntries(
+      Object.entries(models).map(([model, tokens]) => [
+        model,
+        { input: tokens.input ?? 0, output: tokens.output ?? 0, cacheRead: tokens.cacheRead ?? 0, cacheWrite: tokens.cacheWrite ?? 0 },
+      ]),
+    ),
+  });
+
+  test('what the counts have beyond the calls up to their time, each part once, at their time', () => {
+    const calls = [call('deepseek-flash', 100, { input: 100, output: 10 }), call('DeepSeek-Flash', 300, { input: 50, output: 5 })];
+    const extra = unrecordedCalls(
+      's1',
+      [
+        // A title (a call of its own) by the first turn's end.
+        snapshot(200, { 'deepseek-flash': { input: 130, output: 20 } }),
+        // Compacting, by the second's: the counts go on from the first.
+        snapshot(400, { 'deepseek-flash': { input: 190, output: 1015, cacheRead: 5000 } }),
+        // Nothing new: nothing more.
+        snapshot(500, { 'deepseek-flash': { input: 190, output: 1015, cacheRead: 5000 } }),
+      ],
+      calls,
+    );
+    assert.deepEqual(extra, [
+      {
+        id: 's1:unrecorded:0:deepseek-flash',
+        at: 200,
+        model: 'deepseek-flash',
+        input: 30,
+        output: 10,
+        cacheRead: 0,
+        cacheWrite: 0,
+        unrecorded: true,
+      },
+      {
+        id: 's1:unrecorded:1:deepseek-flash',
+        at: 400,
+        model: 'deepseek-flash',
+        input: 10,
+        output: 990,
+        cacheRead: 5000,
+        cacheWrite: 0,
+        unrecorded: true,
+      },
+    ]);
+  });
+
+  test('counts that have less than the transcripts (another process, a fork) add nothing, and take nothing back', () => {
+    const calls = [call('m', 100, { input: 1000, output: 100 }), call('m', 300, { input: 1000, output: 100 })];
+    const extra = unrecordedCalls(
+      's1',
+      [
+        snapshot(200, { m: { input: 1100, output: 100 } }),
+        // A process that counted only its own: less than the transcripts.
+        snapshot(400, { m: { input: 500, output: 50 } }),
+      ],
+      calls,
+    );
+    assert.deepEqual(
+      extra.map((one) => [one.input, one.output]),
+      [[100, 0]],
+    );
+  });
+
+  test('models apart; calls already unrecorded are not counted as recorded', () => {
+    const calls = [call('a', 100, { input: 10 }), { ...call('b', 100, { input: 99 }), unrecorded: true }];
+    const extra = unrecordedCalls('s1', [snapshot(200, { a: { input: 10 }, b: { input: 5 } })], calls);
+    assert.deepEqual(
+      extra.map((one) => [one.model, one.input]),
+      [['b', 5]],
+    );
+  });
+});
+
+describe('unrecordedCalls, a gateway', () => {
+  test('a model counted by the name asked for and recorded by the one answered with: only what is beyond in all', () => {
+    const calls = [call('anthropic/claude-4.5-sonnet-20250929', 100, { input: 1000, output: 100 })];
+    const extra = unrecordedCalls(
+      's1',
+      [{ at: 200, models: { 'anthropic/claude-sonnet-4.5': { input: 1200, output: 150, cacheRead: 0, cacheWrite: 0 } } }],
+      calls,
+    );
+    assert.deepEqual(
+      extra.map((one) => [one.model, one.input, one.output]),
+      [['anthropic/claude-sonnet-4.5', 200, 50]],
+    );
   });
 });

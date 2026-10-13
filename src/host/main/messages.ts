@@ -12,7 +12,7 @@ export const t = defineMessages('main', {
   /** The session list's usage block, in place of the extension's "Account & usage" ({0}: the API provider). */
   usageTitle: 'Usage · {0}',
   usageTooltip:
-    "Estimated with the prices set for this API, from the tokens in Claude Code's transcripts on this computer. Calls Claude Code makes for itself (titles) are not in them.",
+    "Estimated with the prices set for this API, from the tokens in Claude Code's transcripts on this computer. Calls Claude Code makes for itself (titles, compacting the conversation, reading web pages) are not in them one by one: they are added from its own running count.",
   /** The usage block's link to the provider's prices. */
   usagePrices: 'Prices',
   usagePricesTitle: "Set this API's prices",
@@ -26,6 +26,9 @@ export const t = defineMessages('main', {
   /** Under a model's line: how many of its calls a price rule priced ({0}: the rule's label, {1}: calls). */
   usageRuleCalls: '{0}: {1} calls',
   usageNone: 'Nothing yet',
+  /** Under a model's line: of its tokens, those of calls Claude Code made for itself ({0} input, {1} output, {2} cache read, {3} cache write). */
+  usageUnrecorded:
+    "of which Claude Code's own calls (titles, compacting, web pages): {0} input, {1} output, {2} cache read, {3} cache write",
   /** {0}: model names. */
   usageUnpriced: 'No price for {0}',
   /** The built-in API provider (a Claude plan), as the shell names it. */

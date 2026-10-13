@@ -32,3 +32,10 @@ export const DEFAULT_FONT_VALUE = 'default';
 
 /** The color theme when `vilaus.theme` is not set. */
 export const DEFAULT_THEME_ID = 'dark-modern';
+
+/**
+ * Keep Claude Code's conversations: main sets Claude Code's own `cleanupPeriodDays` (30 days
+ * unless set) when it is not set (host/main/claudeRetention.ts). On by default.
+ */
+export const KEEP_SESSIONS_SETTING = 'vilaus.sessions.keepForever';
+export const KEEP_SESSIONS_DEFAULT = true;

@@ -40,6 +40,7 @@ import {
   type UsageViewDto,
 } from '../../platform/protocol';
 import { ACCENT_COLOR_SETTING, ACCENT_SETTING, ACCENT_SOURCES, logoColor, parseColor, withAccent } from '../../platform/accent';
+import { KEEP_SESSIONS_DEFAULT, KEEP_SESSIONS_SETTING } from '../../platform/defaults';
 import { LOGO_COLOR } from '../../platform/logoMark';
 import { URI_SCHEME } from '../../platform/product';
 import {
@@ -67,6 +68,7 @@ import { findGit } from './gitLocator';
 import { t } from './messages';
 import { ProviderStore, type SecretCipher } from './providerStore';
 import { deleteSession, waitForSessionEnd } from './sessionFiles';
+import { applyRetention, KEEP_FOREVER_DAYS } from './claudeRetention';
 import { SessionTagWriter } from './sessionProviders';
 import { scopeValue, usageTotal, usageView } from './usageView';
 import { claudeProjectsDir, SessionSearch } from './sessionSearch';
@@ -313,6 +315,7 @@ export class ShellApp extends Disposable implements WindowHost {
     }
     await this.applyCommandLine(args, true);
     this.scheduleUpdateChecks();
+    this.keepSessions();
     // Not in development: there the entries would point at electron.exe and this checkout.
     if (app.isPackaged) {
       this.refreshExplorerMenu().catch((error: unknown) => this.logger.warn("cannot rewrite File Explorer's menu entries", error));
@@ -776,6 +779,9 @@ export class ShellApp extends Disposable implements WindowHost {
     if (keys.some((key) => UPDATE_SETTING_KEYS.includes(key))) {
       this.checkForUpdatesAutomatically();
     }
+    if (keys.includes(KEEP_SESSIONS_SETTING)) {
+      this.keepSessions();
+    }
     if (keys.some((key) => THEME_SETTING_KEYS.has(key))) {
       this.reloadTheme();
     }
@@ -796,6 +802,22 @@ export class ShellApp extends Disposable implements WindowHost {
       openVsxUrl: stringSetting(this.settings.all[OPEN_VSX_URL_SETTING]) ?? DEFAULT_OPEN_VSX_URL,
       pinned: isVersion(pinned) ? pinned : undefined,
     };
+  }
+
+  /** Claude Code's `cleanupPeriodDays` as `vilaus.sessions.keepForever` wants it (claudeRetention.ts). */
+  private keepSessions(): void {
+    const value = this.settings.all[KEEP_SESSIONS_SETTING];
+    const keep = typeof value === 'boolean' ? value : KEEP_SESSIONS_DEFAULT;
+    applyRetention(this.claudeConfigDir, keep).then(
+      (changed) => {
+        if (changed) {
+          this.logger.info(
+            `Claude Code's cleanupPeriodDays ${changed === 'set' ? `set to ${KEEP_FOREVER_DAYS} days` : 'removed'} (${KEEP_SESSIONS_SETTING})`,
+          );
+        }
+      },
+      (error: unknown) => this.logger.warn("cannot set Claude Code's cleanupPeriodDays", error),
+    );
   }
 
   /** Shortly after the start, then twice a day (and when the update settings change). */
