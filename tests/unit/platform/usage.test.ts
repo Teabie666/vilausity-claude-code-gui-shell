@@ -8,6 +8,7 @@ import {
   inferProvider,
   lastProvider,
   modelsUsed,
+  sessionUsageByProvider,
   summarizeUsage,
   totalCost,
   type AttributedProvider,
@@ -316,6 +317,54 @@ describe('summarizeUsage', () => {
       inFolder: () => true,
     });
     assert.equal(withFolder.folder['deepseek-flash']?.input, 5);
+  });
+
+  test('a call copied into a forked conversation counts once in the folder and all, and in each session', () => {
+    const providers: AttributedProvider[] = [subscription, deepseek];
+    const copied = { ...call('deepseek-flash', 100, { input: 100 }), id: 'msg-1' };
+    const sessions: SessionUsage[] = [
+      { sessionId: 'original', folder: 'C:\\work', calls: [copied] },
+      // The fork starts with the original's calls, then goes on (and has one line twice).
+      {
+        sessionId: 'fork',
+        folder: 'C:\\work',
+        calls: [
+          copied,
+          { ...call('deepseek-flash', 200, { input: 10 }), id: 'msg-2' },
+          { ...call('deepseek-flash', 200, { input: 10 }), id: 'msg-2' },
+        ],
+      },
+    ];
+    const scopes = (sessionId: string) =>
+      summarizeUsage(sessions, () => [], providers, { provider: 'deepseek', sessionId, inFolder: () => true });
+    assert.equal(scopes('fork').session['deepseek-flash']?.input, 110);
+    assert.equal(scopes('original').session['deepseek-flash']?.input, 100);
+    assert.equal(scopes('fork').folder['deepseek-flash']?.input, 110);
+    assert.deepEqual(scopes('fork').all['deepseek-flash'], { input: 110, output: 0, cacheRead: 0, cacheWrite: 0, calls: 2 });
+  });
+});
+
+describe('sessionUsageByProvider', () => {
+  test("splits a session's calls by the provider each ran under, priced by its own prices", () => {
+    const work: AttributedProvider = { id: 'work', type: 'compatible', models: ['glm-5.2'] };
+    const usage: SessionUsage = {
+      sessionId: 's',
+      folder: undefined,
+      calls: [
+        { ...call('deepseek-flash', 100, { input: 1_000_000 }), id: 'a' },
+        { ...call('deepseek-flash', 100, { input: 1_000_000 }), id: 'a' },
+        { ...call('glm-5.2', 300, { output: 1_000_000 }), id: 'b' },
+        { ...call('unknown-model', 400, { input: 5 }), id: 'c' },
+      ],
+    };
+    const pricing: Record<string, ProviderPricing> = {
+      deepseek: { currency: 'CNY', models: { 'deepseek-flash': { input: 2, output: 8 } } },
+    };
+    const result = sessionUsageByProvider(usage, [], [subscription, deepseek, work], (id) => pricing[id]);
+    assert.deepEqual(Object.keys(result).sort(), ['deepseek', 'work']);
+    assert.deepEqual(result.deepseek?.['deepseek-flash'], { input: 1_000_000, output: 0, cacheRead: 0, cacheWrite: 0, calls: 1, cost: 2 });
+    // No prices: tokens only.
+    assert.deepEqual(result.work?.['glm-5.2'], { input: 0, output: 1_000_000, cacheRead: 0, cacheWrite: 0, calls: 1 });
   });
 });
 

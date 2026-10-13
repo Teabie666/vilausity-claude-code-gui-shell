@@ -24,6 +24,11 @@ export interface TokenCounts {
 
 /** One API call of a session. */
 export interface UsageCall extends TokenCounts {
+  /**
+   * The reply's message id: a conversation forked from another starts with a copy of its
+   * transcript, the same calls with the same ids, and they cost once.
+   */
+  readonly id?: string;
   /** When it was recorded (epoch ms). */
   readonly at: number;
   /** The model as the transcript names it. */
@@ -146,7 +151,11 @@ export interface UsageQuery {
   readonly pricing?: ProviderPricing;
 }
 
-/** The tokens of the calls that ran under `query.provider`, by model, in the three scopes. */
+/**
+ * The tokens of the calls that ran under `query.provider`, by model, in the three scopes. A
+ * call in more than one session (copied into a forked conversation) counts in each of their
+ * own scopes, but once in the folder's and once in all: where it is first come to.
+ */
 export function summarizeUsage(
   sessions: Iterable<SessionUsage>,
   tagsOf: (sessionId: string) => readonly SessionTag[],
@@ -156,18 +165,28 @@ export function summarizeUsage(
   const session: ModelTokens = {};
   const folder: ModelTokens = {};
   const all: ModelTokens = {};
+  const seen = new Set<string>();
   for (const usage of sessions) {
     const tags = tagsOf(usage.sessionId);
     const isSession = usage.sessionId === query.sessionId;
     const inFolder = usage.folder !== undefined && query.inFolder?.(usage.folder) === true;
+    const own = new Set<string>();
     for (const call of usage.calls) {
-      if (attributeCall(call, tags, providers) !== query.provider) {
+      const first = call.id === undefined || !seen.has(call.id);
+      const again = call.id !== undefined && own.has(call.id);
+      if (call.id !== undefined) {
+        seen.add(call.id);
+        own.add(call.id);
+      }
+      if (again || (!first && !isSession) || attributeCall(call, tags, providers) !== query.provider) {
         continue;
       }
       const priced = priceCall(call, query.pricing);
-      addTokens(all, call, priced);
-      if (inFolder) {
-        addTokens(folder, call, priced);
+      if (first) {
+        addTokens(all, call, priced);
+        if (inFolder) {
+          addTokens(folder, call, priced);
+        }
       }
       if (isSession) {
         addTokens(session, call, priced);
@@ -175,6 +194,33 @@ export function summarizeUsage(
     }
   }
   return { session, folder, all };
+}
+
+/**
+ * One session's tokens by the provider each call ran under (those that can be told), priced
+ * with each provider's prices.
+ */
+export function sessionUsageByProvider(
+  usage: SessionUsage,
+  tags: readonly SessionTag[],
+  providers: readonly AttributedProvider[],
+  pricingOf: (provider: string) => ProviderPricing | undefined,
+): Record<string, ModelTokens> {
+  const result: Record<string, ModelTokens> = {};
+  const own = new Set<string>();
+  for (const call of usage.calls) {
+    if (call.id !== undefined) {
+      if (own.has(call.id)) {
+        continue;
+      }
+      own.add(call.id);
+    }
+    const provider = attributeCall(call, tags, providers);
+    if (provider !== undefined) {
+      addTokens((result[provider] ??= {}), call, priceCall(call, pricingOf(provider)));
+    }
+  }
+  return result;
 }
 
 /** The models of the calls that ran under `provider` (`modelKey`), sorted. */

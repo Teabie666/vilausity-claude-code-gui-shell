@@ -125,6 +125,8 @@ export class SessionSearch implements IDisposable {
     private readonly projectsDir: string,
     /** The sessions' provider tags (sessionProviders.ts). */
     private readonly tagsFile: string,
+    /** The calls kept after their transcripts are gone (usageLedger.ts). */
+    private readonly ledgerFile: string,
     private readonly logger: ILogger,
   ) {}
 
@@ -151,7 +153,9 @@ export class SessionSearch implements IDisposable {
   }
 
   private start(): Worker {
-    const worker = new Worker(this.workerScript, { workerData: { projectsDir: this.projectsDir, tagsFile: this.tagsFile } });
+    const worker = new Worker(this.workerScript, {
+      workerData: { projectsDir: this.projectsDir, tagsFile: this.tagsFile, ledgerFile: this.ledgerFile },
+    });
     // Quitting need not wait for it.
     worker.unref();
     worker.on('message', (message: { id: number; result?: unknown; error?: string }) => {

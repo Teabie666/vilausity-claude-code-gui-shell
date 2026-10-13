@@ -11,13 +11,14 @@
  * The prompt history (`history.jsonl`, which the input box's arrow keys walk through) keeps
  * the session's prompts too; the CLI appends to it all the time, so it is left alone.
  *
- * A Claude Code process that runs a session keeps a record of itself while it runs,
- * `sessions/<pid>.json` (`{pid, sessionId, ...}`), and removes it when it ends.
+ * A Claude Code process that runs a session keeps a record of itself while it runs
+ * (claudeProcesses.ts).
  */
 
-import { readdir, readFile, rm, stat } from 'node:fs/promises';
+import { readdir, rm, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { processRuns, sessionProcesses } from '../node/claudeProcesses';
 
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -56,45 +57,10 @@ export async function sessionPaths(projectsDir: string, sessionId: string): Prom
   return found;
 }
 
-/** Whether a process runs; one this user may not signal (an administrator's) runs too. */
-export function processRuns(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
-  }
-}
-
 /**
- * The Claude Code processes that run `sessionId` now, by the records under `configDir`. A
- * record whose process is gone was left behind by a crash and does not count.
- */
-export async function sessionProcesses(configDir: string, sessionId: string, runs = processRuns): Promise<number[]> {
-  const dir = path.join(configDir, 'sessions');
-  let names: string[] = [];
-  try {
-    names = await readdir(dir);
-  } catch {
-    return [];
-  }
-  const pids: number[] = [];
-  for (const name of names.filter((entry) => /^\d+\.json$/.test(entry))) {
-    try {
-      const record = JSON.parse(await readFile(path.join(dir, name), 'utf8')) as { pid?: unknown; sessionId?: unknown };
-      if (record.sessionId === sessionId && typeof record.pid === 'number' && runs(record.pid)) {
-        pids.push(record.pid);
-      }
-    } catch {
-      // Being written or removed right now.
-    }
-  }
-  return pids;
-}
-
-/**
- * Waits until no Claude Code process runs `sessionId` (the extension ends a closed tab's
- * process, which takes a moment). False when one still runs after `timeoutMs`.
+ * Waits until no Claude Code process runs `sessionId`, by their records (claudeProcesses.ts).
+ * A tab of this window that showed it was closed before, and its process waited for. False
+ * when one still runs after `timeoutMs`.
  */
 export async function waitForSessionEnd(
   configDir: string,

@@ -57,6 +57,8 @@ export interface WindowHost {
   readonly extensionTable: ExtensionTranslations | undefined;
   /** Undefined until the extension is installed: the window then has no extension host. */
   readonly extension: LocatedExtension | undefined;
+  /** Claude Code's own folder (`~/.claude`, or `CLAUDE_CONFIG_DIR`). */
+  readonly claudeConfigDir: string;
   appInfo(): AppInfo;
   openExternal(url: string): Promise<boolean>;
   /** The zoom level all windows share. */
@@ -527,6 +529,7 @@ export class WindowContext extends Disposable {
         logs: this.logsDir,
         globalStorage: paths.extensionGlobalStorage,
         workspaceStorage: paths.extensionWorkspaceStorage(this.workspaceKey),
+        claudeConfig: this.host.claudeConfigDir,
       },
       settings: this.host.settings.all,
       globalState: this.host.globalState.snapshot,

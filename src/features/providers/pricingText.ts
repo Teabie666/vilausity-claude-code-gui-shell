@@ -59,6 +59,9 @@ export function whenText(when: PriceWhen): string {
   if (when.thinking !== undefined) {
     parts.push(when.thinking ? t('ruleThinking') : t('ruleNotThinking'));
   }
+  if (when.exceptHolidays === 'CN') {
+    parts.push(t('ruleExceptHolidaysCN'));
+  }
   return parts.join(' · ');
 }
 
@@ -96,6 +99,7 @@ export function problemText(problem: PricingProblem): string {
     badDate: () => t('problemBadDate', detail),
     badRange: () => t('problemBadRange', detail),
     emptyWhen: () => t('problemEmptyWhen'),
+    badHolidays: () => t('problemBadHolidays', detail),
     noModels: () => t('problemNoModels'),
   };
   const message = messages[problem.code]();

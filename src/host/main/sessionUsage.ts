@@ -11,15 +11,18 @@
  * (titles...) are not in the transcripts; they are a small share and not counted.
  *
  * Transcripts only grow: a file that got longer is read from where the last read stopped.
+ * Each call read is put in the ledger too (usageLedger.ts), which keeps it once its transcript
+ * is gone: an API's total, deleted conversations included.
  */
 
 import { open, readdir, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { ProviderPricing } from '../../platform/pricing';
-import type { AttributedProvider, SessionTag, SessionUsage, UsageCall, UsageScopes } from '../../platform/usage';
-import { lastProvider, modelsUsed, summarizeUsage } from '../../platform/usage';
+import type { AttributedProvider, ModelTokens, SessionTag, SessionUsage, UsageCall, UsageScopes } from '../../platform/usage';
+import { lastProvider, modelsUsed, sessionUsageByProvider, summarizeUsage } from '../../platform/usage';
 import { normalizeForCompare } from '../node/paths';
 import { SessionTagReader, type SessionTags } from './sessionProviders';
+import { UsageLedger } from './usageLedger';
 
 /** A question sooner than this after the last look at the files uses what is read. */
 const RESCAN_MS = 1000;
@@ -45,13 +48,32 @@ export type UsageRequest =
   /** The provider a session last ran under. */
   | { readonly kind: 'lastProvider'; readonly providers: readonly AttributedProvider[]; readonly sessionId: string }
   /** The provider every session last ran under, by session id (those that can be told). */
-  | { readonly kind: 'sessionProviders'; readonly providers: readonly AttributedProvider[] };
+  | { readonly kind: 'sessionProviders'; readonly providers: readonly AttributedProvider[] }
+  /** One session's tokens by the provider each call ran under, priced with `pricing` (by provider id). */
+  | {
+      readonly kind: 'session';
+      readonly providers: readonly AttributedProvider[];
+      readonly sessionId: string;
+      readonly pricing: Readonly<Record<string, ProviderPricing>>;
+    }
+  /** The tokens of every call that ran under `provider`, those of deleted sessions too (the ledger). */
+  | {
+      readonly kind: 'total';
+      readonly providers: readonly AttributedProvider[];
+      readonly provider: string;
+      readonly pricing?: ProviderPricing;
+    }
+  /** Reads the transcripts now (not up to a second ago) and puts their calls in the ledger. */
+  | { readonly kind: 'sync' };
 
 export interface UsageResults {
   summary: UsageScopes;
   models: string[];
   lastProvider: string | undefined;
   sessionProviders: Record<string, string>;
+  session: Record<string, ModelTokens>;
+  total: ModelTokens;
+  sync: void;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -97,6 +119,7 @@ export function parseUsageLines(text: string, calls: Map<string, UsageCall>): st
       Array.isArray(content) &&
       content.some((block) => isRecord(block) && (block.type === 'thinking' || block.type === 'redacted_thinking'));
     calls.set(id, {
+      id,
       at,
       model,
       ...(thought || calls.get(id)?.thinking ? { thinking: true } : {}),
@@ -172,17 +195,21 @@ export class UsageIndex {
   private scannedAt = 0;
   private scanning: Promise<void> | undefined;
   private readonly tagReader: SessionTagReader;
+  private readonly ledger: UsageLedger | undefined;
 
   constructor(
     private readonly projectsDir: string,
     tagsFile: string,
+    /** No ledger: nothing is kept of the transcripts. */
+    ledgerFile?: string,
   ) {
     this.tagReader = new SessionTagReader(tagsFile);
+    this.ledger = ledgerFile === undefined ? undefined : new UsageLedger(ledgerFile);
   }
 
   async answer<K extends UsageRequest['kind']>(request: Extract<UsageRequest, { kind: K }>): Promise<UsageResults[K]>;
   async answer(request: UsageRequest): Promise<UsageResults[UsageRequest['kind']]> {
-    const [tags] = await Promise.all([this.tagReader.read(), this.refresh()]);
+    const [tags] = await Promise.all([this.tagReader.read(), this.refresh(request.kind === 'sync')]);
     const tagsOf = (sessionId: string): readonly SessionTag[] => tags.get(sessionId) ?? [];
     switch (request.kind) {
       case 'summary': {
@@ -202,6 +229,17 @@ export class UsageIndex {
       }
       case 'sessionProviders':
         return sessionProviders(this.sessions(), tags, request.providers);
+      case 'session': {
+        const usage = this.sessions().find((session) => session.sessionId === request.sessionId);
+        return usage ? sessionUsageByProvider(usage, tagsOf(usage.sessionId), request.providers, (id) => request.pricing[id]) : {};
+      }
+      case 'total': {
+        // Without a ledger (it could not be read), the transcripts there are.
+        const sessions = (await this.ledger?.sessions().catch(() => undefined)) ?? this.sessions();
+        return summarizeUsage(sessions, tagsOf, request.providers, { provider: request.provider, pricing: request.pricing }).all;
+      }
+      case 'sync':
+        return;
     }
   }
 
@@ -222,9 +260,14 @@ export class UsageIndex {
     });
   }
 
-  private refresh(): Promise<void> {
+  /** `now`: read the files again even if they were a moment ago (a scan under way may have passed a file). */
+  private async refresh(now = false): Promise<void> {
+    if (now) {
+      await this.scanning;
+      this.scannedAt = 0;
+    }
     if (!this.scanning && Date.now() - this.scannedAt < RESCAN_MS) {
-      return Promise.resolve();
+      return;
     }
     this.scanning ??= this.scan().finally(() => {
       this.scannedAt = Date.now();
@@ -236,10 +279,16 @@ export class UsageIndex {
   private async scan(): Promise<void> {
     const seen = new Set<string>();
     const sessions: SessionFiles[] = [];
+    /** Files read again (new or changed): their sessions' calls go into the ledger. */
+    const changed = new Set<string>();
     const update = async (file: string): Promise<boolean> => {
-      const state = await readUsageFile(file, this.files.get(file));
+      const known = this.files.get(file);
+      const state = await readUsageFile(file, known);
       if (!state) {
         return false;
+      }
+      if (state !== known) {
+        changed.add(file);
       }
       this.files.set(file, state);
       seen.add(file);
@@ -281,6 +330,15 @@ export class UsageIndex {
       }
     }
     this.sessionFiles = sessions;
+    if (this.ledger && changed.size > 0) {
+      const ids = new Set(
+        sessions
+          .filter((files) => [files.transcript, ...files.subagents].some((file) => changed.has(file)))
+          .map((files) => files.sessionId),
+      );
+      // A ledger that cannot be written now is written the next time the files change.
+      await this.ledger.record(this.sessions().filter((usage) => ids.has(usage.sessionId))).catch(() => undefined);
+    }
   }
 }
 

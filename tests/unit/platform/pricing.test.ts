@@ -118,6 +118,25 @@ describe('readPricingAnswer', () => {
     assert.deepEqual(codes, ['badDate', 'badZone', 'timePair']);
   });
 
+  test('holidays it knows, with a time zone', () => {
+    const answer = (when: Record<string, unknown>): string[] =>
+      readPricingAnswer(
+        JSON.stringify({ currency: 'CNY', models: { a: { input: 1, output: 2, rules: [{ label: 'x', when, input: 2, output: 4 }] } } }),
+      ).problems.map((problem) => problem.code);
+    assert.deepEqual(answer({ zone: 'Asia/Shanghai', from: '09:00', to: '12:00', exceptHolidays: 'CN' }), []);
+    assert.deepEqual(answer({ zone: 'Asia/Shanghai', exceptHolidays: 'US' }), ['badHolidays']);
+    assert.deepEqual(answer({ from: '09:00', to: '12:00', exceptHolidays: 'CN' }), ['zoneNeeded']);
+    const read = readPricingAnswer(
+      JSON.stringify({
+        currency: 'CNY',
+        models: {
+          a: { input: 1, output: 2, rules: [{ label: 'x', when: { zone: 'Asia/Shanghai', exceptHolidays: 'CN' }, input: 2, output: 4 }] },
+        },
+      }),
+    );
+    assert.equal(read.answer?.pricing.models.a?.rules?.[0]?.when.exceptHolidays, 'CN');
+  });
+
   test('needs a model with prices', () => {
     assert.equal(readPricingAnswer('{"currency": "USD", "models": {}}').problems[0]?.code, 'noModels');
   });
@@ -186,6 +205,18 @@ describe('ruleHolds', () => {
     assert.equal(holds({ thinking: true }, '2026-01-05T00:00:00Z'), false);
     assert.equal(holds({ thinking: true }, '2026-01-05T00:00:00Z', { thinking: true }), true);
     assert.equal(holds({ thinking: false }, '2026-01-05T00:00:00Z'), true);
+  });
+
+  test("not on mainland China's public holidays, by the date in its time zone", () => {
+    const peak: PriceWhen = { zone: 'Asia/Shanghai', days: [1, 2, 3, 4, 5], from: '09:00', to: '12:00', exceptHolidays: 'CN' };
+    assert.equal(holds(peak, '2026-10-06T02:00:00Z'), false); // Tuesday 10:00, National Day holidays
+    assert.equal(holds(peak, '2026-10-13T02:00:00Z'), true); // Tuesday 10:00, a working day
+    assert.equal(holds(peak, '2026-10-07T03:59:00Z'), false); // Wednesday 11:59, the last day off
+    assert.equal(holds(peak, '2026-10-08T01:00:00Z'), true); // Thursday 09:00: back at work
+    // Without the condition the holidays are days like any other.
+    assert.equal(holds({ ...peak, exceptHolidays: undefined }, '2026-10-06T02:00:00Z'), true);
+    // A year it knows no holidays of: every day holds.
+    assert.equal(holds(peak, '2027-10-05T02:00:00Z'), true);
   });
 });
 

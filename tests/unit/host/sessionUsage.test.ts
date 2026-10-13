@@ -87,7 +87,15 @@ describe('parseUsageLines', () => {
       calls,
     );
     assert.equal(calls.size, 1);
-    assert.deepEqual(calls.get('msg-ok'), { at: AT, model: 'deepseek-flash', input: 100, output: 0, cacheRead: 0, cacheWrite: 0 });
+    assert.deepEqual(calls.get('msg-ok'), {
+      id: 'msg-ok',
+      at: AT,
+      model: 'deepseek-flash',
+      input: 100,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    });
   });
 
   test('the last line of a reply replaces the earlier ones, and the first line sets the folder', () => {
@@ -102,8 +110,24 @@ describe('parseUsageLines', () => {
     );
     assert.equal(cwd, FOLDER);
     assert.equal(calls.size, 2);
-    assert.deepEqual(calls.get('msg-1'), { at: AT, model: 'deepseek-flash', input: 5, output: 6, cacheRead: 0, cacheWrite: 0 });
-    assert.deepEqual(calls.get('msg-2'), { at: AT, model: 'deepseek-flash', input: 7, output: 0, cacheRead: 0, cacheWrite: 0 });
+    assert.deepEqual(calls.get('msg-1'), {
+      id: 'msg-1',
+      at: AT,
+      model: 'deepseek-flash',
+      input: 5,
+      output: 6,
+      cacheRead: 0,
+      cacheWrite: 0,
+    });
+    assert.deepEqual(calls.get('msg-2'), {
+      id: 'msg-2',
+      at: AT,
+      model: 'deepseek-flash',
+      input: 7,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    });
   });
 
   test('negative or non-numeric token counts become zero', () => {
@@ -123,7 +147,15 @@ describe('parseUsageLines', () => {
       ].join('\n'),
       calls,
     );
-    assert.deepEqual(calls.get('msg-1'), { at: AT, model: 'deepseek-flash', input: 0, output: 0, cacheRead: 10, cacheWrite: 0 });
+    assert.deepEqual(calls.get('msg-1'), {
+      id: 'msg-1',
+      at: AT,
+      model: 'deepseek-flash',
+      input: 0,
+      output: 0,
+      cacheRead: 10,
+      cacheWrite: 0,
+    });
   });
 
   test('a synthetic reply is not counted', () => {
@@ -323,6 +355,70 @@ describe('UsageIndex', () => {
       const after = await new UsageIndex(root, tagsFile).answer({ kind: 'summary' as const, providers, provider: 'deepseek' });
       assert.deepEqual(after.all, { 'deepseek-flash': { input: 150, output: 30, cacheRead: 300, cacheWrite: 0, calls: 2 } });
       assert.deepEqual(after.session, {});
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the ledger keeps a deleted transcript's calls: the total counts them, the scopes do not", async () => {
+    const { root, tagsFile } = makeProject();
+    const ledgerFile = path.join(root, 'usage-ledger.jsonl');
+    try {
+      const index = new UsageIndex(root, tagsFile, ledgerFile);
+      const total = { kind: 'total' as const, providers, provider: 'deepseek' };
+      assert.equal((await index.answer(total))['deepseek-flash']?.input, 157);
+
+      rmSync(path.join(root, 'other', `${ID_C}.jsonl`));
+      await index.answer({ kind: 'sync' as const });
+      const summary = await index.answer({ kind: 'summary' as const, providers, provider: 'deepseek' });
+      assert.equal(summary.all['deepseek-flash']?.input, 150);
+      assert.equal((await index.answer(total))['deepseek-flash']?.input, 157);
+      // Kept on disk: another index (the next start) has it too.
+      assert.deepEqual((await new UsageIndex(root, tagsFile, ledgerFile).answer(total))['deepseek-flash'], {
+        input: 157,
+        output: 33,
+        cacheRead: 300,
+        cacheWrite: 0,
+        calls: 3,
+      });
+      // Read once more, the transcripts add nothing to the ledger.
+      const lines = readFileSync(ledgerFile, 'utf8').trim().split('\n').length;
+      await new UsageIndex(root, tagsFile, ledgerFile).answer({ kind: 'sync' as const });
+      assert.equal(readFileSync(ledgerFile, 'utf8').trim().split('\n').length, lines);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('sync reads a transcript that grew a moment ago, and its new calls go into the ledger', async () => {
+    const { root, tagsFile } = makeProject();
+    const ledgerFile = path.join(root, 'usage-ledger.jsonl');
+    try {
+      const index = new UsageIndex(root, tagsFile, ledgerFile);
+      const summary = { kind: 'summary' as const, providers, provider: 'deepseek' };
+      assert.equal((await index.answer(summary)).all['deepseek-flash']?.calls, 3);
+      appendFileSync(path.join(root, 'shop', `${ID_A}.jsonl`), callLine(ID_A, { id: 'msg-a-3', model: 'deepseek-flash', input: 1 }) + '\n');
+      // Within the rescan throttle: what was read.
+      assert.equal((await index.answer(summary)).all['deepseek-flash']?.calls, 3);
+      await index.answer({ kind: 'sync' as const });
+      assert.equal((await index.answer(summary)).all['deepseek-flash']?.calls, 4);
+      assert.ok(readFileSync(ledgerFile, 'utf8').includes('msg-a-3'));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("session: one session's tokens by provider, priced", async () => {
+    const { root, tagsFile } = makeProject();
+    try {
+      const index = new UsageIndex(root, tagsFile);
+      const pricing = { deepseek: { currency: 'CNY' as const, models: { 'deepseek-flash': { input: 1, output: 2, cacheRead: 0.1 } } } };
+      const result = await index.answer({ kind: 'session' as const, providers, sessionId: ID_A, pricing });
+      assert.deepEqual(Object.keys(result), ['deepseek']);
+      const flash = result.deepseek?.['deepseek-flash'];
+      assert.equal(flash?.calls, 2);
+      assert.ok(Math.abs((flash?.cost ?? 0) - (150 * 1 + 30 * 2 + 300 * 0.1) / 1e6) < 1e-12);
+      assert.deepEqual(await index.answer({ kind: 'session' as const, providers, sessionId: ID_D, pricing }), {});
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -8,9 +8,9 @@ import type { SessionSearchRequest } from '../../platform/protocol';
 import { SessionIndex } from './sessionSearch';
 import { UsageIndex, type UsageRequest } from './sessionUsage';
 
-const data = workerData as { projectsDir: string; tagsFile: string };
+const data = workerData as { projectsDir: string; tagsFile: string; ledgerFile: string };
 const index = new SessionIndex(data.projectsDir);
-const usage = new UsageIndex(data.projectsDir, data.tagsFile);
+const usage = new UsageIndex(data.projectsDir, data.tagsFile, data.ledgerFile);
 
 type WorkerRequest = { id: number; kind: 'search'; request: SessionSearchRequest } | { id: number; kind: 'usage'; request: UsageRequest };
 

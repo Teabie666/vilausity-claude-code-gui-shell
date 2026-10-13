@@ -4,7 +4,7 @@
  * display language.
  */
 
-import type { UsageViewDto } from '../../platform/protocol';
+import type { UsageTotalDto, UsageViewDto } from '../../platform/protocol';
 import type { Currency, ProviderPricing } from '../../platform/providers';
 import { modelCost, totalCost, type ModelTokens, type UsageScopes } from '../../platform/usage';
 import { t } from './messages';
@@ -31,7 +31,7 @@ export function formatTokens(count: number): string {
 }
 
 /** A scope's cost: "—" with nothing to show, "≥ ¥3.40" while some of its models have no price. */
-function scopeValue(models: ModelTokens, pricing: ProviderPricing | undefined, currency: Currency): string {
+export function scopeValue(models: ModelTokens, pricing: ProviderPricing | undefined, currency: Currency): string {
   const { cost, unpriced } = totalCost(models, pricing);
   const used = Object.keys(models).length;
   if (used === 0) {
@@ -61,6 +61,12 @@ function scopeDetail(models: ModelTokens, pricing: ProviderPricing | undefined, 
       return [`${model}: ${counts} · ${cost === undefined ? t('usageNoPrice') : formatCost(cost, currency)}`, ...rules].join('\n');
     });
   return lines.length > 0 ? lines.join('\n') : t('usageNone');
+}
+
+/** A provider's total in the providers editor (`usage.total`). */
+export function usageTotal(models: ModelTokens, pricing: ProviderPricing | undefined): UsageTotalDto {
+  const currency = pricing?.currency ?? 'USD';
+  return { value: scopeValue(models, pricing, currency), detail: scopeDetail(models, pricing, currency) };
 }
 
 /** The block for a provider named `name`; `hasSession`: there is a conversation in front. */

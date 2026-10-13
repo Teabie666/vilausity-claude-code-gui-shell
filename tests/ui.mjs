@@ -1348,7 +1348,8 @@ function startMockApi() {
       }
       if (request.method === 'POST' && url.startsWith('/v1/messages')) {
         const message = {
-          id: 'msg_mock',
+          // Each reply its own id, as an API gives them (usage counts a call once by its id).
+          id: `msg_mock_${requests.length}`,
           type: 'message',
           role: 'assistant',
           model: body?.model ?? 'mock',
@@ -1570,6 +1571,14 @@ await step(
       await waitFor(async () => (await usageRows())['This workspace'] === '¥12.80', 10_000, 'the workspace’s cost by the rule');
       const ruled = await usageRows();
       if (ruled['Claude Code history'] !== '≥ ¥14.80') throw new Error(`usage by the rule: ${JSON.stringify(ruled)}`);
+      // The editor tells the API's total too (deleted conversations would stay in it).
+      await waitFor(
+        async () =>
+          (await editor.locator('.providers-prices-total').textContent()) ===
+          'All of Claude Code on this API: ≥ ¥14.80, deleted conversations included',
+        10_000,
+        'the total under the prices',
+      );
       await page.locator('#content-pane .content-tab.active .tab-close').click();
 
       // A new conversation (the first one holds comments that later steps expect).
@@ -1750,10 +1759,12 @@ await step('the providers editor adds a provider from a preset, saves edits and 
   await editor.locator('.providers-save').click();
   const saved = () => JSON.parse(readFileSync(path.join(dataDir, 'providers.json'), 'utf8'));
   await waitFor(() => saved().providers.some((provider) => provider.name === 'DeepSeek Work'), 5000, 'the name in providers.json');
-  // Its prices: a row per model (deepseek-flash[1m] is deepseek-flash), in the currency it bills in.
+  // Its prices: a row per model its fields name (deepseek-flash[1m] is deepseek-flash) or it has
+  // prices for (the preset's deepseek-v4-pro), in the currency it bills in.
   const flash = editor.locator('.providers-price-row[data-model="deepseek-flash"]');
   await flash.waitFor({ timeout: 5000 });
-  if ((await editor.locator('.providers-price-row[data-model]').count()) !== 1) throw new Error('not one price row per model');
+  const priceRows = await editor.locator('.providers-price-row[data-model]').evaluateAll((rows) => rows.map((row) => row.dataset.model));
+  if (priceRows.join() !== 'deepseek-flash,deepseek-v4-pro') throw new Error(`not one price row per model: ${priceRows.join(', ')}`);
   if ((await editor.locator('.providers-prices .setting-select').inputValue()) !== 'CNY') throw new Error('the prices are not in CNY');
   await flash.locator('[data-field="input"]').fill('2');
   await flash.locator('[data-field="output"]').fill('8');
@@ -2155,7 +2166,14 @@ await step(
           sessionId: id,
           timestamp: at(50),
           cwd: ownWorkspace,
-          message: { role: 'assistant', content: [{ type: 'text', text: 'Done.' }] },
+          // A reply of a compatible API (the one provider that names its model): ¥2 at its prices.
+          message: {
+            id: 'msg-tidy',
+            role: 'assistant',
+            model: 'tidy-model',
+            content: [{ type: 'text', text: 'Done.' }],
+            usage: { input_tokens: 1_000_000, output_tokens: 0 },
+          },
         },
         { type: 'ai-title', aiTitle: 'Tidy the downloads', sessionId: id },
       ]
@@ -2182,6 +2200,19 @@ await step(
     });
     try {
       const otherPage = await other.firstWindow();
+      await otherPage.evaluate(() =>
+        window.vilausNative.invoke('providers.save', {
+          provider: {
+            id: 'tidy',
+            name: 'Tidy API',
+            type: 'compatible',
+            baseUrl: 'http://127.0.0.1:9',
+            auth: 'bearer',
+            models: { main: 'tidy-model' },
+            pricing: { currency: 'CNY', models: { 'tidy-model': { input: 2, output: 8 } } },
+          },
+        }),
+      );
       const rowSelector = `[id="sessions-list-row-${id}"]`;
       const list = await waitFor(
         async () => {
@@ -2246,6 +2277,9 @@ await step(
       const modal = otherPage.locator('.overlay-box.modal');
       await modal.waitFor({ timeout: 5000 });
       if (!(await modal.innerText()).includes('"Tidy the downloads"')) throw new Error(`the question: ${await modal.innerText()}`);
+      // It ran on a compatible API: what it cost leaves the session list's usage, and the question says so.
+      if (!(await modal.innerText()).includes('What it cost on Tidy API (¥2.00) also goes from the usage in the session list.'))
+        throw new Error(`no word of what it cost: ${await modal.innerText()}`);
       // Cancel keeps it and its tab; Delete deletes it.
       await modal.locator('.button', { hasText: 'Cancel' }).click();
       await otherPage.waitForTimeout(500);
@@ -2262,10 +2296,13 @@ await step(
       // The process ended before: nothing writes the transcript again.
       await otherPage.waitForTimeout(1000);
       if (existsSync(transcript)) throw new Error('the transcript came back');
+      // The API's total keeps what it cost.
+      const total = await otherPage.evaluate(() => window.vilausNative.invoke('usage.total', { providerId: 'tidy' }));
+      if (total?.value !== '¥2.00') throw new Error(`the total after deleting: ${JSON.stringify(total)}`);
     } finally {
       await other.close();
     }
-    return 'its tab closed, transcript and file history deleted, the list read again';
+    return 'its tab closed, transcript and file history deleted, the list read again; the API total kept its cost';
   },
 );
 

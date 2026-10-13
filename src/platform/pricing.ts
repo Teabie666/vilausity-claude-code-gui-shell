@@ -7,6 +7,8 @@
  * the stored copy (what does not hold is left out).
  */
 
+import { isHoliday, isHolidayCalendar, type HolidayCalendar } from './holidays';
+
 export type Currency = 'CNY' | 'USD';
 
 /** Per million tokens, in the provider's currency. */
@@ -38,6 +40,8 @@ export interface PriceWhen {
   readonly outputUpTo?: number;
   /** Whether the reply thought (had a thinking block). */
   readonly thinking?: boolean;
+  /** Not on the public holidays of this calendar (by the local date in `zone`): `isHoliday`. */
+  readonly exceptHolidays?: HolidayCalendar;
 }
 
 /** Other prices for the calls `when` holds for. */
@@ -97,6 +101,7 @@ export type PricingProblemCode =
   | 'badDate'
   | 'badRange'
   | 'emptyWhen'
+  | 'badHolidays'
   | 'noModels';
 
 /** A problem of a pasted answer: `path` says where (`models["x"].rules[0].when.from`). */
@@ -137,6 +142,7 @@ const WHEN_KEYS = [
   'outputOver',
   'outputUpTo',
   'thinking',
+  'exceptHolidays',
 ] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -302,7 +308,14 @@ class Reader {
         this.problem(`${path}.thinking`, 'notBoolean', JSON.stringify(value.thinking));
       }
     }
-    const timed = ['days', 'from', 'startDate', 'endDate'].some((key) => value[key] !== undefined);
+    if (value.exceptHolidays !== undefined) {
+      if (isHolidayCalendar(value.exceptHolidays)) {
+        when.exceptHolidays = value.exceptHolidays;
+      } else {
+        this.problem(`${path}.exceptHolidays`, 'badHolidays', JSON.stringify(value.exceptHolidays));
+      }
+    }
+    const timed = ['days', 'from', 'startDate', 'endDate', 'exceptHolidays'].some((key) => value[key] !== undefined);
     if (timed && value.zone === undefined) {
       this.problem(path, 'zoneNeeded');
     }
@@ -548,7 +561,7 @@ export function ruleHolds(when: PriceWhen, call: PricedCall): boolean {
   if (when.thinking !== undefined && when.thinking !== (call.thinking === true)) {
     return false;
   }
-  if (when.zone !== undefined && (when.days || when.from !== undefined || when.startDate || when.endDate)) {
+  if (when.zone !== undefined && (when.days || when.from !== undefined || when.startDate || when.endDate || when.exceptHolidays)) {
     const local = new Date(call.at + zoneOffset(when.zone, call.at));
     const day = ((local.getUTCDay() + 6) % 7) + 1;
     if (when.days && !when.days.includes(day)) {
@@ -564,6 +577,9 @@ export function ruleHolds(when: PriceWhen, call: PricedCall): boolean {
     }
     const date = local.toISOString().slice(0, 10);
     if ((when.startDate && date < when.startDate) || (when.endDate && date > when.endDate)) {
+      return false;
+    }
+    if (when.exceptHolidays && isHoliday(when.exceptHolidays, date)) {
       return false;
     }
   }
@@ -660,8 +676,9 @@ export function pricingPrompt(input: PricingPromptInput): string {
     '   - "from", "to": local time of day "HH:MM", from included, to not; a window past midnight with "days" goes into two rules, one each side of midnight;',
     '   - "startDate", "endDate": local dates "YYYY-MM-DD", both included, for prices that hold only for a while (an offer);',
     '   - "inputOver", "inputUpTo": the call\'s input tokens (cache hits included), over the first and up to and including the second; "outputOver", "outputUpTo" the same for output. Whole numbers: "32K" is 32000 unless the page says 1K = 1024;',
-    '   - "thinking": true or false, if thinking mode is priced apart.',
-    '   If tiers price only the tokens past a threshold higher (not the whole call), or prices depend on anything else (holidays, a fee per request, cache storage by the hour, free quotas, batch), leave that out and explain it in "notes".',
+    '   - "thinking": true or false, if thinking mode is priced apart;',
+    '   - "exceptHolidays": "CN" when the page says the rule does not apply on the public holidays of mainland China (the app knows their dates; do not list them).',
+    '   If tiers price only the tokens past a threshold higher (not the whole call), or prices depend on anything else (other holidays, a fee per request, cache storage by the hour, free quotas, batch), leave that out and explain it in "notes".',
     `6. Every rule has a short "label"; labels and notes in ${input.language}.`,
     '7. "sources": every page you took prices from, "checked": today. "evidence": for each model you priced, a short quote of the page with its prices, as written there.',
     '',

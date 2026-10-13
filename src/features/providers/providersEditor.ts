@@ -890,12 +890,26 @@ export class ProvidersEditorPane implements EditorPane {
     }
     const empty = this.description(t('pricesNone'));
     table.append(header);
+    // What the API cost in all, by the prices saved (the ledger keeps deleted conversations).
+    const total = this.description('');
+    total.classList.add('providers-prices-total');
+    total.hidden = true;
+    this.context.native.call('usage.total', { providerId: provider.id }).then(
+      (shown) => {
+        if (shown) {
+          total.textContent = t('pricesTotal', shown.value);
+          total.title = [t('pricesTotalTitle'), '', shown.detail].join('\n');
+          total.hidden = false;
+        }
+      },
+      (error: unknown) => this.context.logger.warn('cannot add up what a provider cost', error),
+    );
     const { panel: paste, text: pasted } = this.pastePanel(draft, () => {
       changed();
       this.renderForm();
       this.revealPrices();
     });
-    control.append(bar, table, empty, this.pricingInfo(draft, changed), paste);
+    control.append(bar, table, empty, total, this.pricingInfo(draft, changed), paste);
 
     // The models its fields name, it has prices for, or its conversations used.
     const wanted = (): string[] => [

@@ -2,8 +2,9 @@
  * The session list: the Claude Code extension's own session-list webview view, shown in
  * the sidebar in place of a file tree. Clicking a session asks the extension to open it,
  * which arrives as a conversation panel. The shell adds a delete button to each row (the
- * extension can only archive): it asks first, closes the session's tab if one shows it, then
- * main deletes the session's files.
+ * extension can only archive): it asks first (telling what the session cost on a compatible
+ * API, which leaves the session list's usage with it), closes the session's tab if one shows
+ * it, then main deletes the session's files.
  */
 
 import type { ShellModule } from '../../core/module';
@@ -121,6 +122,18 @@ export const sessionsModule: ShellModule = {
       await dialogs.showMessage({ severity: 'info', modal: true, message: t('deleteElsewhere', name), items: [] });
       return true;
     };
+    // What the session cost on a compatible API leaves the session list's usage with it.
+    const costNotice = async (sessionId: string): Promise<string> => {
+      const costs = await native.call('usage.sessionCost', { sessionId }).catch((error: unknown) => {
+        logger.warn(`cannot tell what session ${sessionId} cost`, error);
+        return [];
+      });
+      if (costs.length === 0) {
+        return '';
+      }
+      const items = costs.map(({ name, cost }) => (cost ? t('deleteCostItem', name, cost) : name));
+      return t('deleteCost', items.join(t('deleteCostSeparator')));
+    };
     const deleteSession = async (sessionId: string, title: string): Promise<void> => {
       const name = title || t('untitled');
       if (await refuseIfElsewhere(sessionId, name)) {
@@ -130,7 +143,7 @@ export const sessionsModule: ShellModule = {
         severity: 'warning',
         modal: true,
         message: t('deleteTitle', name),
-        detail: t('deleteDetail'),
+        detail: [t('deleteDetail'), await costNotice(sessionId)].filter(Boolean).join('\n\n'),
         items: [t('delete')],
       });
       // It may have been taken up elsewhere while the question was up.

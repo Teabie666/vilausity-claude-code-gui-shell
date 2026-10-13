@@ -12,6 +12,7 @@ import { createExtensionContext } from '../../compat/vscode/extensionContext';
 import { Memento } from '../../compat/vscode/memento';
 import { Uri } from '../../compat/vscode/uri';
 import { RpcEndpoint, type MessageTransport } from '../../platform/ipc';
+import { sessionProcesses, waitForExit } from '../node/claudeProcesses';
 import { toDisposable } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
 import type { ConversationRequest, ExtHostInitData, RangeDto, StorageScope } from '../../platform/protocol';
@@ -36,6 +37,8 @@ const OPEN_CHAT_COMMAND = 'claude-vscode.editor.open';
  * `/open?session=&prompt=` links use it too (checked against 2.1.282).
  */
 const OPEN_CONVERSATION_COMMAND = 'claude-vscode.primaryEditor.open';
+/** How long a closed tab's Claude process may take to end (it saves the session first). */
+const SESSION_EXIT_TIMEOUT_MS = 10_000;
 
 function portTransport(port: MessagePortMain): MessageTransport<MessagePortMain> {
   return {
@@ -151,10 +154,16 @@ export class ExtensionHost {
         bridge.keepPreview(panel.webview.id);
       }
     });
-    renderer.handle('sessions.close', ({ sessionId }) => {
-      // As if its tabs were closed: the extension's dispose handlers end the Claude process.
+    renderer.handle('sessions.close', async ({ sessionId }) => {
+      // As if its tabs were closed: the extension's dispose handlers end the Claude process. A
+      // process removes its record before its last writes to the transcript: wait for the
+      // process itself, whose id the record had while the tab was open.
       const shown = webviews.allPanels.filter((panel) => conversationSessionId(panel.webview.state) === sessionId);
+      const pids = shown.length > 0 ? await sessionProcesses(init.paths.claudeConfig, sessionId) : [];
       shown.forEach((panel) => panel.dispose());
+      if (!(await waitForExit(pids, SESSION_EXIT_TIMEOUT_MS))) {
+        this.logger.warn(`the Claude process of session ${sessionId} still runs after its tab closed`);
+      }
       return shown.length;
     });
     installVSCodeModule(api);

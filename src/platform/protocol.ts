@@ -73,6 +73,8 @@ export interface ExtHostPaths {
   readonly logs: string;
   readonly globalStorage: string;
   readonly workspaceStorage: string;
+  /** Claude Code's own folder (`~/.claude`, or `CLAUDE_CONFIG_DIR`): the records of its processes. */
+  readonly claudeConfig: string;
 }
 
 export interface ExtHostInitData {
@@ -225,6 +227,25 @@ export interface UsageViewDto {
   readonly rows: readonly { readonly label: string; readonly value: string; readonly detail: string }[];
   /** The models used that have no price, as a line to show; none when every one has. */
   readonly unpriced?: string;
+}
+
+/** What a session cost under a compatible API, for the question before it is deleted. */
+export interface SessionCostDto {
+  /** The provider's name. */
+  readonly name: string;
+  /** "¥1.23", "≥ ¥1.23" (some of its models have no price); empty when none has. */
+  readonly cost: string;
+}
+
+/**
+ * A compatible API's total in the providers editor: every call of Claude Code's sessions that
+ * ran under it, those of sessions deleted since too.
+ */
+export interface UsageTotalDto {
+  /** "¥12.34", "≥ ¥12.34", "—" when no model used has a price. */
+  readonly value: string;
+  /** By model, one line each, as the session list's usage rows tell it. */
+  readonly detail: string;
 }
 
 /** The API provider of each session, for a session list's marks and its "this API only" toggle. */
@@ -716,8 +737,9 @@ export type ExtHostApiForRenderer = {
   /** Whether a session is in use (as the extension last told its pages); undefined when not. */
   'sessions.busy': (p: { sessionId: string }) => SessionBusy | undefined;
   /**
-   * Closes the tabs that show a session (before it is deleted); the extension then ends
-   * its Claude process, a moment later. Resolves to how many were closed.
+   * Closes the tabs that show a session (before it is deleted, or opened under another
+   * provider); the extension then ends its Claude process. Resolves to how many were closed,
+   * once that process has ended (or after a while, if it does not).
    */
   'sessions.close': (p: { sessionId: string }) => number;
 
@@ -865,7 +887,8 @@ export type MainApiForRenderer = {
   /**
    * Deletes a session for good: its transcript and the folders Claude Code keeps next to it.
    * Waits a while for a Claude process that still runs it to end (a tab just closed), and
-   * deletes nothing if one does not. Every window's session list hears of it.
+   * deletes nothing if one does not. Its calls stay in the usage ledger (an API's total).
+   * Every window's session list hears of it.
    */
   'sessions.delete': (p: { sessionId: string }) => SessionDeleteResult;
   /** The folders the open windows show (the calling window's too). */
@@ -896,6 +919,10 @@ export type MainApiForRenderer = {
   'providers.createShortcut': (p: { id: string }) => string;
   /** The models Claude Code's sessions used under a provider (`modelKey`), for its prices. */
   'usage.models': (p: { providerId: string }) => string[];
+  /** What a session cost under each compatible API it ran under (asked before deleting it). */
+  'usage.sessionCost': (p: { sessionId: string }) => SessionCostDto[];
+  /** A compatible API's total, deleted sessions included; null for another type of provider. */
+  'usage.total': (p: { providerId: string }) => UsageTotalDto | null;
   /**
    * Opens a session again in the calling window, once the Claude process that ran it has ended
    * (its tab was just closed); false when it does not end in time.

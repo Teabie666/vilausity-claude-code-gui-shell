@@ -35,6 +35,8 @@ import {
   type ProviderNoticeDto,
   type SessionProvidersDto,
   type ThemeData,
+  type SessionCostDto,
+  type UsageTotalDto,
   type UsageViewDto,
 } from '../../platform/protocol';
 import { ACCENT_COLOR_SETTING, ACCENT_SETTING, ACCENT_SOURCES, logoColor, parseColor, withAccent } from '../../platform/accent';
@@ -48,7 +50,7 @@ import {
   SUBSCRIPTION_PROVIDER,
   type ProviderConfig,
 } from '../../platform/providers';
-import { attributedProvider, CURRENT_PROVIDER_ONLY_SETTING, type AttributedProvider } from '../../platform/usage';
+import { attributedProvider, CURRENT_PROVIDER_ONLY_SETTING, totalCost, type AttributedProvider } from '../../platform/usage';
 import { APP_ORIGIN } from '../../platform/webviewUrls';
 import { extensionTranslations } from '../../nls/extensionPacks';
 import { languagePack } from '../../nls/packs';
@@ -66,7 +68,7 @@ import { t } from './messages';
 import { ProviderStore, type SecretCipher } from './providerStore';
 import { deleteSession, waitForSessionEnd } from './sessionFiles';
 import { SessionTagWriter } from './sessionProviders';
-import { usageView } from './usageView';
+import { scopeValue, usageTotal, usageView } from './usageView';
 import { claudeProjectsDir, SessionSearch } from './sessionSearch';
 import { KeybindingsStore } from './keybindingsStore';
 import { LogoIcons, systemIconColor } from './logoIcons';
@@ -150,6 +152,8 @@ export class ShellApp extends Disposable implements WindowHost {
   private readonly sessionTags: SessionTagWriter;
   /** Claude Code's transcripts (`~/.claude/projects`), for the search and for deleting sessions. */
   private readonly projectsDir = claudeProjectsDir(process.env, os.homedir());
+  /** Claude Code's own folder: the projects folder's parent (`CLAUDE_CONFIG_DIR` moves both). */
+  readonly claudeConfigDir = path.dirname(this.projectsDir);
   /** File Explorer's "Open with Vilausity" entries. */
   private readonly explorerMenu = new ExplorerMenu(explorerMenuRoot(process.env), explorerMenuTarget());
   /** The app icon in the colors of windows' logos, for their icons and providers' shortcuts. */
@@ -193,6 +197,7 @@ export class ShellApp extends Disposable implements WindowHost {
         path.join(env.appDir, 'sessionSearchWorker.js'),
         this.projectsDir,
         env.paths.sessionProvidersFile,
+        env.paths.usageLedgerFile,
         this.logger.child('sessionSearch'),
       ),
     );
@@ -493,6 +498,45 @@ export class ShellApp extends Disposable implements WindowHost {
       pricing: provider.pricing,
     });
     return usageView(scopes, provider.name || provider.id, provider.pricing, sessionId !== undefined);
+  }
+
+  /** A compatible API's total, deleted sessions included (`usage.total`). */
+  async usageTotal(providerId: string): Promise<UsageTotalDto | null> {
+    const provider = this.providers.get(providerId);
+    if (provider?.type !== 'compatible') {
+      return null;
+    }
+    const models = await this.sessionSearch.usage({
+      kind: 'total',
+      providers: this.attributedProviders(),
+      provider: provider.id,
+      pricing: provider.pricing,
+    });
+    return usageTotal(models, provider.pricing);
+  }
+
+  /** What a session cost under the compatible APIs it ran under (`usage.sessionCost`). */
+  async sessionCost(sessionId: string): Promise<SessionCostDto[]> {
+    const compatible = this.providers.list().filter((provider) => provider.type === 'compatible');
+    if (compatible.length === 0) {
+      return [];
+    }
+    const byProvider = await this.sessionSearch.usage({
+      kind: 'session',
+      providers: this.attributedProviders(),
+      sessionId,
+      pricing: Object.fromEntries(compatible.flatMap((provider) => (provider.pricing ? [[provider.id, provider.pricing]] : []))),
+    });
+    return compatible.flatMap((provider) => {
+      const models = byProvider[provider.id] ?? {};
+      const used = Object.keys(models).length;
+      if (used === 0) {
+        return [];
+      }
+      const priced = totalCost(models, provider.pricing).unpriced.length < used;
+      const cost = priced ? scopeValue(models, provider.pricing, provider.pricing?.currency ?? 'USD') : '';
+      return [{ name: provider.name || provider.id, cost }];
+    });
   }
 
   private attributedProviders(): AttributedProvider[] {
@@ -872,10 +916,14 @@ export class ShellApp extends Disposable implements WindowHost {
       'sessions.delete': async ({ sessionId }) => {
         // Its tab was just closed: the Claude process would write the transcript again as it ends.
         const started = Date.now();
-        if (!(await waitForSessionEnd(path.dirname(this.projectsDir), sessionId, SESSION_END_TIMEOUT_MS))) {
+        if (!(await waitForSessionEnd(this.claudeConfigDir, sessionId, SESSION_END_TIMEOUT_MS))) {
           this.logger.warn(`session ${sessionId} still runs: not deleted`);
           return 'running';
         }
+        // What it cost goes into the usage ledger first (its last calls may not be read yet).
+        await this.sessionSearch
+          .usage({ kind: 'sync' })
+          .catch((error: unknown) => this.logger.warn(`cannot keep the usage of session ${sessionId}`, error));
         const deleted = await deleteSession(this.projectsDir, sessionId);
         this.logger.info(`deleted session ${sessionId}: ${deleted.paths.length} path(s), ${Date.now() - started} ms after the request`);
         for (const window of this.windows) {
@@ -899,7 +947,7 @@ export class ShellApp extends Disposable implements WindowHost {
       'providers.createShortcut': ({ id }) => this.createShortcut(id),
       'sessions.reopen': async ({ sessionId }, window) => {
         // Its tab was just closed: a second Claude process on it would have to ask first.
-        if (!(await waitForSessionEnd(path.dirname(this.projectsDir), sessionId, SESSION_END_TIMEOUT_MS))) {
+        if (!(await waitForSessionEnd(this.claudeConfigDir, sessionId, SESSION_END_TIMEOUT_MS))) {
           this.logger.warn(`session ${sessionId} still runs: not opened again`);
           return false;
         }
@@ -908,6 +956,8 @@ export class ShellApp extends Disposable implements WindowHost {
       },
       'usage.models': ({ providerId }) =>
         this.sessionSearch.usage({ kind: 'models', providers: this.attributedProviders(), provider: providerId }),
+      'usage.sessionCost': ({ sessionId }) => this.sessionCost(sessionId),
+      'usage.total': ({ providerId }) => this.usageTotal(providerId),
       'extension.status': () => this.requireUpdater().status(),
       'extension.check': async () => this.afterInstall(await this.requireUpdater().check(true)),
       'extension.installFile': async (_params, window) => {

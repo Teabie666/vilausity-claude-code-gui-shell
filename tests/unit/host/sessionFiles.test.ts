@@ -4,14 +4,8 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import {
-  deleteSession,
-  isSessionId,
-  processRuns,
-  sessionPaths,
-  sessionProcesses,
-  waitForSessionEnd,
-} from '../../../src/host/main/sessionFiles';
+import { deleteSession, isSessionId, sessionPaths, waitForSessionEnd } from '../../../src/host/main/sessionFiles';
+import { processRuns, sessionProcesses, waitForExit } from '../../../src/host/node/claudeProcesses';
 
 const ID = '0f9c2b1e-4d5a-4c3b-9e8f-7a6b5c4d3e2f';
 const OTHER = '11111111-2222-4333-8444-555555555555';
@@ -129,6 +123,20 @@ describe('session files', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test('waits for processes to end, records or not, and gives up after a while', async () => {
+    const running = new Set([101, 102]);
+    const runs = (pid: number): boolean => running.has(pid);
+    setTimeout(() => running.delete(101), 30);
+    setTimeout(() => running.delete(102), 60);
+    assert.equal(await waitForExit([101, 102], 2000, runs, 10), true);
+    assert.equal(running.size, 0);
+    running.add(103);
+    const started = Date.now();
+    assert.equal(await waitForExit([103], 100, runs, 10), false);
+    assert.ok(Date.now() - started >= 100);
+    assert.equal(await waitForExit([], 0, runs), true);
   });
 
   test('a missing Claude Code folder has nothing to delete', async () => {

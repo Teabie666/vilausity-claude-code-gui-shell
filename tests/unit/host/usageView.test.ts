@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { formatCost, formatTokens, usageView } from '../../../src/host/main/usageView';
+import { formatCost, formatTokens, usageTotal, usageView } from '../../../src/host/main/usageView';
 import type { ProviderPricing } from '../../../src/platform/providers';
 import type { ModelTokens, UsageScopes } from '../../../src/platform/usage';
 
@@ -74,5 +74,17 @@ describe('usageView', () => {
         ['$0', 'Nothing yet'],
       ],
     );
+  });
+});
+
+describe('usageTotal', () => {
+  test("a provider's total: its cost, a lower bound with unpriced models, and the models in the detail", () => {
+    const priced = usageTotal({ 'deepseek-flash': tokens(1_000_000, 1_000_000, 1_000_000, 0, 3) }, PRICING);
+    assert.equal(priced.value, '¥10.20');
+    assert.ok(priced.detail.startsWith('deepseek-flash: '), priced.detail);
+    const partly = usageTotal({ 'deepseek-flash': tokens(1_000_000), other: tokens(5) }, PRICING);
+    assert.equal(partly.value, '≥ ¥2.00');
+    assert.equal(usageTotal({ other: tokens(5) }, PRICING).value, '—');
+    assert.equal(usageTotal({}, PRICING).value, '¥0');
   });
 });

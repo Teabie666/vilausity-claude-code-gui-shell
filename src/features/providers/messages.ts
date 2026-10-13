@@ -55,6 +55,10 @@ export const t = defineMessages('providers', {
   pricesHint:
     "Per million tokens, for what this API's conversations cost (the usage at the top of the session list). An empty cache price is the input price.",
   pricesNone: 'Fill in the models above to give them prices.',
+  /** Under the prices ({0}: "¥12.34"): what this API cost in all, conversations deleted since too. */
+  pricesTotal: 'All of Claude Code on this API: {0}, deleted conversations included',
+  pricesTotalTitle:
+    "Every call of Claude Code's sessions on this computer that ran on this API, at the prices saved here. Conversations deleted since still count. Calls Claude Code makes for itself (titles, web fetches) are not in its transcripts and are not counted.",
   currencyCny: 'CNY (¥)',
   currencyUsd: 'USD ($)',
   officialPrices: 'Official Prices',
@@ -107,6 +111,8 @@ export const t = defineMessages('providers', {
   ruleOutput: 'output {0}',
   ruleThinking: 'thinking',
   ruleNotThinking: 'not thinking',
+  /** A rule that does not hold on the public holidays of mainland China (by its `zone`'s date). */
+  ruleExceptHolidaysCN: 'not on public holidays in mainland China',
   problemCannotBrowse: 'The AI says it cannot open web pages: ask one that can.',
   problemNoJson: 'There is no JSON in it.',
   /** {0}: the parser's message. */
@@ -120,13 +126,14 @@ export const t = defineMessages('providers', {
   problemNotBoolean: 'not true or false: {0}',
   problemBadCurrency: 'not CNY or USD: {0}',
   problemBadZone: 'not a time zone: {0}',
-  problemZoneNeeded: 'days, times and dates need a "zone"',
+  problemZoneNeeded: 'days, times, dates and holidays need a "zone"',
   problemBadDays: 'not days from 1 (Monday) to 7 (Sunday): {0}',
   problemBadTime: 'not a time of day (HH:MM): {0}',
   problemTimePair: '"from" and "to" go together, and differ',
   problemBadDate: 'not a date (YYYY-MM-DD): {0}',
   problemBadRange: 'no value fits: {0}',
   problemEmptyWhen: 'no condition',
+  problemBadHolidays: 'not holidays the app knows ("CN"): {0}',
   problemNoModels: 'no model has prices',
   headers: 'Request headers',
   headersHint: 'One per line: Name: value',
