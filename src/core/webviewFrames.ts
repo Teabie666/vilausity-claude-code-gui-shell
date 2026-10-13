@@ -155,6 +155,9 @@ export class WebviewFrames {
   private readonly deleteSessionEmitter = new Emitter<{ sessionId: string; title: string }>();
   /** The delete button of a session list's row was clicked (pages with `hints.sessionRows`). */
   readonly onDidRequestSessionDelete = this.deleteSessionEmitter.event;
+  private readonly editPricesEmitter = new Emitter<void>();
+  /** The usage block's link to the provider's prices was clicked (pages with `hints.usageBlock`). */
+  readonly onDidRequestEditPrices: Event<void> = this.editPricesEmitter.event;
   private readonly navigateEmitter = new Emitter<'back' | 'forward'>();
   /** The mouse's back or forward button was released over a webview. */
   readonly onDidRequestNavigate: Event<'back' | 'forward'> = this.navigateEmitter.event;
@@ -340,6 +343,9 @@ export class WebviewFrames {
         if (data.direction === 'back' || data.direction === 'forward') {
           this.navigateEmitter.fire(data.direction);
         }
+        break;
+      case 'editPrices':
+        this.editPricesEmitter.fire();
         break;
       default:
         this.logger.warn(`unknown message kind from webview ${webviewId}`);

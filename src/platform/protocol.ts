@@ -99,6 +99,8 @@ export interface ExtHostInitData {
    * environment variables, no login prompt). Never written to settings.json.
    */
   readonly settingsOverlay?: Readonly<Record<string, unknown>>;
+  /** The shell works out what the window's conversations cost, not the extension (`usage.changed`). */
+  readonly shellPricing?: boolean;
 }
 
 /** A conversation to open: a session to continue, and / or a prompt for it. */
@@ -184,6 +186,43 @@ export interface WebviewPageHints {
   readonly statusFilter?: StatusFilterHints;
   /** A conversation page's own uses of a plain Escape, which the shell takes over (see the type). */
   readonly conversationEscapes?: ConversationEscapeHints;
+  /** Where the shell's usage block goes in a session list, and the extension's classes it is built of. */
+  readonly usageBlock?: UsageBlockHints;
+}
+
+/**
+ * The session list's top (its root element, a selector) and the classes (space-separated) of
+ * the extension's "Account & usage" block, which the shell's usage block is built of.
+ */
+export interface UsageBlockHints {
+  readonly root: string;
+  readonly header: string;
+  readonly toggle: string;
+  readonly chevron: string;
+  readonly chevronExpanded: string;
+  readonly label: string;
+  readonly link: string;
+  readonly body: string;
+  readonly section: string;
+  readonly rows: string;
+  readonly row: string;
+  readonly rowLabel: string;
+  readonly rowValue: string;
+}
+
+/** What the shell's usage block in the session list shows, in the display language. */
+export interface UsageViewDto {
+  /** "Usage · DeepSeek" */
+  readonly title: string;
+  /** How the numbers come about. */
+  readonly tooltip: string;
+  /** The link to the provider's prices, and its tooltip. */
+  readonly editPrices: string;
+  readonly editPricesTitle: string;
+  /** This conversation, this workspace, all of Claude Code's sessions; `detail` by model. */
+  readonly rows: readonly { readonly label: string; readonly value: string; readonly detail: string }[];
+  /** The models used that have no price, as a line to show; none when every one has. */
+  readonly unpriced?: string;
 }
 
 /**
@@ -584,6 +623,11 @@ export type MainApiForExtHost = {
   'sessions.started': (p: { sessionId: string }) => void;
   /** That process made its first API call: the session is tagged with the provider it started under. */
   'sessions.used': (p: { sessionId: string }) => void;
+  /**
+   * What the window's provider cost (`sessionId` the conversation in front), for the session
+   * list's usage block; null when the shell does not work that out for this provider.
+   */
+  'usage.view': (p: { sessionId?: string }) => UsageViewDto | null;
 };
 
 /** Served by the extension host, called by main. The `init` call carries the renderer port. */
@@ -605,6 +649,11 @@ export type ExtHostApiForMain = {
   'uri.handle': (p: { uri: string }) => void;
   /** Sessions were deleted: the extension's pages list them again. */
   'sessions.storeChanged': (p: void) => void;
+  /**
+   * The window's provider, or its prices, changed: whether the shell works out what the
+   * conversations cost (a compatible API) and the session list shows its usage block.
+   */
+  'usage.changed': (p: { shellPricing: boolean }) => void;
   shutdown: (p: void) => void;
 };
 
@@ -814,6 +863,8 @@ export type MainApiForRenderer = {
   'providers.setKey': (p: { id: string; key?: string }) => void;
   /** A desktop shortcut that starts Vilausity with this provider; resolves to its path. */
   'providers.createShortcut': (p: { id: string }) => string;
+  /** The models Claude Code's sessions used under a provider (`modelKey`), for its prices. */
+  'usage.models': (p: { providerId: string }) => string[];
 
   // ---- The Claude Code extension (vilaus's managed copies) ----
   'extension.status': (p: void) => ExtensionStatus;
@@ -978,7 +1029,9 @@ export type WebviewToShellMessage =
   /** The delete button of a session list's row (see `hints.sessionRows`); `title` as the row shows it. */
   | { readonly ccw: string; readonly kind: 'deleteSession'; readonly sessionId: string; readonly title: string }
   /** The mouse's back or forward button was released over the page. */
-  | { readonly ccw: string; readonly kind: 'navigate'; readonly direction: 'back' | 'forward' };
+  | { readonly ccw: string; readonly kind: 'navigate'; readonly direction: 'back' | 'forward' }
+  /** The usage block's link to the window's provider's prices. */
+  | { readonly ccw: string; readonly kind: 'editPrices' };
 
 export type FindDirection = 'restart' | 'next' | 'previous';
 
@@ -1004,4 +1057,6 @@ export type ShellToWebviewControl =
   /** How many sessions wait for the user (from the bridge). */
   | { readonly ccwControl: 'needsInput'; readonly count: number }
   /** Plays the page its own use of Escape that the shell took over (pages with `hints.conversationEscapes`). */
-  | { readonly ccwControl: 'escape'; readonly action: 'interrupt' | 'rewind' };
+  | { readonly ccwControl: 'escape'; readonly action: 'interrupt' | 'rewind' }
+  /** The session list's usage block (pages with `hints.usageBlock`); null: none, the extension's own shows. */
+  | { readonly ccwControl: 'usageView'; readonly view: UsageViewDto | null };

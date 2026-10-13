@@ -51,6 +51,23 @@ export const t = defineMessages('providers', {
   modelsHint: 'Empty fields leave the model to the provider.',
   modelMain: 'Main model',
   modelSubagent: 'Subagents',
+  prices: 'Prices',
+  pricesHint:
+    "Per million tokens, for what this API's conversations cost (the usage at the top of the session list). An empty cache price is the input price.",
+  pricesNone: 'Fill in the models above to give them prices.',
+  currencyCny: 'CNY (¥)',
+  currencyUsd: 'USD ($)',
+  officialPrices: 'Official Prices',
+  priceModel: 'Model',
+  priceInput: 'Input',
+  /** Prompt cache hits. */
+  priceCacheRead: 'Cache hit',
+  /** Prompt cache writes. */
+  priceCacheWrite: 'Cache write',
+  priceOutput: 'Output',
+  /** In an empty cache price field. */
+  priceAsInput: 'As input',
+  badPrices: 'Give {0} an input and an output price (numbers of 0 or more).',
   headers: 'Request headers',
   headersHint: 'One per line: Name: value',
   timeout: 'Request timeout (ms)',

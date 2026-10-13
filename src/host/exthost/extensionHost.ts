@@ -137,6 +137,8 @@ export class ExtensionHost {
       onActivity: (activity) => this.main.notify('sessions.activity', activity),
       onSessionStarted: (sessionId) => this.main.notify('sessions.started', { sessionId }),
       onSessionUsed: (sessionId) => this.main.notify('sessions.used', { sessionId }),
+      shellPricing: init.shellPricing === true,
+      usageView: (sessionId) => this.main.call('usage.view', { sessionId }),
     });
     webviews.interceptor = bridge;
     this.bridge = bridge;
@@ -165,6 +167,11 @@ export class ExtensionHost {
 
   settingsOverlayChanged(values: Readonly<Record<string, unknown>>): void {
     this.compat?.overlayChanged(values);
+  }
+
+  /** The window's provider or its prices changed (see the bridge's `setShellPricing`). */
+  usageChanged(shellPricing: boolean): void {
+    this.bridge?.setShellPricing(shellPricing);
   }
 
   storageChanged(scope: StorageScope, key: string, value: unknown): void {

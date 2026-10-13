@@ -6,9 +6,13 @@
  * here (Claude Code speaks nothing else): OpenAI's and Google's do not, xAI's Anthropic
  * compatibility is deprecated; OpenRouter reaches their models. Each preset's accent color
  * is in platform/providers.ts (PRESET_ACCENTS).
+ *
+ * Prices are not here: they change too often to ship. A preset billed per token links to its
+ * price list (checked 2026-10-13) and says the currency it bills in; the coding plans are flat
+ * fees.
  */
 
-import type { ProviderConfig } from '../../platform/providers';
+import type { Currency, ProviderConfig } from '../../platform/providers';
 import { t } from './messages';
 
 export interface ProviderPreset {
@@ -17,6 +21,9 @@ export interface ProviderPreset {
   readonly name: () => string;
   /** The provider's setup page for Claude Code. */
   readonly docs?: string;
+  /** Where the provider lists its models' prices per token, and the currency it bills in. */
+  readonly prices?: string;
+  readonly currency?: Currency;
   readonly config: Omit<ProviderConfig, 'id' | 'name' | 'preset'>;
 }
 
@@ -62,6 +69,8 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'deepseek',
     name: () => 'DeepSeek',
     docs: DEEPSEEK_DOCS,
+    prices: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing',
+    currency: 'CNY',
     config: {
       type: 'compatible',
       baseUrl: 'https://api.deepseek.com/anthropic',
@@ -80,6 +89,8 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'kimi',
     name: () => 'Kimi',
     docs: KIMI_DOCS,
+    prices: 'https://platform.kimi.com/docs/pricing/chat',
+    currency: 'CNY',
     config: {
       type: 'compatible',
       baseUrl: 'https://api.moonshot.cn/anthropic',
@@ -92,6 +103,8 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'kimi-intl',
     name: () => 'Kimi (moonshot.ai)',
     docs: KIMI_DOCS,
+    prices: 'https://platform.kimi.ai/docs/pricing/chat',
+    currency: 'USD',
     config: {
       type: 'compatible',
       baseUrl: 'https://api.moonshot.ai/anthropic',
@@ -104,6 +117,8 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'glm',
     name: () => t('presetGlm'),
     docs: 'https://docs.bigmodel.cn/cn/guide/develop/claude',
+    prices: 'https://docs.bigmodel.cn/cn/guide/start/pricing',
+    currency: 'CNY',
     config: {
       type: 'compatible',
       baseUrl: 'https://open.bigmodel.cn/api/anthropic',
@@ -118,6 +133,8 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'zai',
     name: () => 'Z.ai GLM',
     docs: 'https://docs.z.ai/scenario-example/develop-tools/claude',
+    prices: 'https://docs.z.ai/guides/overview/pricing',
+    currency: 'USD',
     config: {
       type: 'compatible',
       baseUrl: 'https://api.z.ai/api/anthropic',
@@ -130,6 +147,7 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'qwen-coding',
     name: () => t('presetQwenCoding'),
     docs: QWEN_DOCS,
+    currency: 'CNY',
     config: {
       type: 'compatible',
       baseUrl: 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
@@ -141,6 +159,8 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'qwen',
     name: () => t('presetQwen'),
     docs: QWEN_DOCS,
+    prices: 'https://help.aliyun.com/zh/model-studio/model-pricing',
+    currency: 'CNY',
     config: {
       type: 'compatible',
       baseUrl: 'https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/apps/anthropic',
@@ -152,6 +172,7 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'qwen-coding-intl',
     name: () => t('presetQwenCodingIntl'),
     docs: QWEN_INTL_DOCS,
+    currency: 'USD',
     config: {
       type: 'compatible',
       baseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
@@ -163,6 +184,8 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'qwen-intl',
     name: () => t('presetQwenIntl'),
     docs: QWEN_INTL_DOCS,
+    prices: 'https://www.alibabacloud.com/help/en/model-studio/model-pricing',
+    currency: 'USD',
     config: {
       type: 'compatible',
       baseUrl: 'https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com/apps/anthropic',
@@ -174,6 +197,7 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'seed',
     name: () => t('presetSeed'),
     docs: 'https://www.volcengine.com/docs/82379/1956278',
+    currency: 'CNY',
     config: {
       type: 'compatible',
       baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
@@ -185,6 +209,7 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'minimax',
     name: () => 'MiniMax',
     docs: 'https://platform.minimax.cn/docs/coding-plan/claude-code',
+    currency: 'CNY',
     config: {
       type: 'compatible',
       baseUrl: 'https://api.minimax.cn/anthropic',
@@ -197,6 +222,7 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'minimax-intl',
     name: () => 'MiniMax (minimax.io)',
     docs: 'https://platform.minimax.io/docs/token-plan/claude-code',
+    currency: 'USD',
     config: {
       type: 'compatible',
       baseUrl: 'https://api.minimax.io/anthropic',
@@ -211,6 +237,8 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'openrouter',
     name: () => 'OpenRouter',
     docs: 'https://openrouter.ai/docs/guides/coding-agents/claude-code-integration',
+    prices: 'https://openrouter.ai/models',
+    currency: 'USD',
     config: {
       type: 'compatible',
       baseUrl: 'https://openrouter.ai/api',

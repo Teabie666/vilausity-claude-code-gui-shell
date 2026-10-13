@@ -67,6 +67,7 @@ main.handle('conversation.open', (request) => host?.openConversation(request));
 main.handle('documents.show', (params) => host?.showDocument(params) ?? false);
 main.handle('uri.handle', ({ uri }) => host?.handleUri(uri));
 main.handle('sessions.storeChanged', () => host?.sessionStoreChanged());
+main.handle('usage.changed', ({ shellPricing }) => host?.usageChanged(shellPricing));
 
 main.handle('shutdown', async () => {
   logger.info('shutdown requested');

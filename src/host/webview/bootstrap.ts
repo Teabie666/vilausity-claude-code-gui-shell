@@ -5,13 +5,21 @@
  * routing of link clicks and keyboard shortcuts to the shell.
  */
 
-import type { KeyEventDto, ShellToWebviewControl, ThemeData, WebviewBootstrapData, WebviewToShellMessage } from '../../platform/protocol';
+import type {
+  KeyEventDto,
+  ShellToWebviewControl,
+  ThemeData,
+  UsageViewDto,
+  WebviewBootstrapData,
+  WebviewToShellMessage,
+} from '../../platform/protocol';
 import { CommentsHost } from './comments';
 import { DEFAULT_WEBVIEW_STYLES } from './defaultStyles';
 import { InPageFinder } from './find';
 import { watchSessionRows } from './sessionRows';
 import { StatusFilter } from './statusFilter';
 import { PageTranslator } from './translate';
+import { UsageBlock } from './usageBlock';
 import { UsageResets } from './usageResets';
 
 interface VsCodeApi {
@@ -114,6 +122,17 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
     });
   }
 
+  // A session list shows the shell's usage block when the window's API is priced by the shell.
+  const usageBlockHints = data.hints?.usageBlock;
+  let usageBlock: UsageBlock | undefined;
+  let pendingUsage: UsageViewDto | null = null;
+  if (usageBlockHints) {
+    onDomReady(() => {
+      usageBlock = new UsageBlock(usageBlockHints, () => post({ kind: 'editPrices' }));
+      usageBlock.set(pendingUsage);
+    });
+  }
+
   // Control messages from the shell are consumed here and never reach the extension.
   window.addEventListener(
     'message',
@@ -159,6 +178,13 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
           break;
         case 'escape':
           playEscape(control.action);
+          break;
+        case 'usageView':
+          if (usageBlock) {
+            usageBlock.set(control.view);
+          } else {
+            pendingUsage = control.view;
+          }
           break;
       }
     },

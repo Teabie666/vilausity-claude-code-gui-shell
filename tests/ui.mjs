@@ -1412,6 +1412,27 @@ await step(
     const { 'vilaus.accent': _source, 'vilaus.accent.custom': _custom, ...ownSettings } = readSettings();
     writeFileSync(settingsFile, JSON.stringify(ownSettings, null, 2), 'utf8');
     await waitFor(async () => (await accent(page)).line === '#d97757', 5000, "the provider's accent again");
+    // What the session list's usage block will add up: calls of the mock's models (no tags: put
+    // down to the provider that names the model), one reply written in two lines.
+    const call = (id, model, cwd, usage) =>
+      JSON.stringify({ type: 'assistant', cwd, timestamp: '2026-10-13T08:00:00.000Z', message: { id, model, usage } });
+    writeFileSync(
+      path.join(sessionsDir, 'project', '00000000-0000-4000-8000-0000000000a1.jsonl'),
+      [1, 2]
+        .map(() =>
+          call('msg-1', 'mock-model', workspace, { input_tokens: 1_000_000, output_tokens: 500_000, cache_read_input_tokens: 2_000_000 }),
+        )
+        .join('\n') + '\n',
+      'utf8',
+    );
+    writeFileSync(
+      path.join(sessionsDir, 'project', '00000000-0000-4000-8000-0000000000a2.jsonl'),
+      [
+        call('msg-2', 'mock-model', path.join(runDir, 'elsewhere'), { input_tokens: 1_000_000 }),
+        call('msg-3', 'mock-haiku', path.join(runDir, 'elsewhere'), { input_tokens: 1000 }),
+      ].join('\n') + '\n',
+      'utf8',
+    );
     try {
       await page.evaluate(async (port) => {
         await window.vilausNative.invoke('providers.save', {
@@ -1423,6 +1444,7 @@ await step(
             auth: 'bearer',
             models: { main: 'mock-model', haiku: 'mock-haiku' },
             color: '#ff0000',
+            pricing: { currency: 'CNY', models: { 'mock-model': { input: 2, output: 8, cacheRead: 0.2 } } },
           },
         });
         await window.vilausNative.invoke('providers.setKey', { id: 'mock', key: 'test-key-123' });
@@ -1461,6 +1483,45 @@ await step(
       await reload.waitFor({ timeout: 5000 });
       await reloaded(() => reload.click());
 
+      // The session list shows what the provider cost, in place of the extension's figures:
+      // here ¥2 + ¥4 + ¥0.40; elsewhere ¥2 more, and a model with no price.
+      const list = await waitFor(
+        async () => {
+          for (const frame of webviewFrames()) {
+            const title = await frame
+              .locator('[data-vilaus-usage] .sectionLabel_djirOA')
+              .textContent({ timeout: 500 })
+              .catch(() => '');
+            if (title === 'Usage · Mock API') return frame;
+          }
+          return undefined;
+        },
+        30_000,
+        'the usage block in the session list',
+      );
+      const usageRows = () =>
+        list
+          .locator('[data-vilaus-usage] .accountRow_JuUW3A')
+          .evaluateAll((rows) =>
+            Object.fromEntries(
+              rows.map((row) => [
+                row.querySelector('.accountLabel_JuUW3A')?.textContent,
+                row.querySelector('.accountValue_JuUW3A')?.textContent,
+              ]),
+            ),
+          );
+      await waitFor(async () => (await usageRows())['This workspace'] === '¥6.40', 10_000, 'the workspace’s cost');
+      const shown = await usageRows();
+      if (shown['Claude Code history'] !== '≥ ¥8.40') throw new Error(`usage: ${JSON.stringify(shown)}`);
+      const note = await list.locator('.vilaus-usage-note').textContent();
+      if (note !== 'No price for mock-haiku') throw new Error(`unpriced note: ${note}`);
+      // Its link opens the provider's prices.
+      await list.locator('[data-vilaus-usage] .sectionLink_djirOA').first().click();
+      const priceInput = page.locator('#content-pane .providers-price-row[data-model="mock-model"] .providers-price[data-field="input"]');
+      await priceInput.waitFor({ timeout: 5000 });
+      if ((await priceInput.inputValue()) !== '2') throw new Error(`the mock model's input price: ${await priceInput.inputValue()}`);
+      await page.locator('#content-pane .content-tab.active .tab-close').click();
+
       // A new conversation (the first one holds comments that later steps expect).
       const before = await tabCount();
       await press('Control+N');
@@ -1495,7 +1556,11 @@ await step(
         10_000,
         'the logo to rest once the conversation is closed',
       );
-      return `${mock.requests.length} requests at the mock; ${request.method} ${request.url}; logo ${await page.evaluate(() => window.logoStates.join(' > '))}`;
+      // After a reply too, the extension's own figures (Claude's prices) stay out of the list.
+      if ((await list.locator('.sectionLabel_djirOA', { hasText: 'Account & usage' }).count()) > 0) {
+        throw new Error("the extension's own usage shows");
+      }
+      return `${mock.requests.length} requests at the mock; ${request.method} ${request.url}; logo ${await page.evaluate(() => window.logoStates.join(' > '))}; usage ${JSON.stringify(shown)}`;
     } finally {
       mock.server.close();
       // Back to the subscription, with fresh processes, for the rest of the run.
@@ -1504,6 +1569,29 @@ await step(
     }
   },
 );
+
+await step('back on the subscription, the session list has no usage block of the shell', async () => {
+  const list = await waitFor(
+    async () => {
+      for (const frame of webviewFrames()) {
+        if (
+          (await frame
+            .locator('.root_djirOA')
+            .count()
+            .catch(() => 0)) > 0
+        )
+          return frame;
+      }
+      return undefined;
+    },
+    30_000,
+    'the session list',
+  );
+  // Give a stale block the time it would take to be posted.
+  await page.waitForTimeout(1500);
+  const blocks = await list.locator('[data-vilaus-usage]').count();
+  if (blocks > 0) throw new Error(`${blocks} usage block element(s) on the subscription`);
+});
 
 await step('the providers editor adds a provider from a preset, saves edits and a key, and removes it', async () => {
   await press('Control+Shift+P');
@@ -1524,6 +1612,19 @@ await step('the providers editor adds a provider from a preset, saves edits and 
   await editor.locator('.providers-save').click();
   const saved = () => JSON.parse(readFileSync(path.join(dataDir, 'providers.json'), 'utf8'));
   await waitFor(() => saved().providers.some((provider) => provider.name === 'DeepSeek Work'), 5000, 'the name in providers.json');
+  // Its prices: a row per model (deepseek-flash[1m] is deepseek-flash), in the currency it bills in.
+  const flash = editor.locator('.providers-price-row[data-model="deepseek-flash"]');
+  await flash.waitFor({ timeout: 5000 });
+  if ((await editor.locator('.providers-price-row[data-model]').count()) !== 1) throw new Error('not one price row per model');
+  if ((await editor.locator('.providers-prices .setting-select').inputValue()) !== 'CNY') throw new Error('the prices are not in CNY');
+  await flash.locator('[data-field="input"]').fill('2');
+  await flash.locator('[data-field="output"]').fill('8');
+  await editor.locator('.providers-save').click();
+  await waitFor(
+    () => saved().providers.some((provider) => provider.pricing?.models?.['deepseek-flash']?.output === 8),
+    5000,
+    'the prices in providers.json',
+  );
   await editor.locator('.providers-key').fill('sk-deepseek-test');
   await editor.locator('.button', { hasText: 'Save Key' }).click();
   await waitFor(async () => (await editor.innerText()).includes('A key is stored'), 5000, 'the stored key');

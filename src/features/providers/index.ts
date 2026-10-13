@@ -8,7 +8,7 @@
  */
 
 import type { ShellModule } from '../../core/module';
-import { ICommands, IDialogs, IEditors, ILayout, INative, ISettings } from '../../core/serviceIds';
+import { ICommands, IDialogs, IEditors, ILayout, INative, ISettings, IWebviewFrames } from '../../core/serviceIds';
 import { DisposableStore } from '../../platform/lifecycle';
 import { DEFAULT_PROVIDER_SETTING, SUBSCRIPTION_ID, type ProviderSummary } from '../../platform/providers';
 import type { QuickPickItemDto } from '../../platform/protocol';
@@ -52,12 +52,16 @@ export const providersModule: ShellModule = {
     show();
     subscriptions.add(model.onDidChange(show));
 
-    const openEditor = (select?: string): void => {
+    const openEditor = (select?: string): ProvidersEditorPane | undefined => {
       const tab = contentPane.open({ id: EDITOR_INPUT, typeId: EDITOR_INPUT, label: t('editorTitle') }, { preview: false });
-      if (select && tab?.pane instanceof ProvidersEditorPane) {
-        tab.pane.select(select);
+      const pane = tab?.pane instanceof ProvidersEditorPane ? tab.pane : undefined;
+      if (select) {
+        pane?.select(select);
       }
+      return pane;
     };
+    // The session list's usage block links to the prices of the window's provider.
+    subscriptions.add(services.get(IWebviewFrames).onDidRequestEditPrices(() => openEditor(model.state.current)?.revealPrices()));
 
     const add = async (): Promise<ProviderSummary | undefined> => {
       const chosen = await dialogs.showQuickPick({
@@ -111,7 +115,12 @@ export const providersModule: ShellModule = {
               .filter(Boolean)
               .join(' · ');
           const actions: { label: string; run: () => void | Promise<void> }[] = [
-            { label: t('manage'), run: () => openEditor() },
+            {
+              label: t('manage'),
+              run: () => {
+                openEditor();
+              },
+            },
             {
               label: t('addProvider'),
               run: async () => {
@@ -141,7 +150,15 @@ export const providersModule: ShellModule = {
         { title: t('switchProvider'), category: t('category') },
       ),
     );
-    subscriptions.add(commands.register('providers.manage', () => openEditor(), { title: t('manage'), category: t('category') }));
+    subscriptions.add(
+      commands.register(
+        'providers.manage',
+        () => {
+          openEditor();
+        },
+        { title: t('manage'), category: t('category') },
+      ),
+    );
     subscriptions.add(
       commands.register(
         'providers.add',

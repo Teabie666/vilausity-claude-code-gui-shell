@@ -20,6 +20,7 @@ import type {
   RendererInitData,
   SessionActivity,
   ThemeData,
+  UsageViewDto,
 } from '../../platform/protocol';
 import { ENVIRONMENT_SETTING } from '../../platform/providers';
 import { URI } from 'vscode-uri';
@@ -64,6 +65,10 @@ export interface WindowHost {
   initialProvider(folder: string): string;
   /** A Claude process that started on a session at `at` under a provider made its first call. */
   tagSession(sessionId: string, providerId: string, at: number): void;
+  /** Whether the shell works out what conversations under a provider cost (not the extension). */
+  shellPricing(providerId: string): boolean;
+  /** What the window's provider cost, for its session list (`usage.view`). */
+  usageView(window: WindowContext, sessionId: string | undefined): Promise<UsageViewDto | null>;
   /** This window's extension host changed a global state value; the other windows' hosts need it too. */
   globalStateChanged(source: WindowContext, key: string, value: unknown): void;
   /** The user closed the window (its close button, Alt+F4). */
@@ -281,6 +286,7 @@ export class WindowContext extends Disposable {
   providersChanged(): void {
     if (this.extHost && this.initialized) {
       this.extHost.rpc.notify('settings.overlay', { values: this.host.providerOverlay(this.currentProvider) });
+      this.extHost.rpc.notify('usage.changed', { shellPricing: this.host.shellPricing(this.currentProvider) });
     }
     this.window.emit('providersChanged', this.host.providersState(this.currentProvider));
     this.refreshTheme();
@@ -490,6 +496,7 @@ export class WindowContext extends Disposable {
     rpc.handle('sessions.started', ({ sessionId }) => {
       this.startedSessions.set(sessionId, { provider: this.currentProvider, at: Date.now() });
     });
+    rpc.handle('usage.view', ({ sessionId }) => this.host.usageView(this, sessionId));
     rpc.handle('sessions.used', ({ sessionId }) => {
       const started = this.startedSessions.get(sessionId) ?? { provider: this.currentProvider, at: Date.now() };
       this.host.tagSession(sessionId, started.provider, started.at);
@@ -517,6 +524,7 @@ export class WindowContext extends Disposable {
       extensionTranslations: this.host.extensionTable,
       openConversation: this.takePendingConversation(),
       settingsOverlay: this.host.providerOverlay(this.currentProvider),
+      shellPricing: this.host.shellPricing(this.currentProvider),
     };
   }
 

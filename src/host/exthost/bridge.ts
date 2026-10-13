@@ -25,6 +25,8 @@ import type {
   ShellToWebviewControl,
   StatusFilterHints,
   UsageBarHints,
+  UsageBlockHints,
+  UsageViewDto,
   WebviewPageHints,
 } from '../../platform/protocol';
 import { formatComments, type PendingComments } from './comments';
@@ -259,6 +261,32 @@ export function usageResetsOf(message: unknown): Record<string, number> | undefi
 }
 
 /**
+ * A message to a page without the extension's figures of what conversations cost, or
+ * undefined when it carries none (anthropic.claude-code 2.1.296). The CLI works them out with
+ * Claude's prices, and a model it does not know costs what Opus does; for a compatible API the
+ * shell shows its own. Two carry them: `active_session_totals_update {session}` (the session
+ * list's "Account & usage", which shows only while there is a session), and
+ * `get_usage_response`'s `usage.session` ("View details"; without it the dialog says the
+ * login method has no limits to show).
+ */
+export function withoutExtensionCosts(message: unknown): unknown {
+  const inner = isRecord(message) && message.type === 'from-extension' ? message.message : undefined;
+  if (!isRecord(message) || !isRecord(inner)) {
+    return undefined;
+  }
+  const request = inner.type === 'request' && isRecord(inner.request) ? inner.request : undefined;
+  if (request?.type === 'active_session_totals_update' && request.session !== null && request.session !== undefined) {
+    return { ...message, message: { ...inner, request: { ...request, session: null } } };
+  }
+  const response = inner.type === 'response' && isRecord(inner.response) ? inner.response : undefined;
+  if (response?.type === 'get_usage_response' && isRecord(response.usage) && response.usage.session !== undefined) {
+    const { session: _session, ...usage } = response.usage;
+    return { ...message, message: { ...inner, response: { ...response, usage } } };
+  }
+  return undefined;
+}
+
+/**
  * The conversation's text in the conversation font (`chat.fontFamily`, `chat.fontSize`): a
  * user message, Claude's Markdown, thinking, and the message input with the mirror the page
  * draws its text in (both must agree, or the caret drifts from the text). Code in Markdown is
@@ -308,6 +336,11 @@ const SESSION_LIST_STYLES = `
 .accountRows_djirOA .accountRow_JuUW3A { justify-content: flex-start; padding: 0; }
 .accountRows_djirOA .accountLabel_JuUW3A { display: none; }
 .accountRows_djirOA .accountValue_JuUW3A { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.vilaus-usage-note { align-self: flex-start; padding: 0; text-align: left; white-space: normal; }
+.vilaus-usage-note[hidden] { display: none; }
+[data-vilaus-usage] .accountRow_JuUW3A { cursor: default; }
+[data-vilaus-usage][hidden] { display: none; }
 
 .headerRow_djirOA { gap: 6px; padding: 8px 12px 4px; border-bottom: none; }
 .newSessionButton_djirOA {
@@ -387,6 +420,27 @@ const STATUS_FILTER: StatusFilterHints = {
   activeToggle: '.activeFilterToggle_OOQiHg',
 };
 
+/**
+ * The session list's "Account & usage" (anthropic.claude-code 2.1.296), first in `.root_djirOA`:
+ * a header (a toggle with a chevron and the title, and a "View details" link), then the body
+ * (sections of label / value rows). The shell's usage block is built of the same classes.
+ */
+const USAGE_BLOCK: UsageBlockHints = {
+  root: '.root_djirOA',
+  header: 'sectionHeader_djirOA',
+  toggle: 'sectionToggle_djirOA',
+  chevron: 'sectionChevron_djirOA',
+  chevronExpanded: 'sectionChevronExpanded_djirOA',
+  label: 'sectionLabel_djirOA',
+  link: 'sectionLink_djirOA',
+  body: 'container_JuUW3A accountUsageBody_djirOA',
+  section: 'section_JuUW3A',
+  rows: 'accountInfo_JuUW3A',
+  row: 'accountRow_JuUW3A',
+  rowLabel: 'accountLabel_JuUW3A',
+  rowValue: 'accountValue_JuUW3A',
+};
+
 const SESSION_ROWS: SessionRowHints = {
   row: 'button[id^="sessions-list-row-"]',
   idPrefix: 'sessions-list-row-',
@@ -431,7 +485,14 @@ export interface BridgeOptions {
   readonly onSessionUsed?: (sessionId: string) => void;
   /** A turn ended in a conversation: what its session cost changed. */
   readonly onTurnEnded?: (sessionId: string | undefined) => void;
+  /** Whether the shell works out what the conversations cost at first (see `setShellPricing`). */
+  readonly shellPricing?: boolean;
+  /** What the window's provider cost, the conversation in front being `sessionId` (main's `usage.view`). */
+  readonly usageView?: (sessionId: string | undefined) => Promise<UsageViewDto | null>;
 }
+
+/** The usage block's view is asked for again at most this often. */
+const USAGE_REFRESH_MS = 1000;
 
 export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   /** `open_diff` requests we are holding, by requestId. */
@@ -455,12 +516,22 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   private activity: SessionActivity = { running: 0, waiting: 0 };
   /** The session of each conversation's Claude process (by page and channel), and whether it made a call yet. */
   private readonly processes = new Map<string, { sessionId: string; used: boolean }>();
+  /** Whether the shell works out what the conversations cost; the extension's own figures are then hidden. */
+  private shellPricing: boolean;
+  /** The conversation in front, as the extension last told its pages. */
+  private activeSessionId: string | undefined;
+  /** What the session lists' usage block shows (null: none), and when it was last asked for. */
+  private usage: UsageViewDto | null = null;
+  private usageAskedAt = 0;
+  private usageTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private readonly os: OsBackend,
     private readonly logger: ILogger,
     private readonly options: BridgeOptions,
-  ) {}
+  ) {
+    this.shellPricing = options.shellPricing === true;
+  }
 
   interceptFromWebview(webview: WebviewImpl, message: unknown): boolean {
     if (!isRecord(message)) {
@@ -601,6 +672,13 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     if (isRecord(message) && this.ownPosts.has(message)) {
       return undefined;
     }
+    if (this.shellPricing) {
+      const priced = withoutExtensionCosts(message);
+      if (priced !== undefined) {
+        this.refreshUsage();
+        return priced;
+      }
+    }
     const resets = usageResetsOf(message);
     if (resets) {
       // To the page's script, which shows the bars' reset times to the minute.
@@ -646,11 +724,22 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
         this.options.onActivity?.(activity);
       }
     }
+    // Every update says which conversation is in front (`activeSessionId`, none: no session).
+    const active = typeof request.activeSessionId === 'string' && request.activeSessionId ? request.activeSessionId : undefined;
+    if (active !== this.activeSessionId) {
+      this.activeSessionId = active;
+      this.refreshUsage();
+    }
     if (webview.viewType !== SESSION_LIST_VIEW_TYPE || !isRecord(message) || !isRecord(inner)) {
       return undefined;
     }
+    const newPage = !this.listPages.has(webview);
     const told = { ...request, openSessionIds: request.openSessionIds ?? this.listPages.get(webview)?.openSessionIds };
     this.listPages.set(webview, told);
+    if (newPage && this.shellPricing) {
+      this.postUsage(webview);
+      this.refreshUsage();
+    }
     const open = request.openSessionIds;
     const shown = Array.isArray(open) ? this.withoutPreviews(open) : open;
     return shown === open ? undefined : { ...message, message: { ...inner, request: { ...request, openSessionIds: shown } } };
@@ -689,7 +778,58 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
       }
     } else if (output.type === 'result') {
       this.options.onTurnEnded?.(sessionId ?? process?.sessionId);
+      this.refreshUsage();
     }
+  }
+
+  /**
+   * The window's provider changed: whether the shell works out what the conversations cost
+   * (a compatible API's) and shows it in the session lists, the extension's figures hidden.
+   */
+  setShellPricing(on: boolean): void {
+    this.shellPricing = on;
+    this.refreshUsage();
+  }
+
+  /** Asks main for the usage block's view again, at most once a second (the last ask wins). */
+  private refreshUsage(): void {
+    if (this.usageTimer !== undefined) {
+      return;
+    }
+    const wait = Math.max(0, this.usageAskedAt + USAGE_REFRESH_MS - Date.now());
+    this.usageTimer = setTimeout(() => {
+      this.usageTimer = undefined;
+      this.usageAskedAt = Date.now();
+      void this.askUsage();
+    }, wait);
+  }
+
+  private async askUsage(): Promise<void> {
+    // A session list that opens asks again.
+    if (this.listPages.size === 0) {
+      return;
+    }
+    let view: UsageViewDto | null = null;
+    if (this.shellPricing && this.options.usageView) {
+      try {
+        view = await this.options.usageView(this.activeSessionId);
+      } catch (error) {
+        this.logger.warn('the usage view failed', error);
+        return;
+      }
+    }
+    if (JSON.stringify(view) === JSON.stringify(this.usage)) {
+      return;
+    }
+    this.usage = view;
+    for (const page of this.listPages.keys()) {
+      this.postUsage(page);
+    }
+  }
+
+  private postUsage(page: WebviewImpl): void {
+    const control: ShellToWebviewControl = { ccwControl: 'usageView', view: this.usage };
+    void page.postMessage(control);
   }
 
   /**
@@ -764,6 +904,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
           sessionRows: SESSION_ROWS,
           usageBars: USAGE_BARS,
           statusFilter: STATUS_FILTER,
+          usageBlock: USAGE_BLOCK,
         };
       case PLAN_PREVIEW_VIEW_TYPE:
         return { untranslated: PLAN_PREVIEW_CONTENT };

@@ -164,6 +164,9 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **哪个接口的**：只看模型名分不开（订阅和 Anthropic API 的模型名一样，同一家开两个 key 也一样），所以每个会话打接口标签。插件把 CLI 的输出原样转给对话页（`io_message`），bridge 看到进程启动时的 `system/init`（带 `session_id`）就告诉主进程（`sessions.started`），主进程记下这个窗口当时的接口：CLI 每次起进程时才读环境变量，所以这就是这个进程用的接口。进程第一次有 API 回复（`assistant`）时（`sessions.used`）才写进标签文件 `<数据目录>\session-providers.jsonl`（`host/main/sessionProviders.ts`，普通实例和管理员实例共用，只追加），光打开、没发消息的不算。
 - **归属规则**（`platform/usage.ts` 的 `attributeCall`）：一次调用归它之前最近的那个标签的接口；如果那个接口的模型里没有这个模型、而另一个兼容接口明确写了它，就归那一个（会话后来在 Vilausity 外面换了接口接着聊）。没有标签的调用（有标签之前的历史、命令行和 VS Code 里跑的）按模型名推断：只有一个兼容接口写了这个模型才算它的；Claude 自己的模型名在只配了订阅时算订阅。推断不出的不算任何接口的。
 - **统计范围**：只算当前窗口所用接口的费用，不把各家加在一起；分本对话、本工作区、这台电脑上的全部会话（"Claude Code 历史消费"）。
+- **价格编辑**：API 接口编辑页里，兼容接口的模型一栏下面是价格表：币种（预设给了默认值）、官方价格页链接（预设的 `prices`，2026-10-13 核对过）、每个模型一行（各档模型名、已经有价格的、会话记录里归到这个接口的模型，后者由主进程的 `usage.models` 给出）。预设不带价格，价格变得太快。
+- **侧栏用量块**：窗口用的是兼容接口时（主进程在初始化数据和 `usage.changed` 里告诉插件进程 `shellPricing`），bridge 把插件推给页面的 `active_session_totals_update` 的 `session` 换成 null（插件那块"Account & usage"就不显示了），把 `get_usage_response` 的 `usage.session` 去掉（"查看详情"弹框不显示美元数）。会话列表页由页面脚本 `host/webview/usageBlock.ts` 在同一个位置（`.root_djirOA` 的最前面）放壳自己的一块，用插件同样的类名（bridge 的页面提示 `usageBlock`），插件重绘后自己放回去；内容（标题、三行、按模型的悬停明细、没填价格的模型）由主进程按界面语言写好（`host/main/usageView.ts`），经 `usage.view` 交给 bridge，bridge 用控制消息 `usageView` 发给页面。什么时候重新要：会话列表页出现时、当前对话换了（`session_states_update.activeSessionId`）、一轮结束（`result`）、插件推会话合计时、接口或价格变了，最多一秒一次。块上的"价格"链接打开这个接口的编辑页，滚到价格表。订阅、Anthropic API、Bedrock、Vertex、Foundry 的窗口不动，插件的数对它们是对的。
+- **近似的地方**：DeepSeek 分高峰 / 空闲时段计价（空闲半价），千问按上下文长度分档；这里每个模型只有一个价，填哪个由用户定。
 
 ## 插件管理（M4）
 

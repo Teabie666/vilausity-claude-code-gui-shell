@@ -1,11 +1,18 @@
 import { afterEach, beforeEach, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ClaudeWebviewBridge, conversationSessionId, describeShape, usageResetsOf } from '../../../src/host/exthost/bridge';
+import {
+  ClaudeWebviewBridge,
+  conversationSessionId,
+  describeShape,
+  usageResetsOf,
+  withoutExtensionCosts,
+} from '../../../src/host/exthost/bridge';
 import { CommentStore } from '../../../src/host/exthost/comments';
 import { NullLogger } from '../../../src/platform/log';
 import type { WebviewImpl } from '../../../src/compat/vscode/webviews';
 import type { OsBackend } from '../../../src/compat/vscode/host';
+import type { UsageViewDto } from '../../../src/platform/protocol';
 
 function makeWebview(): { webview: WebviewImpl; messages: unknown[] } {
   const messages: unknown[] = [];
@@ -668,5 +675,156 @@ describe('ClaudeWebviewBridge and what Claude Code says', () => {
     const { bridge, events } = makeOutputBridge();
     bridge.observeToWebview(fakeWebview('panel', 'claudeVSCodePanel'), reply('c1', 'S1'));
     assert.deepEqual(events, ['started S1', 'used S1']);
+  });
+});
+
+describe('the extension’s figures of what conversations cost', () => {
+  const totals = (session: unknown): unknown => ({
+    type: 'from-extension',
+    message: { type: 'request', channelId: '', requestId: 'r1', request: { type: 'active_session_totals_update', session } },
+  });
+  const usageResponse = (usage: Record<string, unknown>): unknown => ({
+    type: 'from-extension',
+    message: { type: 'response', requestId: 'r2', response: { type: 'get_usage_response', usage } },
+  });
+
+  test('takes the session totals and the usage dialog’s session out, and leaves the rest', () => {
+    assert.deepEqual(withoutExtensionCosts(totals({ total_cost_usd: 0.39 })), totals(null));
+    assert.deepEqual(
+      withoutExtensionCosts(usageResponse({ session: { total_cost_usd: 0.39 }, rate_limits_available: false })),
+      usageResponse({ rate_limits_available: false }),
+    );
+    assert.equal(withoutExtensionCosts(totals(null)), undefined);
+    assert.equal(withoutExtensionCosts(usageResponse({ rate_limits_available: false })), undefined);
+    assert.equal(withoutExtensionCosts({ type: 'from-extension', message: { type: 'request', request: { type: 'other' } } }), undefined);
+  });
+});
+
+describe('ClaudeWebviewBridge and the usage block', () => {
+  beforeEach(() => {
+    mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 10_000 });
+  });
+  afterEach(() => {
+    mock.timers.reset();
+  });
+
+  const VIEW: UsageViewDto = { title: 'Usage · DeepSeek', tooltip: '', editPrices: 'Prices', editPricesTitle: '', rows: [] };
+
+  function makeUsageBridge(shellPricing: boolean) {
+    const asked: (string | undefined)[] = [];
+    const bridge = new ClaudeWebviewBridge(makeOs().os, NullLogger, {
+      diffEditorAvailable: () => true,
+      comments: new CommentStore(),
+      workspaceFolders: [],
+      shellPricing,
+      usageView: (sessionId) => {
+        asked.push(sessionId);
+        return Promise.resolve(VIEW);
+      },
+    });
+    return { bridge, asked };
+  }
+  function listPage(id = 'list'): { page: WebviewImpl; posted: unknown[] } {
+    const posted: unknown[] = [];
+    const page = {
+      id,
+      viewType: 'claudeVSCodeSessionsList',
+      postMessage: (message: unknown) => {
+        posted.push(message);
+        return Promise.resolve(true);
+      },
+    } as unknown as WebviewImpl;
+    return { page, posted };
+  }
+  const states = (activeSessionId: string | null): unknown => ({
+    type: 'from-extension',
+    message: { type: 'request', channelId: '', requestId: 'r', request: { type: 'session_states_update', sessions: [], activeSessionId } },
+  });
+  const usageViews = (posted: unknown[]): unknown[] =>
+    posted.flatMap((message) =>
+      (message as { ccwControl?: string }).ccwControl === 'usageView' ? [(message as { view: unknown }).view] : [],
+    );
+  const settle = async (ms = 0): Promise<void> => {
+    mock.timers.tick(ms);
+    // The view comes back from main a promise later.
+    await Promise.resolve();
+    await Promise.resolve();
+  };
+
+  test('a session list that appears gets the view of the conversation in front, asked again when that changes', async () => {
+    const { bridge, asked } = makeUsageBridge(true);
+    const { page, posted } = listPage();
+    bridge.observeToWebview(page, states('S1'));
+    await settle();
+    assert.deepEqual(asked, ['S1']);
+    assert.deepEqual(usageViews(posted), [null, VIEW]);
+
+    bridge.observeToWebview(page, states('S2'));
+    await settle(1000);
+    assert.deepEqual(asked, ['S1', 'S2']);
+    // The same view again is not posted again.
+    assert.deepEqual(usageViews(posted), [null, VIEW]);
+  });
+
+  test('asks at most once a second, the last ask winning', async () => {
+    const { bridge, asked } = makeUsageBridge(true);
+    const { page } = listPage();
+    bridge.observeToWebview(page, states('S1'));
+    await settle();
+    bridge.observeToWebview(page, states('S2'));
+    bridge.observeToWebview(page, states('S3'));
+    await settle(500);
+    assert.deepEqual(asked, ['S1']);
+    await settle(500);
+    assert.deepEqual(asked, ['S1', 'S3']);
+  });
+
+  test('a turn that ends asks again', async () => {
+    const { bridge, asked } = makeUsageBridge(true);
+    const { page } = listPage();
+    bridge.observeToWebview(page, states('S1'));
+    await settle();
+    const panel = fakeWebview('panel', 'claudeVSCodePanel');
+    bridge.observeToWebview(panel, {
+      type: 'from-extension',
+      message: { type: 'io_message', channelId: 'c', message: { type: 'result' } },
+    });
+    await settle(1000);
+    assert.deepEqual(asked, ['S1', 'S1']);
+  });
+
+  test('hides the extension’s figures only while the shell prices the conversations, and takes the block away when it stops', async () => {
+    const { bridge, asked } = makeUsageBridge(false);
+    const { page, posted } = listPage();
+    const message = {
+      type: 'from-extension',
+      message: {
+        type: 'request',
+        channelId: '',
+        requestId: 'r1',
+        request: { type: 'active_session_totals_update', session: { total_cost_usd: 1 } },
+      },
+    };
+    assert.equal(bridge.observeToWebview(page, message), undefined);
+    bridge.observeToWebview(page, states('S1'));
+    await settle();
+    assert.deepEqual(asked, []);
+    assert.deepEqual(usageViews(posted), []);
+
+    bridge.setShellPricing(true);
+    await settle(1000);
+    assert.deepEqual(usageViews(posted), [VIEW]);
+    assert.deepEqual(bridge.observeToWebview(page, message), withoutExtensionCosts(message));
+
+    bridge.setShellPricing(false);
+    await settle(1000);
+    assert.deepEqual(usageViews(posted), [VIEW, null]);
+    assert.equal(bridge.observeToWebview(page, message), undefined);
+  });
+
+  test('the session list is told where the usage block goes', () => {
+    const hints = makeUsageBridge(true).bridge.pageHints(listPage().page);
+    assert.equal(hints?.usageBlock?.root, '.root_djirOA');
+    assert.equal(makeUsageBridge(true).bridge.pageHints(fakeWebview('panel', 'claudeVSCodePanel'))?.usageBlock, undefined);
   });
 });

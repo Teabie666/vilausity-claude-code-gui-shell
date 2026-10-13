@@ -33,6 +33,7 @@ import {
   type ProvidersState,
   type StartupNotices,
   type ThemeData,
+  type UsageViewDto,
 } from '../../platform/protocol';
 import { ACCENT_COLOR_SETTING, ACCENT_SETTING, ACCENT_SOURCES, logoColor, parseColor, withAccent } from '../../platform/accent';
 import { LOGO_COLOR } from '../../platform/logoMark';
@@ -44,6 +45,7 @@ import {
   SUBSCRIPTION_ID,
   SUBSCRIPTION_PROVIDER,
 } from '../../platform/providers';
+import { attributedProvider, type AttributedProvider } from '../../platform/usage';
 import { APP_ORIGIN } from '../../platform/webviewUrls';
 import { extensionTranslations } from '../../nls/extensionPacks';
 import { languagePack } from '../../nls/packs';
@@ -61,6 +63,7 @@ import { t } from './messages';
 import { ProviderStore, type SecretCipher } from './providerStore';
 import { deleteSession, waitForSessionEnd } from './sessionFiles';
 import { SessionTagWriter } from './sessionProviders';
+import { usageView } from './usageView';
 import { claudeProjectsDir, SessionSearch } from './sessionSearch';
 import { KeybindingsStore } from './keybindingsStore';
 import { LogoIcons, systemIconColor } from './logoIcons';
@@ -463,6 +466,33 @@ export class ShellApp extends Disposable implements WindowHost {
     );
   }
 
+  /**
+   * A compatible API's conversations cost what the shell works out with its prices; the
+   * extension prices every model it does not know as Claude's. Claude's own APIs it prices right.
+   */
+  shellPricing(providerId: string): boolean {
+    return this.providers.get(providerId)?.type === 'compatible';
+  }
+
+  async usageView(window: WindowContext, sessionId: string | undefined): Promise<UsageViewDto | null> {
+    const provider = this.providers.get(window.provider);
+    if (provider?.type !== 'compatible') {
+      return null;
+    }
+    const scopes = await this.sessionSearch.usage({
+      kind: 'summary',
+      providers: this.attributedProviders(),
+      provider: provider.id,
+      sessionId,
+      folder: window.folder,
+    });
+    return usageView(scopes, provider.name || provider.id, provider.pricing, sessionId !== undefined);
+  }
+
+  private attributedProviders(): AttributedProvider[] {
+    return this.providers.list().map(attributedProvider);
+  }
+
   /** The folder's provider from last time, else the default setting's, else the subscription. */
   initialProvider(folder: string): string {
     const remembered = this.history.folderProvider(folder);
@@ -818,6 +848,8 @@ export class ShellApp extends Disposable implements WindowHost {
       'providers.remove': ({ id }) => this.providers.remove(id),
       'providers.setKey': ({ id, key }) => this.providers.setKey(id, key),
       'providers.createShortcut': ({ id }) => this.createShortcut(id),
+      'usage.models': ({ providerId }) =>
+        this.sessionSearch.usage({ kind: 'models', providers: this.attributedProviders(), provider: providerId }),
       'extension.status': () => this.requireUpdater().status(),
       'extension.check': async () => this.afterInstall(await this.requireUpdater().check(true)),
       'extension.installFile': async (_params, window) => {

@@ -13,9 +13,12 @@ import { DisposableStore } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
 import type { ProvidersState } from '../../platform/protocol';
 import {
+  modelKey,
   providerAccentColor,
   providerIdFor,
   SUBSCRIPTION_ID,
+  type Currency,
+  type ModelPrice,
   type ProviderConfig,
   type ProviderModels,
   type ProviderSummary,
@@ -103,6 +106,53 @@ interface Draft {
   env: string;
   /** Empty: the vendor's accent (`providerAccentColor`). */
   color: string;
+  currency: Currency;
+  /** By model (`modelKey`). */
+  prices: Record<string, PriceDraft>;
+}
+
+/** A model's prices as typed (per million tokens). */
+export interface PriceDraft {
+  input: string;
+  output: string;
+  cacheRead: string;
+  cacheWrite: string;
+}
+
+const PRICE_FIELDS = ['input', 'cacheRead', 'cacheWrite', 'output'] as const;
+
+function priceText(value: number | undefined): string {
+  return value === undefined ? '' : String(value);
+}
+
+/**
+ * The prices typed for each model; a model whose fields are all empty has none. `bad` names
+ * the models whose prices do not parse (input and output are needed, numbers of 0 or more).
+ */
+export function parsePrices(prices: Readonly<Record<string, PriceDraft>>): { models: Record<string, ModelPrice>; bad: string[] } {
+  const models: Record<string, ModelPrice> = {};
+  const bad: string[] = [];
+  const number = (text: string): number | undefined => {
+    const value = text.trim() === '' ? Number.NaN : Number(text.trim());
+    return Number.isFinite(value) && value >= 0 ? value : undefined;
+  };
+  for (const [model, draft] of Object.entries(prices)) {
+    if (PRICE_FIELDS.every((field) => draft[field].trim() === '')) {
+      continue;
+    }
+    const input = number(draft.input);
+    const output = number(draft.output);
+    const cacheRead = draft.cacheRead.trim() === '' ? undefined : number(draft.cacheRead);
+    const cacheWrite = draft.cacheWrite.trim() === '' ? undefined : number(draft.cacheWrite);
+    const cacheBad =
+      (draft.cacheRead.trim() !== '' && cacheRead === undefined) || (draft.cacheWrite.trim() !== '' && cacheWrite === undefined);
+    if (input === undefined || output === undefined || cacheBad) {
+      bad.push(model);
+      continue;
+    }
+    models[model] = { input, output, cacheRead, cacheWrite };
+  }
+  return { models, bad };
 }
 
 const MODEL_FIELDS: readonly { key: keyof ProviderModels; label: () => string; variable: string }[] = [
@@ -141,6 +191,18 @@ function draftOf(provider: ProviderConfig): Draft {
       .map(([name, value]) => `${name}=${value}`)
       .join('\n'),
     color: provider.color ?? '',
+    currency: provider.pricing?.currency ?? presetById(provider.preset)?.currency ?? 'USD',
+    prices: Object.fromEntries(
+      Object.entries(provider.pricing?.models ?? {}).map(([model, price]) => [
+        model,
+        {
+          input: priceText(price.input),
+          output: priceText(price.output),
+          cacheRead: priceText(price.cacheRead),
+          cacheWrite: priceText(price.cacheWrite),
+        },
+      ]),
+    ),
   };
 }
 
@@ -185,6 +247,8 @@ export class ProvidersEditorPane implements EditorPane {
   private selectedId: string;
   private draft: Draft | undefined;
   private dirty = false;
+  /** The models each provider's conversations used, as main last said (`usage.models`). */
+  private readonly usedModels = new Map<string, readonly string[]>();
 
   constructor(
     container: HTMLElement,
@@ -213,6 +277,13 @@ export class ProvidersEditorPane implements EditorPane {
         this.render();
       }),
     );
+  }
+
+  /** Brings the selected provider's prices into view (the session list's usage links here). */
+  revealPrices(): void {
+    const prices = this.form.querySelector<HTMLElement>('.providers-prices');
+    prices?.scrollIntoView({ block: 'center' });
+    prices?.querySelector<HTMLInputElement>('.providers-price')?.focus();
   }
 
   /** Shows a provider's form; `force` drops unsaved changes. */
@@ -395,6 +466,7 @@ export class ProvidersEditorPane implements EditorPane {
       );
     }
 
+    let prices: { sync(): void } | undefined;
     const models = doc.createElement('div');
     models.className = 'providers-models';
     for (const field of MODEL_FIELDS) {
@@ -405,11 +477,24 @@ export class ProvidersEditorPane implements EditorPane {
       name.title = field.variable;
       label.append(
         name,
-        this.input(draft.models[field.key], (value) => ((draft.models[field.key] = value), changed()), field.variable),
+        this.input(
+          draft.models[field.key],
+          (value) => {
+            draft.models[field.key] = value;
+            changed();
+            prices?.sync();
+          },
+          field.variable,
+        ),
       );
       models.append(label);
     }
     this.form.append(this.row(t('models'), models, this.description(t('modelsHint'))));
+    if (draft.type === 'compatible') {
+      const table = this.pricesRow(provider, draft, changed);
+      prices = table;
+      this.form.append(table.row);
+    }
 
     this.form.append(
       this.textareaRow(t('headers'), t('headersHint'), draft.headers, ':', HEADER_NAME, (value) => {
@@ -537,6 +622,11 @@ export class ProvidersEditorPane implements EditorPane {
       return false;
     }
     const usesKey = draft.type === 'compatible' || draft.type === 'anthropic-api';
+    const prices = parsePrices(draft.prices);
+    if (draft.type === 'compatible' && prices.bad.length > 0) {
+      this.toast('error', t('badPrices', prices.bad.join(', ')));
+      return false;
+    }
     const config: ProviderConfig = {
       id: provider.id,
       name: draft.name.trim() || provider.id,
@@ -557,7 +647,7 @@ export class ProvidersEditorPane implements EditorPane {
       color:
         draft.color && draft.color !== providerAccentColor({ ...provider, type: draft.type, color: undefined }) ? draft.color : undefined,
       preset: provider.preset,
-      pricing: provider.pricing,
+      pricing: draft.type === 'compatible' ? { currency: draft.currency, models: prices.models } : provider.pricing,
     };
     const saved = await this.call(() => this.context.native.call('providers.save', { provider: config }));
     if (saved) {
@@ -679,6 +769,119 @@ export class ProvidersEditorPane implements EditorPane {
     const text = this.description(label);
     wrapper.append(box, text);
     row.append(wrapper);
+    return row;
+  }
+
+  /**
+   * A compatible API's prices: a row for each model its fields name, it has prices for, or
+   * its conversations used (main reads those from the transcripts, a moment later). `sync`
+   * adds the rows models now need, and drops the empty rows of models no longer named.
+   */
+  private pricesRow(provider: ProviderSummary, draft: Draft, changed: () => void): { row: HTMLElement; sync(): void } {
+    const doc = this.root.ownerDocument;
+    const control = doc.createElement('div');
+    control.className = 'providers-prices';
+    const bar = doc.createElement('div');
+    bar.className = 'providers-prices-bar';
+    bar.append(
+      this.dropdown(
+        [
+          { value: 'CNY', label: t('currencyCny') },
+          { value: 'USD', label: t('currencyUsd') },
+        ],
+        draft.currency,
+        (value) => {
+          draft.currency = value === 'CNY' ? 'CNY' : 'USD';
+          changed();
+        },
+      ),
+    );
+    const url = presetById(provider.preset)?.prices;
+    if (url) {
+      bar.append(this.button(t('officialPrices'), 'secondary', () => this.context.native.call('os.openExternal', { url })));
+    }
+    const table = doc.createElement('div');
+    table.className = 'providers-prices-table';
+    table.setAttribute('role', 'table');
+    const header = doc.createElement('div');
+    header.className = 'providers-price-row providers-price-header';
+    header.setAttribute('role', 'row');
+    for (const label of [t('priceModel'), t('priceInput'), t('priceCacheRead'), t('priceCacheWrite'), t('priceOutput')]) {
+      const cell = doc.createElement('span');
+      cell.setAttribute('role', 'columnheader');
+      cell.textContent = label;
+      cell.title = label;
+      header.append(cell);
+    }
+    const empty = this.description(t('pricesNone'));
+    table.append(header);
+    control.append(bar, table, empty);
+
+    const rows = new Map<string, HTMLElement>();
+    const sync = (): void => {
+      const named = [
+        ...Object.values(draft.models).map(modelKey),
+        ...Object.keys(draft.prices),
+        ...(this.usedModels.get(provider.id) ?? []),
+      ].filter((model) => model !== '');
+      const wanted = [...new Set(named)];
+      for (const [model, row] of rows) {
+        const price = draft.prices[model];
+        if (!wanted.includes(model) && (!price || PRICE_FIELDS.every((field) => price[field].trim() === ''))) {
+          row.remove();
+          rows.delete(model);
+        }
+      }
+      for (const model of wanted) {
+        if (!rows.has(model)) {
+          const row = this.priceRow(model, draft, changed);
+          rows.set(model, row);
+          table.append(row);
+        }
+      }
+      header.hidden = rows.size === 0;
+      empty.hidden = rows.size > 0;
+    };
+    sync();
+    this.context.native.call('usage.models', { providerId: provider.id }).then(
+      (used) => {
+        this.usedModels.set(provider.id, used);
+        sync();
+      },
+      (error: unknown) => this.context.logger.warn('cannot list the models a provider used', error),
+    );
+    return { row: this.row(t('prices'), control, this.description(t('pricesHint'))), sync };
+  }
+
+  private priceRow(model: string, draft: Draft, changed: () => void): HTMLElement {
+    const doc = this.root.ownerDocument;
+    const row = doc.createElement('div');
+    row.className = 'providers-price-row';
+    row.setAttribute('role', 'row');
+    row.dataset.model = model;
+    const name = doc.createElement('span');
+    name.className = 'providers-price-model';
+    name.setAttribute('role', 'cell');
+    name.textContent = model;
+    name.title = model;
+    row.append(name);
+    for (const field of PRICE_FIELDS) {
+      const placeholder = field === 'cacheRead' || field === 'cacheWrite' ? t('priceAsInput') : '';
+      const input = this.input(
+        draft.prices[model]?.[field] ?? '',
+        (value) => {
+          const price = draft.prices[model] ?? { input: '', output: '', cacheRead: '', cacheWrite: '' };
+          draft.prices[model] = { ...price, [field]: value };
+          changed();
+        },
+        placeholder,
+      );
+      input.classList.add('providers-price');
+      input.inputMode = 'decimal';
+      input.dataset.field = field;
+      input.setAttribute('role', 'cell');
+      row.append(input);
+    }
     return row;
   }
 

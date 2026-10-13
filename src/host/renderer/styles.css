@@ -1516,6 +1516,62 @@ body.resizing {
   color: var(--vscode-descriptionForeground);
 }
 
+.providers-prices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 640px;
+}
+
+.providers-prices-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.providers-prices-bar > .setting-select {
+  width: auto;
+}
+
+.providers-prices-table {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.providers-price-row {
+  display: grid;
+  grid-template-columns: minmax(64px, 1.5fr) repeat(4, minmax(48px, 1fr));
+  align-items: center;
+  gap: 6px;
+}
+
+.providers-price-row[hidden] {
+  display: none;
+}
+
+.providers-price-header {
+  color: var(--vscode-descriptionForeground);
+}
+
+.providers-price-header > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.providers-price-model {
+  overflow: hidden;
+  font-family: var(--vscode-editor-font-family);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.providers-price {
+  width: 100%;
+  min-width: 0;
+}
+
 .providers-textarea {
   height: auto;
   max-width: 560px;
