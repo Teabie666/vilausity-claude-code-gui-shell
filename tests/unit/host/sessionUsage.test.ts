@@ -4,9 +4,9 @@ import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSyn
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { parseUsageLines, readUsageFile, UsageIndex, type UsageCall } from '../../../src/host/main/sessionUsage';
+import { parseUsageLines, readUsageFile, UsageIndex } from '../../../src/host/main/sessionUsage';
 import { parseTags, SessionTagReader, SessionTagWriter, tagLine } from '../../../src/host/main/sessionProviders';
-import type { AttributedProvider } from '../../../src/platform/usage';
+import type { AttributedProvider, UsageCall } from '../../../src/platform/usage';
 
 const FOLDER = 'C:\\work\\shop';
 const OTHER_FOLDER = 'C:\\work\\other';
