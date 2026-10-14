@@ -227,6 +227,8 @@ export interface UsageViewDto {
   readonly rows: readonly { readonly label: string; readonly value: string; readonly detail: string }[];
   /** The models used that have no price, as a line to show; none when every one has. */
   readonly unpriced?: string;
+  /** In small print under it all: the figures can be lower than what the API charges. */
+  readonly caveat: string;
 }
 
 /** What a session cost under a compatible API, for the question before it is deleted. */

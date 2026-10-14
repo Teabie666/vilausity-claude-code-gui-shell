@@ -31,6 +31,8 @@ export const t = defineMessages('main', {
     "of which Claude Code's own calls (titles, compacting, web pages): {0} input, {1} output, {2} cache read, {3} cache write",
   /** {0}: model names. */
   usageUnpriced: 'No price for {0}',
+  /** In small print under the usage block (why, in the providers editor). */
+  usageCaveat: "This version's figures can be a little lower than what the API charges.",
   /** The built-in API provider (a Claude plan), as the shell names it. */
   subscription: 'Claude subscription',
   /** Above a conversation's input ({0}: the provider it last ran under, {1}: the window's). */

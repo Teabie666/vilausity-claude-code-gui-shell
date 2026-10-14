@@ -779,7 +779,7 @@ describe('ClaudeWebviewBridge and the usage block', () => {
     mock.timers.reset();
   });
 
-  const VIEW: UsageViewDto = { title: 'Usage · DeepSeek', tooltip: '', editPrices: 'Prices', editPricesTitle: '', rows: [] };
+  const VIEW: UsageViewDto = { title: 'Usage · DeepSeek', tooltip: '', editPrices: 'Prices', editPricesTitle: '', rows: [], caveat: '' };
 
   const MARKS: SessionProvidersDto = {
     sessions: { S1: 'mock' },

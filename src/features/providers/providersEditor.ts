@@ -909,7 +909,9 @@ export class ProvidersEditorPane implements EditorPane {
       this.renderForm();
       this.revealPrices();
     });
-    control.append(bar, table, empty, total, this.pricingInfo(draft, changed), paste);
+    const accuracy = this.description(t('pricesAccuracy'));
+    accuracy.classList.add('providers-prices-accuracy');
+    control.append(bar, table, empty, total, accuracy, this.pricingInfo(draft, changed), paste);
 
     // The models its fields name, it has prices for, or its conversations used.
     const wanted = (): string[] => [

@@ -100,5 +100,6 @@ export function usageView(scopes: UsageScopes, name: string, pricing: ProviderPr
       };
     }),
     unpriced: unpriced.length > 0 ? t('usageUnpriced', unpriced.join(', ')) : undefined,
+    caveat: t('usageCaveat'),
   };
 }

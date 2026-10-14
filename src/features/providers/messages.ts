@@ -59,6 +59,9 @@ export const t = defineMessages('providers', {
   pricesTotal: 'All of Claude Code on this API: {0}, deleted conversations included',
   pricesTotalTitle:
     "Every call of Claude Code's sessions on this computer that ran on this API, at the prices saved here. Conversations deleted since still count. Calls Claude Code makes for itself (titles, compacting the conversation, reading web pages) are added from its own running count.",
+  /** Under the prices: why the figures can be low, and by how much (checked against DeepSeek, 2026-10-14). */
+  pricesAccuracy:
+    'The figures can be a little lower than what the API charges: Claude Code keeps no usage record of some of its requests. Mostly the ones that decide whether a tool may run in Auto mode; also, web searches, reading web pages, titles and compacting the conversation count only once the conversation is closed, and are missed if the app is ended by force. Checked against DeepSeek: within a cent of its charge without Auto mode; a conversation in Auto mode came out about 3% low.',
   currencyCny: 'CNY (¥)',
   currencyUsd: 'USD ($)',
   officialPrices: 'Official Prices',

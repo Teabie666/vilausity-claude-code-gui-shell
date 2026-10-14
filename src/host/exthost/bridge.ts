@@ -372,6 +372,8 @@ const SESSION_LIST_STYLES = `
 
 .vilaus-usage-note { align-self: flex-start; padding: 0; text-align: left; white-space: normal; }
 .vilaus-usage-note[hidden] { display: none; }
+/* Small print, as the extension's own "Resets in 3h". */
+.vilaus-usage-caveat { color: var(--app-primary-foreground); opacity: 0.5; font-size: 11px; }
 [data-vilaus-usage] .accountRow_JuUW3A { cursor: default; }
 [data-vilaus-usage][hidden] { display: none; }
 

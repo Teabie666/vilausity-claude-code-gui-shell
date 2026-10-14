@@ -25,6 +25,7 @@ export class UsageBlock {
   private readonly body: HTMLElement;
   private readonly rows: HTMLElement;
   private readonly note: HTMLElement;
+  private readonly caveat: HTMLElement;
 
   constructor(
     private readonly hints: UsageBlockHints,
@@ -54,7 +55,8 @@ export class UsageBlock {
     this.rows = element('div', hints.rows);
     this.note = element('button', `${hints.link} vilaus-usage-note`);
     this.note.addEventListener('click', onEditPrices);
-    section.append(this.rows, this.note);
+    this.caveat = element('div', 'vilaus-usage-caveat');
+    section.append(this.rows, this.note, this.caveat);
     this.body.append(section);
     for (const node of [this.header, this.body]) {
       node.setAttribute(MARK, '');
@@ -96,6 +98,7 @@ export class UsageBlock {
     this.note.textContent = view.unpriced ?? '';
     this.note.hidden = !view.unpriced;
     this.note.title = view.editPricesTitle;
+    this.caveat.textContent = view.caveat;
     this.body.hidden = this.collapsed;
     this.place();
   }

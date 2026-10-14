@@ -49,6 +49,8 @@ describe('usageView', () => {
     );
     assert.equal(view.rows[0]?.detail, 'deepseek-flash: 1m input, 1m output, 1m cache read, 0 cache write (3 calls) · ¥10.20');
     assert.equal(view.unpriced, undefined);
+    // Always said: some calls Claude Code makes keep no usage record.
+    assert.equal(view.caveat, "This version's figures can be a little lower than what the API charges.");
   });
 
   test('a scope with models that have no price is a lower bound, or a dash when none has one', () => {
