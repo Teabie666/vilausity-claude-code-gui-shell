@@ -109,6 +109,16 @@
   "glm": {
     "currency": "CNY",
     "models": {
+      "glm-5.3": {
+        "input": 8,
+        "output": 28,
+        "cacheRead": 2
+      },
+      "glm-5.3-flash": {
+        "input": 0.8,
+        "output": 2.8,
+        "cacheRead": 0.23
+      },
       "glm-5.2": {
         "input": 8,
         "output": 28,

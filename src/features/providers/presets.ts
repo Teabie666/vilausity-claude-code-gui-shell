@@ -7,6 +7,12 @@
  * compatibility is deprecated; OpenRouter reaches their models. Each preset's accent color
  * is in platform/providers.ts (PRESET_ACCENTS).
  *
+ * Every model tier is filled (checked against the setup pages 2026-10-14): the strongest model
+ * for Opus and Fable, the one the provider sets Claude Code to work with for the main model,
+ * Sonnet and subagents, a small one for Haiku; a provider or plan with one model (or one it
+ * recommends) has it everywhere. `[1m]` (1M tokens of context) as the setup pages write it, and
+ * on DeepSeek's Pro, which its page does not set up but takes 1M too.
+ *
  * A preset billed per token links to its price list (checked 2026-10-13) and says the currency
  * it bills in; the coding plans are flat fees. The mainland China sites ship default prices
  * (presetPrices.json, read from their price pages by tools/prices/ on the date its sources
@@ -47,18 +53,29 @@ const kimiModels = {
   subagent: 'kimi-k3[1m]',
 };
 const kimiEnv = { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '1000000', CLAUDE_CODE_EFFORT_LEVEL: 'max' };
-const qwenCodingModels = { main: 'qwen3.7-plus', opus: 'qwen3.7-plus', sonnet: 'qwen3.7-plus', haiku: 'qwen3.7-plus' };
-/** Ark's Coding Plan: the model chosen in the Ark console. */
-const arkModels = { main: 'ark-code-latest', opus: 'ark-code-latest', sonnet: 'ark-code-latest', haiku: 'ark-code-latest' };
-const minimaxModel = 'MiniMax-M3.1-Flash-Preview';
-const minimaxModels = { main: minimaxModel, opus: minimaxModel, sonnet: minimaxModel, haiku: minimaxModel };
+/** Every tier on one model: a plan or provider that has (or recommends) just the one. */
+const allOn = (model: string) => ({ main: model, opus: model, sonnet: model, haiku: model, fable: model, subagent: model });
+const qwenCodingModels = allOn('qwen3.7-plus');
+/** Ark's Coding Plan: the model chosen in the Ark console (or its Auto). */
+const arkModels = allOn('ark-code-latest');
+const minimaxModels = allOn('MiniMax-M3.1-Flash-Preview[1m]');
 const minimaxEnv = { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '524288' };
 const qwenModels = {
   main: 'qwen3.7-max',
   opus: 'qwen3.7-max',
   sonnet: 'qwen3.7-max',
   haiku: 'qwen3.6-flash',
+  fable: 'qwen3.7-max',
   subagent: 'qwen3.7-max',
+};
+/** GLM's newest: the full model, its Flash for the small tasks (both 1M). */
+const glmModels = {
+  main: 'glm-5.3[1m]',
+  opus: 'glm-5.3[1m]',
+  sonnet: 'glm-5.3[1m]',
+  haiku: 'glm-5.3-flash[1m]',
+  fable: 'glm-5.3[1m]',
+  subagent: 'glm-5.3[1m]',
 };
 
 export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
@@ -78,12 +95,14 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
       type: 'compatible',
       baseUrl: 'https://api.deepseek.com/anthropic',
       auth: 'bearer',
+      // Flash for the work, Pro for the hardest (DeepSeek's own page puts Flash everywhere).
       models: {
         main: 'deepseek-flash[1m]',
-        opus: 'deepseek-flash[1m]',
+        opus: 'deepseek-v4-pro[1m]',
         sonnet: 'deepseek-flash[1m]',
         haiku: 'deepseek-flash',
-        subagent: 'deepseek-flash',
+        fable: 'deepseek-v4-pro[1m]',
+        subagent: 'deepseek-flash[1m]',
       },
       env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '786432', CLAUDE_CODE_EFFORT_LEVEL: 'max' },
     },
@@ -126,7 +145,7 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
       type: 'compatible',
       baseUrl: 'https://open.bigmodel.cn/api/anthropic',
       auth: 'bearer',
-      models: { opus: 'glm-5.2[1m]', sonnet: 'glm-5.2[1m]', haiku: 'glm-4.7' },
+      models: glmModels,
       timeoutMs: 3000000,
       disableNonessentialTraffic: true,
       env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '1000000' },
@@ -142,7 +161,7 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
       type: 'compatible',
       baseUrl: 'https://api.z.ai/api/anthropic',
       auth: 'bearer',
-      models: { opus: 'GLM-4.7', sonnet: 'GLM-4.7', haiku: 'GLM-4.5-Air' },
+      models: glmModels,
       timeoutMs: 3000000,
     },
   },
@@ -246,7 +265,9 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
       type: 'compatible',
       baseUrl: 'https://openrouter.ai/api',
       auth: 'bearer',
+      // The main model is Claude Code's default, Opus.
       models: {
+        main: '~anthropic/claude-opus-latest[1m]',
         opus: '~anthropic/claude-opus-latest[1m]',
         sonnet: '~anthropic/claude-sonnet-latest[1m]',
         haiku: '~anthropic/claude-haiku-latest',
