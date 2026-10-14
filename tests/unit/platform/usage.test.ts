@@ -519,6 +519,94 @@ describe('unrecordedCalls', () => {
   });
 });
 
+describe('unrecordedCalls, runs of counts', () => {
+  const counts = (at: number, since: number, models: Record<string, Partial<TokenCounts>>): UsageSnapshot => ({
+    at,
+    since,
+    models: Object.fromEntries(
+      Object.entries(models).map(([model, tokens]) => [
+        model,
+        { input: tokens.input ?? 0, output: tokens.output ?? 0, cacheRead: tokens.cacheRead ?? 0, cacheWrite: tokens.cacheWrite ?? 0 },
+      ]),
+    ),
+  });
+  const asked = (model: string, at: number, tokens: Partial<TokenCounts>): UsageCall => ({ ...call(model, at, tokens), requested: model });
+
+  for (const named of [true, false]) {
+    test(`a process killed before it wrote its count is in no later one: its calls are not compared (${named ? 'names asked for' : 'names answered with'})`, () => {
+      const make = named ? asked : call;
+      const calls = [
+        // The killed process's call, before the next process started (at 150).
+        make('pro', 100, { input: 49949, output: 54 }),
+        make('pro', 200, { input: 134, output: 1218, cacheRead: 49920 }),
+      ];
+      const extra = unrecordedCalls(
+        's1',
+        [
+          counts(300, 150, {
+            pro: { input: 134, output: 1218, cacheRead: 49920 },
+            flash: { input: 158170, output: 8402, cacheRead: 3968 },
+          }),
+        ],
+        calls,
+      );
+      assert.deepEqual(
+        extra.map((one) => [one.model, one.input, one.output, one.cacheRead]),
+        [['flash', 158170, 8402, 3968]],
+      );
+    });
+  }
+
+  test('with the names asked for, a model the count has less of takes nothing from another model', () => {
+    const calls = [
+      asked('pro', 80, { input: 100 }),
+      // A process killed after the first count: its call is in the run's time, not in its counts.
+      asked('pro', 150, { input: 1000 }),
+      asked('pro', 250, { input: 200 }),
+    ];
+    const snapshots = [counts(100, 50, { pro: { input: 100 } }), counts(300, 50, { pro: { input: 300 }, flash: { input: 5000 } })];
+    assert.deepEqual(
+      unrecordedCalls('s1', snapshots, calls).map((one) => [one.model, one.input]),
+      [['flash', 5000]],
+    );
+    // Named as answered (before 2.1.296), the flash count may be a gateway's name for those pro calls: capped.
+    const answered = calls.map((one) => call(one.model, one.at, one));
+    assert.deepEqual(
+      unrecordedCalls('s1', snapshots, answered).map((one) => [one.model, one.input]),
+      [['flash', 4000]],
+    );
+  });
+
+  test('two processes on a session at once: each count adds its own', () => {
+    const calls = [asked('flash', 120, { input: 10 }), asked('flash', 130, { input: 20 })];
+    const extra = unrecordedCalls(
+      's1',
+      [
+        // The one started later wrote first.
+        counts(140, 110, { flash: { input: 20 + 50 } }),
+        counts(150, 100, { flash: { input: 10 + 70 } }),
+      ],
+      calls,
+    );
+    // Each run is compared with both calls (they cannot be told apart): less than all, never twice.
+    assert.deepEqual(
+      extra.map((one) => [one.id, one.input]),
+      [
+        ['s1:unrecorded:0:flash', 40],
+        ['s1:unrecorded:1:flash', 50],
+      ],
+    );
+  });
+
+  test("a run's first count, after a long gap: its calls are put at its start, not at the last line before", () => {
+    const extra = unrecordedCalls('s1', [counts(100, 5000, { flash: { input: 7 } })], [asked('flash', 100, { input: 1 })]);
+    assert.deepEqual(
+      extra.map((one) => [one.at, one.input]),
+      [[5000, 7]],
+    );
+  });
+});
+
 describe('unrecordedCalls, a gateway', () => {
   test('a model counted by the name asked for and recorded by the one answered with: only what is beyond in all', () => {
     const calls = [call('anthropic/claude-4.5-sonnet-20250929', 100, { input: 1000, output: 100 })];

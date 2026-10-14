@@ -208,6 +208,29 @@ describe('parseUsageLines', () => {
       { at: Date.parse('2026-10-13T08:01:00.000Z'), models: { 'deepseek-flash': { input: 200, output: 60, cacheRead: 0, cacheWrite: 0 } } },
     ]);
   });
+
+  test('keeps the model a call asked for and when the counts began (startTime), which stands in for a time not known', () => {
+    const lines = newUsageLines();
+    const started = Date.parse('2026-10-13T07:00:00.000Z');
+    parseUsageLines(
+      [
+        line({ type: 'cost-state', sessionId: ID_A, startTime: started, totalDuration: 5, modelUsage: {} }),
+        line({
+          type: 'assistant',
+          requestedModel: 'deepseek-flash[1m]',
+          timestamp: TIMESTAMP,
+          message: { id: 'msg-1', model: 'deepseek-flash', usage: { input_tokens: 1 } },
+        }),
+        line({ type: 'cost-state', sessionId: ID_A, startTime: started, totalDuration: 9, modelUsage: {} }),
+      ].join('\n'),
+      lines,
+    );
+    assert.equal(lines.calls.get('msg-1')?.requested, 'deepseek-flash[1m]');
+    assert.deepEqual(lines.snapshots, [
+      { at: started, since: started, models: {} },
+      { at: AT, since: started, models: {} },
+    ]);
+  });
 });
 
 describe('readUsageFile', () => {
@@ -519,6 +542,86 @@ describe('UsageIndex', () => {
       });
       // Kept in the ledger with the rest.
       assert.equal((await index.answer({ kind: 'total' as const, providers, provider: 'deepseek' }))['deepseek-flash']?.output, 1038);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a process killed before it wrote its count: the next one's count is set against its own calls only", async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'vilaus-usage-'));
+    const ledgerFile = path.join(root, 'usage-ledger.jsonl');
+    try {
+      const asked = (id: string, at: string, input: number, output: number, cacheRead: number): string =>
+        line({
+          type: 'assistant',
+          requestedModel: 'deepseek-v4-pro',
+          cwd: FOLDER,
+          sessionId: ID_A,
+          timestamp: at,
+          message: {
+            id,
+            model: 'deepseek-v4-pro',
+            usage: { input_tokens: input, output_tokens: output, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: 0 },
+          },
+        });
+      const counts = (modelUsage: Record<string, [number, number, number]>): string =>
+        line({
+          type: 'cost-state',
+          sessionId: ID_A,
+          // The process after the killed one started at 08:02:24.
+          startTime: Date.parse('2026-10-14T08:02:24.845Z'),
+          totalDuration: 1,
+          modelUsage: Object.fromEntries(
+            Object.entries(modelUsage).map(([model, [input, output, cacheRead]]) => [
+              model,
+              {
+                inputTokens: input,
+                outputTokens: output,
+                cacheReadInputTokens: cacheRead,
+                cacheCreationInputTokens: 0,
+                webSearchRequests: 0,
+              },
+            ]),
+          ),
+        });
+      // As a DeepSeek session went (2.1.299): the first process answered once and was killed with the
+      // app; the next one counted from nothing, its eight web searches (flash) among its calls.
+      writeSession(root, 'shop', ID_A, [
+        asked('msg-1', '2026-10-14T07:23:44.897Z', 49949, 54, 0),
+        counts({}),
+        asked('msg-2', '2026-10-14T08:05:12.551Z', 134, 1218, 49920),
+        counts({ 'deepseek-v4-pro': [134, 1218, 49920], 'deepseek-flash[1m]': [158170, 8402, 3968] }),
+      ]);
+      // What an earlier reckoning put in the ledger: less for this count, and some for another.
+      writeFileSync(
+        ledgerFile,
+        `${line({ s: ID_A, f: FOLDER, c: [[`${ID_A}:unrecorded:1:deepseek-flash`, 1, 'deepseek-flash', 108221, 8348, 3968, 0, 0]] })}\n` +
+          `${line({ s: ID_A, f: FOLDER, c: [[`${ID_A}:unrecorded:0:deepseek-flash`, 1, 'deepseek-flash', 5, 5, 5, 0, 0]] })}\n`,
+      );
+      const both: AttributedProvider = { id: 'deepseek', type: 'compatible', models: ['deepseek-flash', 'deepseek-v4-pro'] };
+      const index = new UsageIndex(root, path.join(root, 'tags.jsonl'), ledgerFile);
+      const summary = await index.answer({
+        kind: 'summary' as const,
+        providers: [subscription, both],
+        provider: 'deepseek',
+        sessionId: ID_A,
+      });
+      assert.deepEqual(summary.session['deepseek-flash'], {
+        input: 158170,
+        output: 8402,
+        cacheRead: 3968,
+        cacheWrite: 0,
+        calls: 0,
+        unrecorded: { input: 158170, output: 8402, cacheRead: 3968, cacheWrite: 0 },
+      });
+      assert.equal(summary.session['deepseek-v4-pro']?.input, 49949 + 134);
+      // The ledger has the new figures over the old, as a made-up call (not one more call).
+      const total = await new UsageIndex(root, path.join(root, 'tags.jsonl'), ledgerFile).answer({
+        kind: 'total' as const,
+        providers: [subscription, both],
+        provider: 'deepseek',
+      });
+      assert.deepEqual(total['deepseek-flash'], summary.session['deepseek-flash']);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -5,19 +5,20 @@
  *
  * A call is a `type: "assistant"` line (checked against Claude Code 2.1.29x):
  * `message.{id, model, usage.{input_tokens, output_tokens, cache_read_input_tokens,
- * cache_creation_input_tokens}}` and `timestamp`. The CLI writes one line per content block
- * of a reply, each with the reply's usage, so calls are told apart by `message.id`. A
- * subagent's calls are in `<session id>/subagents/*.jsonl`.
+ * cache_creation_input_tokens}}`, `timestamp` and, from 2.1.296 on, `requestedModel`. The CLI
+ * writes one line per content block of a reply, each with the reply's usage, so calls are told
+ * apart by `message.id`. A subagent's calls are in `<session id>/subagents/*.jsonl`.
  *
- * Calls the CLI makes for itself (a title, compacting the conversation, WebFetch's summary of a
- * page) are not in the transcripts, but its own running count is: the `cost-state` line each
- * process writes as a turn ends, `{modelUsage: {<model>: {inputTokens, outputTokens,
+ * Calls the CLI makes for itself (a title, compacting the conversation, WebSearch, WebFetch's
+ * summary of a page) are not in the transcripts, but its own running count is: the
+ * `cost-state` line a process writes as it exits (2.1.299; older ones wrote it more often),
+ * `{startTime, modelUsage: {<model as requested>: {inputTokens, outputTokens,
  * cacheReadInputTokens, cacheCreationInputTokens, ...}}}`, counting every call it made and
- * those of the processes before it on the session. What it has beyond the transcripts is
- * added as unrecorded calls (platform/usage.ts `unrecordedCalls`), at the time of the line
- * before it (its own times count only the processes' running time). Checked against what
- * DeepSeek charged (2.1.296): the transcripts alone missed a compaction, a quarter of that
- * session's cost; with these added, the cost was right.
+ * going on from the last line written before it started, `startTime` and all. What it has
+ * beyond the transcripts is added as unrecorded calls (platform/usage.ts `unrecordedCalls`),
+ * at the time of the line before it (its own times count only the processes' running time).
+ * Checked against what DeepSeek charged (2.1.296): the transcripts alone missed a compaction, a
+ * quarter of that session's cost; with these added, the cost was right.
  *
  * Transcripts only grow: a file that got longer is read from where the last read stopped.
  * Each call read is put in the ledger too (usageLedger.ts), which keeps it once its transcript
@@ -182,8 +183,11 @@ export function parseUsageLines(text: string, lines: UsageLines): void {
     }
     if (isRecord(entry) && entry.type === 'cost-state') {
       const models = snapshotModels(entry);
-      if (models && lines.lastAt !== undefined) {
-        lines.snapshots.push({ at: lines.lastAt, models });
+      const since =
+        typeof entry.startTime === 'number' && Number.isFinite(entry.startTime) && entry.startTime > 0 ? entry.startTime : undefined;
+      const at = lines.lastAt ?? since;
+      if (models && at !== undefined) {
+        lines.snapshots.push({ at, ...(since === undefined ? {} : { since }), models });
       }
       continue;
     }
@@ -207,10 +211,12 @@ export function parseUsageLines(text: string, lines: UsageLines): void {
     const thought =
       Array.isArray(content) &&
       content.some((block) => isRecord(block) && (block.type === 'thinking' || block.type === 'redacted_thinking'));
+    const requested = typeof entry.requestedModel === 'string' && entry.requestedModel ? entry.requestedModel : undefined;
     calls.set(id, {
       id,
       at,
       model,
+      ...(requested === undefined ? {} : { requested }),
       ...(thought || calls.get(id)?.thinking ? { thinking: true } : {}),
       input: tokens(usage.input_tokens),
       output: tokens(usage.output_tokens),

@@ -119,6 +119,32 @@ describe('UsageLedger', () => {
     }
   });
 
+  test('a made-up call its session no longer has goes to no tokens and out of the sessions; the others stay', async () => {
+    const { dir, file } = tempLedger();
+    try {
+      const ledger = new UsageLedger(file);
+      const madeUp = (index: number, input: number): UsageCall =>
+        call(`${ID_A}:unrecorded:${index}:deepseek-flash`, input, { unrecorded: true });
+      await ledger.record([
+        { sessionId: ID_A, folder: FOLDER, calls: [call('m1', 1), madeUp(0, 5), madeUp(1, 7)] },
+        { sessionId: ID_B, folder: FOLDER, calls: [call(`${ID_B}:unrecorded:0:deepseek-flash`, 9, { unrecorded: true })] },
+      ]);
+      // Worked out again: all of it in the second count. Session B's transcript is gone (not given).
+      await ledger.record([{ sessionId: ID_A, folder: FOLDER, calls: [call('m1', 1), madeUp(1, 12)] }]);
+      const sessions = await new UsageLedger(file).sessions();
+      assert.deepEqual(sessions.find((session) => session.sessionId === ID_A)?.calls, [call('m1', 1), madeUp(1, 12)]);
+      assert.deepEqual(sessions.find((session) => session.sessionId === ID_B)?.calls, [
+        call(`${ID_B}:unrecorded:0:deepseek-flash`, 9, { unrecorded: true }),
+      ]);
+      // Nothing changed: nothing written.
+      const lines = lineCount(file);
+      await ledger.record([{ sessionId: ID_A, folder: FOLDER, calls: [call('m1', 1), madeUp(1, 12)] }]);
+      assert.equal(lineCount(file), lines);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('a ledger rewritten shorter is read again from the start; no file is no calls', async () => {
     const { dir, file } = tempLedger();
     try {

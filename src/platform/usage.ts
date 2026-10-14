@@ -33,6 +33,11 @@ export interface UsageCall extends TokenCounts {
   readonly at: number;
   /** The model as the transcript names it. */
   readonly model: string;
+  /**
+   * The model as Claude Code asked for it (`requestedModel`, from 2.1.296 on): the name its own
+   * counts go by, where a gateway may answer with another.
+   */
+  readonly requested?: string;
   /** The reply thought (some APIs price thinking apart). */
   readonly thinking?: boolean;
   /**
@@ -45,13 +50,18 @@ export interface UsageCall extends TokenCounts {
 
 /**
  * Claude Code's own count of a session's calls at one point, by model (`modelKey`): the
- * transcript's `cost-state` line, which each Claude process writes as a turn ends. It counts
- * every call the process made (and those of the processes before it on the session), the
- * ones the transcript leaves out too.
+ * transcript's `cost-state` line, which a Claude process writes as it exits (and at other
+ * times). It counts every call the process made, the ones the transcript leaves out too, and
+ * goes on from the last count written before the process started, if any.
  */
 export interface UsageSnapshot {
   /** When it was written: the time of the last transcript line before it (epoch ms). */
   readonly at: number;
+  /**
+   * When the first process it counts for started (`startTime`, epoch ms): a process that goes on
+   * from a count keeps its start time, so counts with the same `since` go on from one another.
+   */
+  readonly since?: number;
   readonly models: Readonly<Record<string, TokenCounts>>;
 }
 
@@ -312,34 +322,61 @@ const TOKEN_KINDS = ['input', 'output', 'cacheRead', 'cacheWrite'] as const;
 
 type MutableCounts = { -readonly [K in keyof TokenCounts]: number };
 
+/** In the id of a call `unrecordedCalls` makes up: `<session id>:unrecorded:<snapshot>:<model>`. */
+export const UNRECORDED_ID = ':unrecorded:';
+
+/** Snapshots that go on from one another (the same `since`), and the calls compared with them so far. */
+interface CountRun {
+  /** The next of the calls (by time) to compare. */
+  next: number;
+  /** The calls compared, by the model Claude Code counts them under. */
+  readonly recorded: Record<string, TokenCounts>;
+  recordedAll: TokenCounts;
+  /** Every call compared has the name it was asked for by (`UsageCall.requested`). */
+  named: boolean;
+  /** What the run's snapshots have added so far. */
+  readonly added: Record<string, TokenCounts>;
+}
+
 /**
  * The calls a session's transcripts leave out, from Claude Code's own counts (its snapshots,
- * in the order written): what a snapshot has beyond the session's calls up to its time, by
- * model and kind of token, as far as that is more than earlier snapshots had. A snapshot
- * that counts less than the transcripts (a process that did not see another one's calls, a
- * forked conversation's copied calls) adds nothing. Nor more than it has beyond them in all:
- * Claude Code counts a model by the name it asked for, the transcript by the name the API
- * answered with, and a gateway may answer with another (OpenRouter). So this can count too
- * little, never twice.
+ * in the order written). A process goes on from the last count written before it started,
+ * keeping its `since`, so the snapshots with the same `since` are one run, each counting what
+ * the ones before it did and more. A process that exits without writing its count (killed with
+ * the app) is in no run: its calls are in the transcript, and the next process starts a run
+ * of its own or goes on from an older count. So a snapshot is compared with the session's
+ * calls from its `since` up to its time: what it has beyond them, by model and kind of token,
+ * as far as that is more than the run's earlier snapshots had.
+ *
+ * Calls are compared under the name Claude Code asked for (`requested`); transcripts before
+ * 2.1.296 have only the name the API answered with, and a gateway may answer with another
+ * (OpenRouter). With such calls in the comparison, a snapshot adds no more than it has beyond
+ * the calls in all. A snapshot that counts less of a model than the calls (another process's
+ * calls in its time) adds none of it. So this can count too little, never twice.
  */
 export function unrecordedCalls(sessionId: string, snapshots: readonly UsageSnapshot[], calls: readonly UsageCall[]): UsageCall[] {
   const sorted = calls.filter((call) => !call.unrecorded).sort((a, b) => a.at - b.at);
-  const recorded: Record<string, TokenCounts> = {};
-  let recordedAll: TokenCounts = NO_TOKENS;
-  const added: Record<string, TokenCounts> = {};
+  const runs = new Map<number | undefined, CountRun>();
   const result: UsageCall[] = [];
-  let next = 0;
   snapshots.forEach((snapshot, index) => {
-    for (; next < sorted.length && (sorted[next]?.at ?? Infinity) <= snapshot.at; next++) {
-      const call = sorted[next];
+    const since = snapshot.since;
+    let run = runs.get(since);
+    if (!run) {
+      const first = since === undefined ? 0 : sorted.findIndex((call) => call.at >= since);
+      run = { next: first < 0 ? sorted.length : first, recorded: {}, recordedAll: NO_TOKENS, named: true, added: {} };
+      runs.set(since, run);
+    }
+    for (; run.next < sorted.length && (sorted[run.next]?.at ?? Infinity) <= snapshot.at; run.next++) {
+      const call = sorted[run.next];
       if (call) {
-        const model = modelKey(call.model);
-        recorded[model] = plus(recorded[model] ?? NO_TOKENS, call);
-        recordedAll = plus(recordedAll, call);
+        const model = modelKey(call.requested ?? call.model);
+        run.recorded[model] = plus(run.recorded[model] ?? NO_TOKENS, call);
+        run.recordedAll = plus(run.recordedAll, call);
+        run.named &&= call.requested !== undefined;
       }
     }
+    const { recorded, recordedAll, added } = run;
     const models = Object.entries(snapshot.models);
-    const counted = models.reduce<TokenCounts>((sum, [, tokens]) => plus(sum, tokens), NO_TOKENS);
     const beyond = new Map<string, MutableCounts>(
       models.map(([model, tokens]) => [
         model,
@@ -351,15 +388,20 @@ export function unrecordedCalls(sessionId: string, snapshots: readonly UsageSnap
         },
       ]),
     );
-    for (const kind of TOKEN_KINDS) {
-      const room = Math.max(0, counted[kind] - recordedAll[kind]);
-      const wanted = [...beyond.values()].reduce((sum, tokens) => sum + tokens[kind], 0);
-      if (wanted > room) {
-        for (const tokens of beyond.values()) {
-          tokens[kind] = Math.floor((tokens[kind] * room) / wanted);
+    if (!run.named) {
+      const counted = models.reduce<TokenCounts>((sum, [, tokens]) => plus(sum, tokens), NO_TOKENS);
+      for (const kind of TOKEN_KINDS) {
+        const room = Math.max(0, counted[kind] - recordedAll[kind]);
+        const wanted = [...beyond.values()].reduce((sum, tokens) => sum + tokens[kind], 0);
+        if (wanted > room) {
+          for (const tokens of beyond.values()) {
+            tokens[kind] = Math.floor((tokens[kind] * room) / wanted);
+          }
         }
       }
     }
+    // The last line before a run's first count may be from long before its process started.
+    const at = since === undefined ? snapshot.at : Math.max(snapshot.at, since);
     for (const [model, tokens] of beyond) {
       const before = added[model] ?? NO_TOKENS;
       const extra = {
@@ -370,7 +412,7 @@ export function unrecordedCalls(sessionId: string, snapshots: readonly UsageSnap
       };
       if (TOKEN_KINDS.some((kind) => extra[kind] > 0)) {
         added[model] = plus(before, extra);
-        result.push({ id: `${sessionId}:unrecorded:${index}:${model}`, at: snapshot.at, model, ...extra, unrecorded: true });
+        result.push({ id: `${sessionId}${UNRECORDED_ID}${index}:${model}`, at, model, ...extra, unrecorded: true });
       }
     }
   });

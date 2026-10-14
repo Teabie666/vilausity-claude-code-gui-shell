@@ -10,11 +10,15 @@
  * worker of either instance (normal and administrator share it); a call found twice (both
  * added it) is one call, its later line winning. A broken line is a few calls less, added
  * again while their transcript is still there.
+ *
+ * The calls made up from Claude Code's own counts (`unrecordedCalls`, ids with `UNRECORDED_ID`)
+ * are worked out again from the whole transcript each time: while it is there, those of an
+ * earlier reckoning that it no longer has are written again with no tokens.
  */
 
 import { appendFile, mkdir, open, stat } from 'node:fs/promises';
 import * as path from 'node:path';
-import type { SessionUsage, UsageCall } from '../../platform/usage';
+import { UNRECORDED_ID, type SessionUsage, type UsageCall } from '../../platform/usage';
 
 const NEWLINE = 0x0a;
 
@@ -24,6 +28,8 @@ export interface LedgerEntry {
   readonly folder: string | undefined;
   readonly call: UsageCall;
 }
+
+const hasTokens = (call: UsageCall): boolean => call.input > 0 || call.output > 0 || call.cacheRead > 0 || call.cacheWrite > 0;
 
 function sameCall(a: UsageCall, b: UsageCall): boolean {
   return (
@@ -94,6 +100,7 @@ export function parseLedger(text: string, entries: Map<string, LedgerEntry>): vo
           cacheRead: count(cacheRead),
           cacheWrite: count(cacheWrite),
           ...(thinking === 1 ? { thinking: true } : {}),
+          ...(id.includes(UNRECORDED_ID) ? { unrecorded: true } : {}),
         },
       });
     }
@@ -111,11 +118,23 @@ export class UsageLedger {
   /**
    * Adds the calls of `sessions` it does not have to the file, and those of the same session
    * whose tokens changed. A call it has from another session is a copy (a forked conversation).
+   * Each of `sessions` has all its calls: made-up ones it has no more go to no tokens.
    */
   async record(sessions: Iterable<SessionUsage>): Promise<void> {
     await this.load();
     const lines: string[] = [];
     const batch = new Set<string>();
+    const madeUp = new Map<string, LedgerEntry[]>();
+    for (const entry of this.entries.values()) {
+      if (entry.call.unrecorded && hasTokens(entry.call)) {
+        const list = madeUp.get(entry.sessionId);
+        if (list) {
+          list.push(entry);
+        } else {
+          madeUp.set(entry.sessionId, [entry]);
+        }
+      }
+    }
     for (const usage of sessions) {
       const calls = usage.calls.filter((call) => {
         if (call.id === undefined || batch.has(call.id)) {
@@ -128,6 +147,13 @@ export class UsageLedger {
         batch.add(call.id);
         return true;
       });
+      const ids = new Set(usage.calls.map((call) => call.id));
+      for (const { call } of madeUp.get(usage.sessionId) ?? []) {
+        if (call.id !== undefined && !ids.has(call.id) && !batch.has(call.id)) {
+          batch.add(call.id);
+          calls.push({ ...call, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+        }
+      }
       if (calls.length > 0) {
         lines.push(ledgerLine(usage, calls));
       }
@@ -147,6 +173,9 @@ export class UsageLedger {
     if (!this.grouped) {
       const bySession = new Map<string, { folder: string | undefined; calls: UsageCall[] }>();
       for (const entry of this.entries.values()) {
+        if (entry.call.unrecorded && !hasTokens(entry.call)) {
+          continue;
+        }
         const session = bySession.get(entry.sessionId) ?? { folder: entry.folder, calls: [] };
         session.calls.push(entry.call);
         bySession.set(entry.sessionId, session);
