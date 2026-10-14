@@ -22,6 +22,7 @@ import { ProviderNotice } from './providerNotice';
 import { filterButtonOnly, SessionProviderMarks } from './sessionProviders';
 import { watchSessionRows } from './sessionRows';
 import { StatusFilter } from './statusFilter';
+import { installStreamMerging } from './streamMerge';
 import { PageTranslator } from './translate';
 import { UsageBlock } from './usageBlock';
 import { UsageResets } from './usageResets';
@@ -232,6 +233,11 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
     },
     true,
   );
+  // Ahead of the page's own listeners, which its scripts add later.
+  const streamMerge = data.hints?.streamMerge;
+  if (streamMerge) {
+    installStreamMerging(streamMerge);
+  }
 
   window.addEventListener('click', (event) => handleClick(event, post));
   window.addEventListener('auxclick', (event) => {

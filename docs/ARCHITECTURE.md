@@ -42,12 +42,12 @@ Electron main ── 窗口、命令行参数、设置和状态存储（唯一�
 
 插件升级最容易坏的地方，全部集中在这两处，每处都注明对照的插件版本：
 
-- `src/host/exthost/bridge.ts`：在消息层拦截插件 webview 与后端之间的私有请求（比如 `open_diff`、`open_url`）；插件页面的知识也只写在这里（页面提示 `WebviewPageHints`：评论块的锚点、页面里哪些区域是内容、盖在页面自己样式上的样式；页面存的状态里的会话 id）。
+- `src/host/exthost/bridge.ts`：在消息层拦截插件 webview 与后端之间的私有请求（比如 `open_diff`、`open_url`）；插件页面的知识也只写在这里（页面提示 `WebviewPageHints`：评论块的锚点、页面里哪些区域是内容、盖在页面自己样式上的样式、页面脚本合并哪些流式消息；页面存的状态里的会话 id）。
 - `src/compat/vscode/`：插件依赖的 VS Code 行为细节（比如 diff 标签页的 `TabInputWebview` viewType 前缀）。
 
 这两处和其他文档只描述跟插件交互时看得到的行为（消息格式、命令 id、设置项）；逆向得来的内部细节不写进仓库。
 
-插件升级后的检查顺序：先跑 `npm run smoke`，再看最新一次 `logs\...\shim-unimplemented.log`，有新出现的 API 就补上。然后是汉化：重跑 `node tools/extension-strings/extract.mjs`，`npm run nls` 看新出现和过时的界面文字（`--todo-extension` 导出补译），并核对 bridge 页面提示里的类名在新版本里还在（侧栏会话列表的样式 `SESSION_LIST_STYLES`、对话正文的字体 `CONVERSATION_STYLES` 也是按类名写的，类名变了就退回插件原样）。
+插件升级后的检查顺序：先跑 `npm run smoke`，再看最新一次 `logs\...\shim-unimplemented.log`，有新出现的 API 就补上。然后是汉化：重跑 `node tools/extension-strings/extract.mjs`，`npm run nls` 看新出现和过时的界面文字（`--todo-extension` 导出补译），并核对 bridge 页面提示里的类名在新版本里还在（侧栏会话列表的样式 `SESSION_LIST_STYLES`、对话正文的字体 `CONVERSATION_STYLES` 也是按类名写的，类名变了就退回插件原样），以及流式消息的形状（`STREAM_MERGE`，见"流式消息合并"）。
 
 ## 内容面板（M2）
 
@@ -255,6 +255,14 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **句子片段和模板**：插件把一句话拆成几个文本节点（"Allow reading from" + 路径 + "?"），只能一段段换；中文语序对得上的才翻（"允许读取" + 路径 + "?"），带复数词尾之类对不上的保持英文。模板的变量本身是表里的文字时也一起换（"`<模式说明>`. Click to change…"）。紧凑的时长（"5m"、"2h 30m"）格式不一，统一保持英文。
 - **壳里的提示**：插件经 `window.showInformationMessage` / `showQuickPick` / `showInputBox` 弹出的文字，在插件进程里（`host/exthost/compatHost.ts`）查表后再发给渲染进程。返回给插件的仍是它自己的条目，插件按英文比较选项不受影响。表经 `ExtHostInitData.extensionTranslations` 交给插件进程，是否翻译按当时的设置。
 - **设置** `vilaus.translateExtensionUi`：默认开，只在中文界面起作用，改了立即生效：main 通知渲染进程，渲染进程给每个 webview 发控制消息（开 = 发表，关 = 换回原文）。
+
+## 流式消息合并
+
+插件把 Claude Code 的流式事件 (stream event) 一条条转给对话页面：`stream_event` 里的 `content_block_delta`（回复的文字、工具调用的参数、思考），每段思考后面还跟一条 `thinking_tokens`（思考的 token 计数）。页面每收到一条就把整个对话重新渲染一遍。Anthropic 的接口一个事件带好几个 token；DeepSeek 一个 token 一个事件，每秒 200 到 1000 条。对话长一点、电脑慢一点，每条的渲染时间乘上条数就超过一秒，页面跟不上：消息越积越多，显示的内容落后几十秒到几分钟，这期间页面没有反应（转圈不动、不能滚动、关掉计划后对话不重新排版），输出结束、积压处理完才恢复。
+
+- **做法**：引导脚本在插件脚本之前给 window 加 message 监听器。window 上的监听器不分 capture，按添加顺序调用，所以它总在插件的前面。它按 bridge 给的规则（`WebviewPageHints.streamMerge`，对照 2.1.296）认出这些消息，同一个流、同一个内容块的一串合成一条：文字拼起来；`thinking_tokens` 取最新的计数，新增数相加。别的消息一到，先把攒着的按原来的顺序交出去，再放它过去；没有别的消息就最多等 50 毫秒。页面上一次渲染花得更久，就等同样长（最多 1 秒），渲染最多占一半时间。交给页面的是新造的 MessageEvent，origin 和 source 跟原消息一样。逻辑在 `host/webview/streamMerge.ts`，规则是数据，引导脚本本身不认识插件的消息格式。
+- **实测**（插件 2.1.296、DeepSeek flash；对话页约 2 千个元素，CPU 降速 4 倍模拟慢电脑）：让 Claude 写一个 200 行的文件。合并前页面收到约 1 万条消息，主线程 96% 被占满，显示落后 95 秒，最长 15 秒不响应；合并后插件只收到约 1 千条，主线程占 40%，落后 0.2 秒，30 毫秒内响应。写长篇 Markdown、中途停止、子代理的情况一样，显示的内容跟合并前一致。不降速时，合并前也会卡 3 秒、落后 7 秒，合并后察觉不到延迟。这期间我们注入的脚本（翻译、计量条）只占几百毫秒。
+- **插件改了消息格式**：规则对不上就不合并，消息原样交给页面，退回原来的样子，不会出错。升级插件后核对 bridge 里 `STREAM_MERGE` 写的消息形状。
 
 ## 打包和安装包（M6）
 

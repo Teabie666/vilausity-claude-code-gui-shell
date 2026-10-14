@@ -192,6 +192,38 @@ export interface WebviewPageHints {
   readonly conversationEscapes?: ConversationEscapeHints;
   /** Where the shell's usage block goes in a session list, and the extension's classes it is built of. */
   readonly usageBlock?: UsageBlockHints;
+  /** The messages a conversation page gets a token at a time, which the page script merges (see the type). */
+  readonly streamMerge?: StreamMergeHints;
+}
+
+/**
+ * Messages the extension streams to a conversation page a token at a time: each adds to what
+ * the one before it said (more of the reply, of a tool call's input, of the thinking, or the
+ * thinking's token count). The page renders the whole conversation again for each message,
+ * and fast APIs stream hundreds a second, so the page script holds a run of them and hands
+ * the page one message for it: at once when anything else comes, else after a short wait.
+ */
+export interface StreamMergeHints {
+  readonly rules: readonly StreamMergeRule[];
+  /** The shortest wait before a held run goes to the page (ms); a page slow to render waits longer. */
+  readonly intervalMs: number;
+}
+
+/** A path into a message, property by property from its top. */
+export type MessagePath = readonly string[];
+
+/**
+ * One kind of streamed message. Two messages of a rule merge when the values at its `key`
+ * paths are equal (one stream, one content block). With `append`, the merged message is the
+ * first one with the text at that path concatenated; without it, the merged message is the
+ * latest one, with the numbers at the `sum` paths added up.
+ */
+export interface StreamMergeRule {
+  /** A message is the rule's when the value at each path is the one given. */
+  readonly match: readonly (readonly [MessagePath, string | number | boolean | null])[];
+  readonly key: readonly MessagePath[];
+  readonly append?: MessagePath;
+  readonly sum?: readonly MessagePath[];
 }
 
 /**

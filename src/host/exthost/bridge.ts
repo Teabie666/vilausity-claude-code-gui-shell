@@ -24,6 +24,8 @@ import type {
   SessionRowHints,
   ShellToWebviewControl,
   StatusFilterHints,
+  StreamMergeHints,
+  StreamMergeRule,
   UsageBarHints,
   ProviderNoticeDto,
   SessionProvidersDto,
@@ -58,6 +60,52 @@ const CHAT_INPUT_FORM = 'form:has([role="textbox"][aria-label="Message input"])'
 const CONVERSATION_ESCAPES: ConversationEscapeHints = {
   input: '[role="textbox"][aria-label="Message input"]',
   doubleMs: 800,
+};
+
+/**
+ * What a conversation page gets a token at a time (anthropic.claude-code 2.1.296): Claude
+ * Code's stream events as they come, `{type: 'from-extension', message: {type: 'io_message',
+ * channelId, message, done: false}}` where `message` is
+ *   `{type: 'stream_event', event: {type: 'content_block_delta', index, delta}, parent_tool_use_id, ...}`
+ * with `delta` `{type: 'text_delta', text}`, `{type: 'input_json_delta', partial_json}` (a tool
+ * call's input) or `{type: 'thinking_delta', thinking}`, and after each thinking delta
+ *   `{type: 'system', subtype: 'thinking_tokens', estimated_tokens, estimated_tokens_delta, ...}`
+ * (the running count, and what this delta added). A run of deltas of one content block merges
+ * into one delta with the text joined; a run of token counts into the latest count, with the
+ * added tokens summed. DeepSeek's API sends one event per token (200 to 1000 a second), and the
+ * page renders the whole conversation for each one: a long conversation fell minutes behind.
+ */
+const IO_MESSAGE: StreamMergeRule['match'] = [
+  [['type'], 'from-extension'],
+  [['message', 'type'], 'io_message'],
+  [['message', 'done'], false],
+];
+const STREAM_KEY: StreamMergeRule['key'] = [
+  ['message', 'channelId'],
+  ['message', 'message', 'parent_tool_use_id'],
+];
+const deltaRule = (type: string, field: string): StreamMergeRule => ({
+  match: [
+    ...IO_MESSAGE,
+    [['message', 'message', 'type'], 'stream_event'],
+    [['message', 'message', 'event', 'type'], 'content_block_delta'],
+    [['message', 'message', 'event', 'delta', 'type'], type],
+  ],
+  key: [...STREAM_KEY, ['message', 'message', 'event', 'index']],
+  append: ['message', 'message', 'event', 'delta', field],
+});
+export const STREAM_MERGE: StreamMergeHints = {
+  rules: [
+    deltaRule('text_delta', 'text'),
+    deltaRule('input_json_delta', 'partial_json'),
+    deltaRule('thinking_delta', 'thinking'),
+    {
+      match: [...IO_MESSAGE, [['message', 'message', 'type'], 'system'], [['message', 'message', 'subtype'], 'thinking_tokens']],
+      key: STREAM_KEY,
+      sum: [['message', 'message', 'estimated_tokens_delta']],
+    },
+  ],
+  intervalMs: 50,
 };
 
 /** The session list view and the plan preview panel (anthropic.claude-code 2.1.282). */
@@ -1016,6 +1064,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
           meters: USAGE_METERS,
           usageBars: USAGE_BARS,
           conversationEscapes: CONVERSATION_ESCAPES,
+          streamMerge: STREAM_MERGE,
         };
       case SESSION_LIST_VIEW_TYPE:
         return {
