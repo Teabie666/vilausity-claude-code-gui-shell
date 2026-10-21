@@ -128,13 +128,16 @@ export class QuickAccess {
   }
 
   private open(initialValue: string): void {
-    const { box, finish } = this.dialogs.openOverlay<void>(() => {
-      this.setValue = undefined;
-      cancelDeferredAccept();
-      tokenSource?.cancel();
-      tokenSource?.dispose();
-    }, undefined);
-    box.classList.add('quick-input');
+    const { box, finish } = this.dialogs.openOverlay<void>(
+      () => {
+        this.setValue = undefined;
+        cancelDeferredAccept();
+        tokenSource?.cancel();
+        tokenSource?.dispose();
+      },
+      undefined,
+      { quickInput: true },
+    );
     const input = document.createElement('input');
     input.className = 'quick-input-filter';
     input.setAttribute('aria-label', t('quickAccess'));

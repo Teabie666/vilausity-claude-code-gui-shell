@@ -33,6 +33,11 @@ export const contentPaneModule: ShellModule = {
     const pane = new ContentPane(layout, services.get(IEditors), logger, {
       // Webviews in a tab's own window post their messages to that window.
       watchWindow: (target) => frames.watchWindow(target),
+      // Saving is the editor module's command; its key as the user has it now.
+      unsavedTooltip: () => {
+        const key = keybindings.labelFor('editor.save');
+        return key ? t('unsavedSaveWith', key) : t('unsaved');
+      },
     });
     subscriptions.add(services.register(IContentPane, pane));
     subscriptions.add(services.get(IEditors).register(createWebviewEditorProvider(frames, connection)));

@@ -4,7 +4,8 @@
  *
  * An administrator instance (elevated) runs next to the normal one, so what one process
  * owns is its own: state, logs, the Chromium profile and the extension's storage go under
- * `<root>\admin`. Settings, API providers and the installed extensions are shared.
+ * `<root>\admin`. Settings, API providers, the installed extensions and the recently opened
+ * folders are shared.
  */
 
 import * as fs from 'node:fs';
@@ -19,8 +20,10 @@ export interface AppPaths {
   /** The user's keybindings, next to settings.json (shared by both instances, as that is). */
   readonly keybindingsFile: string;
   readonly globalStateFile: string;
-  /** What main itself remembers (windows, recent folders), apart from the extension's state. */
+  /** What main itself remembers (windows, zoom), apart from the extension's state. */
   readonly shellStateFile: string;
+  /** The recently opened folders, the normal and the administrator instance's both (recentFolders.ts). */
+  readonly recentFoldersFile: string;
   /** The API providers; their keys are stored encrypted. */
   readonly providersFile: string;
   /** Which provider each Claude Code session ran under (sessionProviders.ts). */
@@ -65,6 +68,7 @@ export function createAppPaths(root: string, startedAt = new Date(), elevated = 
     keybindingsFile: path.join(root, 'keybindings.json'),
     globalStateFile: path.join(instanceRoot, 'state', 'global.json'),
     shellStateFile: path.join(instanceRoot, 'state', 'shell.json'),
+    recentFoldersFile: path.join(root, 'state', 'recent-folders.json'),
     providersFile: path.join(root, 'providers.json'),
     sessionProvidersFile: path.join(root, 'session-providers.jsonl'),
     usageLedgerFile: path.join(root, 'usage-ledger.jsonl'),

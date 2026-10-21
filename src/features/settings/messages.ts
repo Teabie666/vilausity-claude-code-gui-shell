@@ -55,6 +55,9 @@ export const settingTitleName = defineNames('settingTitles', {
   'markdown.preview.fontSize': 'Markdown › Preview: Font Size',
   'markdown.preview.lineHeight': 'Markdown › Preview: Line Height',
 
+  'terminal.external.windowsExec': 'Terminal › External: Windows Exec',
+  'files.autoSave': 'Files: Auto Save',
+  'files.autoSaveDelay': 'Files: Auto Save Delay',
   'editor.fontFamily': 'Editor: Font Family',
   'editor.fontSize': 'Editor: Font Size',
   'editor.fontWeight': 'Editor: Font Weight',

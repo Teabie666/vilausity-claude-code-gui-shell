@@ -1,8 +1,14 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { parseCliArgs, parseGoto, userArguments } from '../../../src/host/main/cli';
+import { SharedRecentFolders } from '../../../src/host/main/recentFolders';
+import type { ILogger } from '../../../src/platform/log';
 import { CASCADE_OFFSET, cascade, foldersToOpen, parsePlacement, sameFolder, WindowHistory } from '../../../src/host/main/windowHistory';
+
+const silentLogger = { error() {}, warn() {}, info() {}, debug() {}, trace() {}, child: () => silentLogger } as unknown as ILogger;
 
 function memoryStore(): { get(key: string): unknown; set(key: string, value: unknown): void; data: Map<string, unknown> } {
   const data = new Map<string, unknown>();
@@ -151,6 +157,45 @@ describe('WindowHistory', () => {
     assert.deepEqual(history.recentFolders(), ['c:\\A', 'C:\\b']);
     history.removeRecent('C:\\a');
     assert.deepEqual(history.recentFolders(), ['C:\\b']);
+  });
+
+  test("recent folders shared with the other instance: read again each time; an instance's own list moves in once", () => {
+    let file = ['C:\\shared'];
+    const shared = {
+      read: () => [...file],
+      write: (folders: readonly string[]) => {
+        file = [...folders];
+      },
+    };
+    const store = memoryStore();
+    store.set('recentFolders', ['C:\\own', 'c:\\SHARED']);
+    const history = new WindowHistory(store, shared);
+    history.shareRecent();
+    assert.deepEqual(history.recentFolders(), ['C:\\shared', 'C:\\own']);
+    assert.equal(store.get('recentFolders'), undefined);
+    // The other process added one meanwhile.
+    file = ['C:\\other', ...file];
+    history.addRecent('C:\\new');
+    assert.deepEqual(file, ['C:\\new', 'C:\\other', 'C:\\shared', 'C:\\own']);
+    history.removeRecent('c:\\other');
+    assert.deepEqual(file, ['C:\\new', 'C:\\shared', 'C:\\own']);
+    history.shareRecent();
+    assert.deepEqual(file, ['C:\\new', 'C:\\shared', 'C:\\own'], 'nothing more to move');
+  });
+
+  test('the shared recent folders file: written and read back, values of the wrong shape dropped', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'vilaus-recent-'));
+    try {
+      const file = path.join(dir, 'state', 'recent-folders.json');
+      const recent = new SharedRecentFolders(file, silentLogger);
+      assert.deepEqual(recent.read(), [], 'no file yet');
+      recent.write(['C:\\a', 'C:\\b']);
+      assert.deepEqual(new SharedRecentFolders(file, silentLogger).read(), ['C:\\a', 'C:\\b']);
+      writeFileSync(file, JSON.stringify(['C:\\a', 3, '', null]));
+      assert.deepEqual(recent.read(), ['C:\\a']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('the restore-all mark applies to one start', () => {

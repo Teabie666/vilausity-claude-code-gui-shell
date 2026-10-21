@@ -24,6 +24,12 @@ export const t = defineMessages('editor', {
   // Settings (descriptions as in VS Code).
   sectionTextEditor: 'Text Editor',
   sectionDiffEditor: 'Diff Editor',
+  autoSave: 'Controls auto save of editors that have unsaved changes.',
+  autoSaveOff: 'An editor with changes is never saved by itself.',
+  autoSaveAfterDelay: 'An editor with changes is saved after Auto Save Delay.',
+  autoSaveOnFocusChange: 'An editor with changes is saved when it loses focus.',
+  autoSaveOnWindowChange: 'An editor with changes is saved when the window loses focus.',
+  autoSaveDelay: 'Milliseconds after which an editor with changes is saved, when Auto Save is afterDelay.',
   fontFamily: 'Controls the font family.',
   fontSize: 'Controls the font size in pixels.',
   fontWeight: 'Controls the font weight.',

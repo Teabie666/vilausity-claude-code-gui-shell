@@ -95,6 +95,9 @@ export function monacoLanguageFor(languageId: string): string {
 
 export class TextModels {
   private readonly entries = new Map<string, Entry>();
+  private readonly contentEmitter = new Emitter<ModelEntry>();
+  /** A document's text changed (an edit in an editor, or one from the extension host), dirty state updated. */
+  readonly onDidChangeContent: Event<ModelEntry> = this.contentEmitter.event;
 
   constructor(
     private readonly monaco: MonacoApi,
@@ -133,6 +136,7 @@ export class TextModels {
           isRedoing: event.isRedoing,
         });
         this.updateDirty(created);
+        this.contentEmitter.fire(created);
       });
       entry = created;
       this.entries.set(snapshot.uri, entry);
@@ -153,6 +157,11 @@ export class TextModels {
 
   get(uri: string): ModelEntry | undefined {
     return this.entries.get(uri);
+  }
+
+  /** The documents with unsaved changes. */
+  get dirty(): readonly ModelEntry[] {
+    return [...this.entries.values()].filter((entry) => entry.isDirty);
   }
 
   /** Saves through the extension host. Resolves to false when it could not be saved. */

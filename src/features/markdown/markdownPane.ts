@@ -163,6 +163,11 @@ export class MarkdownPane implements EditorPane {
     return this.mode === 'source';
   }
 
+  /** The preview shows the same document: saving from it saves the source. */
+  get documentUri(): string {
+    return this.source.uri;
+  }
+
   setMode(mode: Mode): void {
     if (mode === this.mode) {
       return;

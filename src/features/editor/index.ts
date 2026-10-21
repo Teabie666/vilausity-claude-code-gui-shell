@@ -24,12 +24,14 @@ import {
 import { createServiceId } from '../../core/services';
 import type { ThemeService } from '../../core/themes';
 import type { Dialogs } from '../../core/dialogs';
+import { Emitter, type Event } from '../../platform/event';
 import { DisposableStore } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
 import { getUiLanguage } from '../../platform/nls';
 import { SAVED_FILE_SCHEME, type ShowDiffEditorParams, type ShowTextEditorParams } from '../../platform/protocol';
 import { URI } from 'vscode-uri';
 import { IContentPane } from '../contentPane';
+import { AutoSave, autoSaveMode, DEFAULT_AUTO_SAVE_DELAY_MS } from './autoSave';
 import type { ContentPane } from '../contentPane/contentPane';
 import { DiffEditorPane, type DiffInputData } from './diffEditorPane';
 import { Highlighting } from './highlighting';
@@ -38,7 +40,7 @@ import { loadMonaco, type JsonLanguage, type MonacoApi } from './monaco';
 import { SelectionMenu } from './selectionMenu';
 import { TextEditorPane, editorFontOptions, type TextInputData } from './textEditorPane';
 import { basename, shortDiffTitle } from './titles';
-import { TextModels, type TextModel } from './textModels';
+import { TextModels, type ModelEntry, type TextModel } from './textModels';
 import {
   diffEditorOptions,
   editorOptions,
@@ -88,6 +90,9 @@ export class TextEditorService {
   /** Text editor panes by the editor id the extension host assigned. */
   private readonly panes = new Map<string, TextEditorPane>();
   private readonly diffPanes = new Set<DiffEditorPane>();
+  private readonly documentEmitter = new Emitter<ModelEntry>();
+  /** A document's text changed: an edit in an editor, or one from the extension host. */
+  readonly onDidChangeDocument: Event<ModelEntry> = this.documentEmitter.event;
 
   constructor(
     private readonly connection: ExtensionHostConnection,
@@ -243,6 +248,7 @@ export class TextEditorService {
       const models = new TextModels(monaco, highlighting, this.connection, this.logger.child('models'), (model) =>
         this.applyIndentation(model),
       );
+      models.onDidChangeContent((entry) => this.documentEmitter.fire(entry));
       this.monaco = monaco;
       this.models = models;
       this.logger.info(`editor loaded in ${Math.round(performance.now() - started)} ms`);
@@ -276,9 +282,18 @@ export class TextEditorService {
     return pane instanceof DiffEditorPane ? pane : undefined;
   }
 
-  /** The document Ctrl+S saves: the active text editor's, or the right side of the active diff. */
+  /**
+   * The document the active tab edits, also one embedded in another view (a Markdown
+   * preview's source, a settings file beside its defaults); not a diff's. Revert and
+   * Compare with Saved act on it.
+   */
+  get activeTextDocument(): string | undefined {
+    return this.contentPane.current?.pane.documentUri;
+  }
+
+  /** The document Ctrl+S saves: the active tab's, or the right side of the active diff. */
   get activeDocument(): string | undefined {
-    return this.activePane?.uri ?? this.activeDiff?.modifiedUri;
+    return this.activeTextDocument ?? this.activeDiff?.modifiedUri;
   }
 
   /** The extension host's `editor.showDiff` (the `vscode.diff` command). */
@@ -545,6 +560,59 @@ export const editorModule: ShellModule = {
     );
     subscriptions.add(themes.onDidChange(() => editors.applyTheme()));
 
+    const dialogs = services.get(IDialogs);
+    const reportSaveFailure = (uri: string): Promise<unknown> =>
+      dialogs.showMessage({
+        severity: 'error',
+        message: t('saveFailed', basename(decodeURIComponent(uri))),
+        modal: false,
+        items: [],
+      });
+    const autoSave = subscriptions.add(
+      new AutoSave(
+        {
+          mode: () => autoSaveMode(settings.get('files.autoSave', 'off')),
+          delay: () => {
+            const delay = settings.get('files.autoSaveDelay', DEFAULT_AUTO_SAVE_DELAY_MS);
+            return typeof delay === 'number' && delay >= 0 ? delay : DEFAULT_AUTO_SAVE_DELAY_MS;
+          },
+          dirty: () => editors.modelService?.dirty ?? [],
+          save: (uri) => editors.modelService?.save(uri) ?? Promise.resolve(false),
+          reportFailure: (uri) => void reportSaveFailure(uri),
+        },
+        logger.child('autoSave'),
+      ),
+    );
+    subscriptions.add(editors.onDidChangeDocument((entry) => autoSave.didChangeContent(entry)));
+    subscriptions.add(
+      settings.onDidChange((keys) => {
+        if (keys.includes('files.autoSave') || keys.includes('files.autoSaveDelay')) {
+          autoSave.didChangeMode();
+        }
+      }),
+    );
+    // The document of the tab with focus: when focus leaves it (another tab, the conversation), it saves.
+    let focusedDocument: string | undefined;
+    const trackEditorFocus = (): void => {
+      const current = contentPane.hasFocus ? contentPane.current?.pane.documentUri : undefined;
+      if (focusedDocument !== current) {
+        autoSave.didBlurEditor(focusedDocument);
+      }
+      focusedDocument = current;
+    };
+    subscriptions.add(contentPane.onDidChangeFocus(trackEditorFocus));
+    subscriptions.add(contentPane.onDidChangeActive(trackEditorFocus));
+    // Focus moving into a webview blurs the window too; the document keeps it then.
+    const onWindowBlur = (): void => {
+      setTimeout(() => {
+        if (!document.hasFocus()) {
+          autoSave.didBlurWindow();
+        }
+      });
+    };
+    window.addEventListener('blur', onWindowBlur);
+    subscriptions.add({ dispose: () => window.removeEventListener('blur', onWindowBlur) });
+
     const report = trackVisibleEditors(connection, contentPane, layout);
     // A pane can change its editors without changing tabs (Markdown preview <-> source).
     const paneEditors = subscriptions.add(new DisposableStore());
@@ -587,17 +655,12 @@ export const editorModule: ShellModule = {
         async () => {
           const uri = editors.activeDocument;
           if (uri && !(await editors.modelService?.save(uri))) {
-            await services.get(IDialogs).showMessage({
-              severity: 'error',
-              message: t('saveFailed', basename(decodeURIComponent(uri))),
-              modal: false,
-              items: [],
-            });
+            await reportSaveFailure(uri);
           }
         },
         { title: t('saveCommand'), category: CommandCategory.file, when: 'activeEditorIsText' },
       ),
-      commands.register('editor.revert', () => editors.activePane && editors.modelService?.revert(editors.activePane.uri), {
+      commands.register('editor.revert', () => editors.activeTextDocument && editors.modelService?.revert(editors.activeTextDocument), {
         title: t('revertCommand'),
         category: CommandCategory.file,
         when: 'activeEditorIsText && !activeEditorIsDiff',
@@ -614,7 +677,7 @@ export const editorModule: ShellModule = {
       commands.register(
         'editor.compareWithSaved',
         async () => {
-          const uri = editors.activePane?.uri;
+          const uri = editors.activeTextDocument;
           if (!uri?.startsWith('file:')) {
             return;
           }

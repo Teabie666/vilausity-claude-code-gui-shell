@@ -78,6 +78,12 @@ export interface EditorPane extends IDisposable {
   relocate?(container: HTMLElement): void;
   /** Ids of the text editors this pane shows, the input-taking one first (for `visibleTextEditors`). */
   readonly textEditorIds?: readonly string[];
+  /**
+   * The document this tab edits (`vscode.Uri.toString()`), when it has one: a text editor's,
+   * or one embedded in the pane (a Markdown preview's source, a settings file beside its
+   * defaults). Save, Revert and Compare with Saved act on it, whichever view shows.
+   */
+  readonly documentUri?: string;
   readonly onDidChangeTextEditors?: Event<void>;
   /**
    * The text selected in this pane now, for `editor/selection` commands run from a

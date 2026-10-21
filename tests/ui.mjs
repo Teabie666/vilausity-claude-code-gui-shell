@@ -234,8 +234,9 @@ await step('command palette switches the color theme for shell and webviews', as
 
 await step('the search box finds conversations by title, words and files; > lists commands', async () => {
   const label = await page.locator('.search-box').innerText();
-  if (!label.startsWith('Workspace: ') || (await page.locator('.search-box button').count()) !== 1) {
-    throw new Error(`the search box: "${label}", ${await page.locator('.search-box button').count()} button(s)`);
+  const actions = await page.locator('.search-box .search-box-action').evaluateAll((buttons) => buttons.map((b) => b.ariaLabel));
+  if (!label.startsWith('Workspace: ') || actions.join() !== 'Reveal Folder in File Explorer,Open Terminal in Workspace') {
+    throw new Error(`the search box: "${label}", buttons ${actions.join(', ')}`);
   }
   await page.locator('.search-box-open').click();
   const filter = page.locator('.quick-input-filter');
@@ -274,6 +275,108 @@ await step('the search box finds conversations by title, words and files; > list
   );
   await filter.press('Escape');
   await waitFor(async () => (await page.locator('.quick-input-filter').count()) === 0, 3000, 'the picker to close');
+});
+
+/** The main window's bounds; `bounds` given, it moves there first. */
+const mainWindowBounds = (bounds) =>
+  app.evaluate(
+    ({ BrowserWindow }, { title, bounds }) => {
+      const window = BrowserWindow.getAllWindows().find(
+        (w) => w.webContents.getURL().startsWith('ccw://app/') && (w.getTitle() === title || w.getTitle().endsWith(` - ${title}`)),
+      );
+      if (bounds) window.setBounds(bounds);
+      return window.getBounds();
+    },
+    { title: windowTitle(workspace), bounds },
+  );
+
+await step(
+  'the search box sits mid-window; its picker covers it, also narrow with a long provider name, clear of the window buttons',
+  async () => {
+    const rects = () =>
+      page.evaluate(() =>
+        Object.fromEntries(
+          [
+            ['left', '.titlebar-main > .titlebar-left'],
+            ['right', '.titlebar-main > .titlebar-right'],
+            ['box', '.search-box'],
+            ['controls', '.titlebar-main .titlebar-controls-space'],
+          ].map(([name, selector]) => [name, document.querySelector(selector).getBoundingClientRect().toJSON()]),
+        ),
+      );
+    const covered = async (what) => {
+      await page.locator('.search-box-open').click();
+      const picker = await page.locator('.overlay-box.quick-input').evaluate((element) => element.getBoundingClientRect().toJSON());
+      const { box, controls } = await rects();
+      await page.locator('.quick-input-filter').press('Escape');
+      await waitFor(async () => (await page.locator('.quick-input-filter').count()) === 0, 3000, 'the picker to close');
+      if (picker.left > box.left + 1 || picker.right < box.right - 1 || picker.right > controls.left) {
+        throw new Error(
+          `${what}: the picker spans ${picker.left}-${picker.right}, the box ${box.left}-${box.right}, the window buttons start at ${controls.left}`,
+        );
+      }
+      return `${what}: box ${Math.round(box.left)}-${Math.round(box.right)}, picker ${Math.round(picker.left)}-${Math.round(picker.right)}`;
+    };
+    const original = await mainWindowBounds();
+    const providerLabel = page.locator('.titlebar-provider-label');
+    const providerName = await providerLabel.innerText();
+    try {
+      // Wide enough for the box to be as wide as the picker: off by a pixel, it would show beside it.
+      await mainWindowBounds({ ...original, width: 1700 });
+      await waitFor(async () => (await rects()).box.width >= 599, 5000, 'the box at its widest');
+      const { left, right } = await rects();
+      if (Math.abs(left.width - right.width) > 1) throw new Error(`the title bar's sides are ${left.width} and ${right.width} px wide`);
+      const wide = await covered('wide');
+      // Narrow, with a crowded left side: the box is off the middle, and the picker goes with it.
+      await providerLabel.evaluate((element) => (element.textContent = 'A provider with a long name'));
+      await mainWindowBounds({ ...original, width: 700 });
+      await waitFor(async () => (await rects()).box.width < 400, 5000, 'the narrow box');
+      const narrow = await covered('narrow');
+      return `${wide}; ${narrow}`;
+    } finally {
+      await providerLabel.evaluate((element, name) => (element.textContent = name), providerName);
+      await mainWindowBounds(original);
+    }
+  },
+);
+
+await step('the terminal button opens terminal.external.windowsExec in the workspace folder', async () => {
+  // A script for a terminal: Windows runs it without a window, and it writes where it ran.
+  const script = path.join(runDir, 'fake-terminal.vbs');
+  const written = `${script}.cwd`;
+  writeFileSync(
+    script,
+    [
+      'Set fso = CreateObject("Scripting.FileSystemObject")',
+      'Set f = fso.CreateTextFile(WScript.ScriptFullName & ".cwd", True)',
+      'f.WriteLine CreateObject("WScript.Shell").CurrentDirectory',
+      'f.Close',
+    ].join('\r\n'),
+  );
+  const before = readFileSync(settingsFile, 'utf8');
+  writeFileSync(settingsFile, JSON.stringify({ ...JSON.parse(before), 'terminal.external.windowsExec': script }, null, 2), 'utf8');
+  try {
+    // Main has the setting before the click; otherwise the real terminal would open.
+    await waitFor(
+      async () =>
+        (await page.evaluate(() => window.vilausNative.invoke('settings.read'))).values['terminal.external.windowsExec'] === script,
+      5000,
+      'main to read the setting',
+    );
+    await page.locator('.search-box-action[aria-label="Open Terminal in Workspace"]').click();
+    await waitFor(() => existsSync(written), 10_000, 'the program to run');
+    const cwd = readFileSync(written, 'utf8').trim();
+    if (cwd.toLowerCase() !== workspace.toLowerCase()) throw new Error(`it ran in ${cwd}`);
+    // With nothing typed, the search lists both under Folders.
+    await press('Control+P');
+    for (const name of ['Reveal Folder in File Explorer', 'Open Terminal in Workspace']) {
+      await page.locator('.quick-input-item', { hasText: name }).waitFor({ timeout: 5000 });
+    }
+    await page.locator('.quick-input-filter').press('Escape');
+    return cwd;
+  } finally {
+    writeFileSync(settingsFile, before, 'utf8');
+  }
 });
 
 await step('Ctrl+F finds text in the active conversation', async () => {
@@ -570,6 +673,96 @@ await step('a Markdown file opens as a preview, with highlighted code and a loca
   await page.locator('#content-pane .markdown-preview').click();
   await press('Control+W');
   await waitFor(async () => (await contentTabs().count()) === 1, 5000, 'the Markdown tab to close');
+});
+
+/** Runs a command from the palette by its title (the only match). */
+async function runCommand(title) {
+  await press('Control+Shift+P');
+  await page.locator('.quick-input-filter').fill(`>${title}`);
+  await waitFor(async () => (await page.locator('.quick-input-item').count()) === 1, 5000, `the command ${title}`);
+  await page.locator('.quick-input-filter').press('Enter');
+}
+
+await step(
+  'a Markdown file saves with Ctrl+S from its source and its preview; the dot says how to save; Revert and Compare act on it',
+  async () => {
+    const notes = path.join(workspace, 'notes.md');
+    const dirtyTabs = () => page.locator('#content-pane .content-tab.dirty').count();
+    const toggle = (label) => page.locator('#content-pane .editor-toolbar .button', { hasText: label }).click();
+    await press('Control+P');
+    await page.locator('.quick-input-filter').fill('notes.md');
+    await waitFor(async () => (await page.locator('.quick-input-item').count()) > 0, 10_000, 'notes.md in the list');
+    await page.locator('.quick-input-filter').press('Enter');
+    await page.locator('#content-pane .markdown-preview:not([hidden]) h1').waitFor({ timeout: 10_000 });
+
+    // In the source view.
+    await toggle('Open Source');
+    await page.locator('#content-pane .content-editor:not([hidden]) .monaco-editor .view-lines').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('\nSaved from the source.');
+    await waitFor(async () => (await dirtyTabs()) === 1, 5000, 'the dirty marker');
+    // The dot (the close button of a dirty tab) says how to save, with the key as it is bound now.
+    await page.locator('#content-pane .content-tab.dirty .tab-close').hover();
+    const tooltip = await page.locator('#content-pane .content-tab.dirty .tab-close').getAttribute('title');
+    if (tooltip !== 'Unsaved (Ctrl+S to save)') throw new Error(`the dot's tooltip: ${tooltip}`);
+    await page.locator('#content-pane .content-editor:not([hidden]) .monaco-editor .view-lines').click();
+    await press('Control+S');
+    await waitFor(() => readFileSync(notes, 'utf8').includes('Saved from the source.'), 5000, 'the source view to save');
+    await waitFor(async () => (await dirtyTabs()) === 0, 5000, 'the tab clean');
+
+    // An edit, then the preview: Ctrl+S there saves the same document.
+    await page.keyboard.type('\n\nSaved from the preview.');
+    await toggle('Open Preview');
+    await page.locator('#content-pane .markdown-preview').click();
+    await press('Control+S');
+    await waitFor(() => readFileSync(notes, 'utf8').includes('Saved from the preview.'), 5000, 'the preview to save');
+    await waitFor(async () => (await dirtyTabs()) === 0, 5000, 'the tab clean');
+
+    // Revert File from the preview drops what was not saved.
+    await toggle('Open Source');
+    await page.locator('#content-pane .content-editor:not([hidden]) .monaco-editor .view-lines').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('\nNot kept.');
+    await toggle('Open Preview');
+    await page.locator('#content-pane .markdown-preview').click();
+    await runCommand('Revert File');
+    await waitFor(async () => (await dirtyTabs()) === 0, 5000, 'the revert');
+    if (readFileSync(notes, 'utf8').includes('Not kept.')) throw new Error('the reverted text reached the disk');
+
+    // Compare with Saved, from the preview too.
+    await toggle('Open Source');
+    await page.locator('#content-pane .content-editor:not([hidden]) .monaco-editor .view-lines').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('\nCompared.');
+    await toggle('Open Preview');
+    await page.locator('#content-pane .markdown-preview').click();
+    await runCommand('Compare Active File with Saved');
+    await waitFor(async () => (await contentTabs().count()) === 3, 10_000, 'a diff tab');
+    await page.locator('#content-pane .content-editor:not([hidden]) .monaco-diff-editor').waitFor({ timeout: 10_000 });
+    await press('Control+W');
+    await waitFor(async () => (await contentTabs().count()) === 2, 5000, 'the diff tab to close');
+    await page.locator('#content-pane .markdown-preview').click();
+    await runCommand('Revert File');
+    await waitFor(async () => (await dirtyTabs()) === 0, 5000, 'the revert');
+    await page.locator('#content-pane .markdown-preview').click();
+    await press('Control+W');
+    await waitFor(async () => (await contentTabs().count()) === 1, 5000, 'the Markdown tab to close');
+  },
+);
+
+await step('Files: Auto Save set to afterDelay saves an edited file by itself', async () => {
+  const settingsBefore = readFileSync(settingsFile, 'utf8');
+  const sampleBefore = readFileSync(sampleFile, 'utf8');
+  const autoSaving = { ...JSON.parse(settingsBefore), 'files.autoSave': 'afterDelay', 'files.autoSaveDelay': 300 };
+  writeFileSync(settingsFile, JSON.stringify(autoSaving, null, 2), 'utf8');
+  await page.locator('#content-pane .content-editor:not([hidden]) .monaco-editor .view-lines').click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type('// saved by itself');
+  await waitFor(() => readFileSync(sampleFile, 'utf8').includes('// saved by itself'), 5000, 'the file saved without Ctrl+S');
+  await waitFor(async () => (await page.locator('#content-pane .content-tab.dirty').count()) === 0, 5000, 'the tab clean');
+  writeFileSync(settingsFile, settingsBefore, 'utf8');
+  writeFileSync(sampleFile, sampleBefore, 'utf8');
+  await waitFor(async () => !(await editorText()).includes('saved by itself'), 10_000, 'the file as it was');
 });
 
 // ---- M3: comments on selected text --------------------------------------------------------
@@ -936,6 +1129,15 @@ await step('settings.json opens in the editor beside the default settings, valid
   await waitFor(() => shown('.defaults-split-side').isVisible(), 5000, 'the defaults to show again');
   await waitFor(async () => (await paneWidth()) === wide, 5000, 'the pane wide again');
   await page.screenshot({ path: path.join(runDir, 'settings-json.png') });
+  // Ctrl+S saves the file on the right, also with the focus in the defaults on the left.
+  await shown('.defaults-split-main .monaco-editor .view-lines').click({ position: { x: 30, y: 8 } });
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type('\n// saved with Ctrl+S');
+  await waitFor(async () => (await page.locator('#content-pane .content-tab.dirty').count()) === 1, 5000, 'the dirty marker');
+  await shown('.defaults-split-side .monaco-editor .view-lines').click({ position: { x: 30, y: 8 } });
+  await press('Control+S');
+  await waitFor(() => readFileSync(settingsFile, 'utf8').includes('// saved with Ctrl+S'), 5000, 'settings.json saved');
+  await waitFor(async () => (await page.locator('#content-pane .content-tab.dirty').count()) === 0, 5000, 'the tab clean');
   writeFileSync(settingsFile, original, 'utf8');
   await waitFor(async () => !(await editorText()).includes('"wide"'), 10_000, 'the file back as it was');
   // Close settings.json and sample.ts.
@@ -1089,6 +1291,24 @@ await step(
     await waitFor(() => page.locator('#sidebar').isHidden(), 5000, 'Ctrl+B to toggle again');
     await press('Control+B');
     await waitFor(() => page.locator('#sidebar').isVisible(), 5000, 'the session list back');
+
+    // keybindings.json beside the default keybindings: Ctrl+S saves it.
+    await runCommand('Open Keyboard Shortcuts (JSON)');
+    await waitFor(
+      async () => (await page.locator('#content-pane .content-tab.active .tab-label').innerText()) === 'keybindings.json',
+      10_000,
+      'the keybindings.json tab',
+    );
+    await page
+      .locator('#content-pane .content-editor:not([hidden]) .defaults-split-main .monaco-editor .view-lines')
+      .click({ position: { x: 30, y: 8 } });
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('\n// saved with Ctrl+S');
+    await press('Control+S');
+    await waitFor(() => written().includes('// saved with Ctrl+S'), 5000, 'keybindings.json saved');
+    await press('Control+W');
+    await waitFor(async () => (await contentTabs().count()) === 0, 5000, 'the keybindings.json tab to close');
+    writeFileSync(keybindingsFile, '[]\n');
   },
 );
 
@@ -2664,6 +2884,15 @@ await step('administrator instance: runs next to the normal one, says so, and re
     // safeStorage there decrypts what the normal instance encrypted: one key for both.
     const key = await admin.evaluate(({ safeStorage }, data) => safeStorage.decryptString(Buffer.from(data, 'base64')), stored);
     if (key !== 'test-key-123') throw new Error(`decrypted "${key}"`);
+    // The folder opened as administrator is among the normal instance's recent folders too.
+    await waitFor(
+      async () => {
+        const recent = await page.evaluate(() => window.vilausNative.invoke('window.recentFolders'));
+        return recent.some((folder) => folder.toLowerCase() === adminWorkspace.toLowerCase());
+      },
+      10_000,
+      "the administrator's folder in the normal instance's recent folders",
+    );
     // The normal instance is still there.
     await page.title();
   } finally {

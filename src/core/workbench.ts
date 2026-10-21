@@ -86,7 +86,7 @@ export async function startWorkbench(modules: readonly ShellModule[]): Promise<v
   const frames = new WebviewFrames(connection, logger.child('webviews'));
   const themes = new ThemeService(newerTheme ?? init.theme, frames, native);
   earlyThemes.dispose();
-  const dialogs = new Dialogs(layout.overlays);
+  const dialogs = new Dialogs(layout.overlays, (width) => layout.quickInputLeft(width));
   const folder = init.workspaceFolders[0] ?? '';
 
   services.register(INative, native);

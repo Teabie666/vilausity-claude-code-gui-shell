@@ -77,7 +77,7 @@ describe('ConfigurationService', () => {
     const exclude = service.getConfiguration('files').get<Record<string, boolean>>('exclude')!;
     assert.equal(exclude['**/dist'], true);
     assert.equal(exclude['**/.git'], true, 'core default kept');
-    assert.equal(service.getConfiguration().get('files.autoSave'), 'afterDelay');
+    assert.equal(service.getConfiguration().get('files.autoSave'), 'off');
   });
 
   test('has and inspect report user and default values; inspect returns copies', () => {

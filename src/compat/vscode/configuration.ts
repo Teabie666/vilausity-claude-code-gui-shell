@@ -13,8 +13,9 @@ import type { SettingsBackend } from './host';
 
 /** Core VS Code settings the extension reads, with VS Code's defaults (or vilaus's choice). */
 const CORE_DEFAULTS: Readonly<Record<string, unknown>> = {
-  // Not "off": the extension then needs an explicit accept/reject on diffs (matches VSCodium usage).
-  'files.autoSave': 'afterDelay',
+  // VS Code's default, and the shell's (features/editor/autoSave.ts declares it). Off, the
+  // extension takes saving the right side of a proposed change as accepting it.
+  'files.autoSave': 'off',
   'files.exclude': {
     '**/.git': true,
     '**/.svn': true,

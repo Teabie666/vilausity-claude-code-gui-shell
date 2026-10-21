@@ -77,9 +77,11 @@ import { LogoIcons, systemIconColor } from './logoIcons';
 import { SettingsStore } from './settingsStore';
 import { isExternalUrl, nextZoomLevel } from './shellWindow';
 import { StateStore } from './stateStore';
+import { EXTERNAL_TERMINAL_SETTING, findWindowsTerminal, openTerminal, terminalLaunch } from './terminal';
 import { DEFAULT_THEME_ID, FONT_SETTING_KEYS, listThemeSummaries, loadTheme, readFontFaces, withFontVariables } from './themes';
 import { WebviewDocumentStore } from './webviewDocuments';
 import { WindowContext, type WindowHost } from './windowContext';
+import { SharedRecentFolders } from './recentFolders';
 import { cascade, foldersToOpen, parsePlacement, sameFolder, WindowHistory, type WindowPlacement } from './windowHistory';
 
 /** The VS Code version we report to the extension. It gates features on this number. */
@@ -182,7 +184,11 @@ export class ShellApp extends Disposable implements WindowHost {
     this.logger.info(`display language: ${this.language}`);
     this.globalState = new StateStore(env.paths.globalStateFile, this.logger.child('state'));
     this.shellState = new StateStore(env.paths.shellStateFile, this.logger.child('state'));
-    this.history = new WindowHistory(this.shellState);
+    this.history = new WindowHistory(
+      this.shellState,
+      new SharedRecentFolders(env.paths.recentFoldersFile, this.logger.child('recentFolders')),
+    );
+    this.history.shareRecent();
     const legacy = this.globalState.get(LEGACY_WINDOW_STATE_KEY) as { zoomLevel?: unknown } | undefined;
     this.legacyPlacement = parsePlacement(legacy);
     if (legacy !== undefined) {
@@ -905,6 +911,17 @@ export class ShellApp extends Disposable implements WindowHost {
         const error = await shell.openPath(folder);
         if (error) {
           this.logger.warn(`cannot open ${folder} in the file manager: ${error}`);
+        }
+      },
+      'os.openTerminal': async ({ folder }) => {
+        const comspec = process.env.ComSpec ?? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe');
+        const launch = terminalLaunch(this.settings.all[EXTERNAL_TERMINAL_SETTING], findWindowsTerminal(), comspec);
+        try {
+          await openTerminal(folder, launch);
+          return true;
+        } catch (error) {
+          this.logger.warn(`cannot open a terminal in ${folder}`, error);
+          return false;
         }
       },
       'settings.read': () => ({ values: { ...this.settings.all }, filePath: this.settings.filePath }),

@@ -171,6 +171,22 @@ export class Layout {
     this.setContentPaneVisible(!this.state.contentVisible);
   }
 
+  /**
+   * Where quick input (the search, commands, pickers) goes across the window: centered on
+   * the middle of the title bar (the search box) rather than on the window, since the
+   * title bar's sides are not always as wide as each other (a long provider name on the
+   * left); kept between the window's left edge and its buttons. The left of a box `width`
+   * wide, in window coordinates.
+   */
+  quickInputLeft(width: number): number {
+    const margin = 8;
+    const center = this.titleBarCenter.getBoundingClientRect();
+    const controls = document.querySelector('.titlebar-main .titlebar-controls-space')?.getBoundingClientRect();
+    const right = (controls && controls.width > 0 ? controls.left : window.innerWidth) - margin;
+    const wanted = center.width > 0 ? center.left + center.width / 2 - width / 2 : (window.innerWidth - width) / 2;
+    return Math.round(Math.max(margin, Math.min(wanted, right - width)));
+  }
+
   /** Adds an element to the title bar; lower `order` sits further left. */
   addTitleBarItem(side: TitleBarSide, item: HTMLElement, order = 0): IDisposable {
     const container = side === 'left' ? this.titleBarLeft : this.titleBarRight;

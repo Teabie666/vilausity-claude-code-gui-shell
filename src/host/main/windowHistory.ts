@@ -1,7 +1,8 @@
 /**
  * What main remembers about windows between runs (state/shell.json, apart from the
- * extension's global state): where each folder's window was, the recently opened folders,
- * which windows were open (to restore them), and the zoom level all windows share.
+ * extension's global state): where each folder's window was, which windows were open (to
+ * restore them), and the zoom level all windows share. The recently opened folders are
+ * the normal and the administrator instance's both (a file of their own, recentFolders.ts).
  * No Electron here, so it can be unit tested.
  */
 
@@ -30,6 +31,12 @@ export interface KeyValueStore {
   set(key: string, value: unknown): void;
 }
 
+/** The recently opened folders, most recent first; read again each time (another process may write them). */
+export interface RecentFoldersFile {
+  read(): string[];
+  write(folders: readonly string[]): void;
+}
+
 const PLACEMENTS_KEY = 'windowPlacements';
 const RECENT_KEY = 'recentFolders';
 const OPEN_KEY = 'openWindows';
@@ -46,8 +53,24 @@ export function sameFolder(a: string, b: string): boolean {
   return normalizeForCompare(a) === normalizeForCompare(b);
 }
 
+/** Recent folders kept in `store` with the rest, as before they were shared (tests). */
+function recentIn(store: KeyValueStore): RecentFoldersFile {
+  return {
+    read: () => stringList(store.get(RECENT_KEY)),
+    write: (folders) => store.set(RECENT_KEY, [...folders]),
+  };
+}
+
 export class WindowHistory {
-  constructor(private readonly store: KeyValueStore) {}
+  private readonly recent: RecentFoldersFile;
+
+  constructor(
+    private readonly store: KeyValueStore,
+    /** Where the recent folders are, when not in `store`. */
+    private readonly shared?: RecentFoldersFile,
+  ) {
+    this.recent = shared ?? recentIn(store);
+  }
 
   placement(folder: string): WindowPlacement | undefined {
     const saved = this.placements()[normalizeForCompare(folder)];
@@ -65,19 +88,31 @@ export class WindowHistory {
 
   /** Most recent first. */
   recentFolders(): string[] {
-    return stringList(this.store.get(RECENT_KEY));
+    return this.recent.read();
   }
 
   addRecent(folder: string): void {
     const rest = this.recentFolders().filter((candidate) => !sameFolder(candidate, folder));
-    this.store.set(RECENT_KEY, [folder, ...rest].slice(0, MAX_RECENT));
+    this.recent.write([folder, ...rest].slice(0, MAX_RECENT));
   }
 
   removeRecent(folder: string): void {
-    this.store.set(
-      RECENT_KEY,
-      this.recentFolders().filter((candidate) => !sameFolder(candidate, folder)),
-    );
+    this.recent.write(this.recentFolders().filter((candidate) => !sameFolder(candidate, folder)));
+  }
+
+  /**
+   * Moves the recent folders an older version kept in this instance's own state into the
+   * shared list, after the ones already there (each instance does it once).
+   */
+  shareRecent(): void {
+    const own = stringList(this.store.get(RECENT_KEY));
+    if (!this.shared || own.length === 0) {
+      return;
+    }
+    const shared = this.recentFolders();
+    const added = own.filter((folder) => !shared.some((candidate) => sameFolder(candidate, folder)));
+    this.recent.write([...shared, ...added].slice(0, MAX_RECENT));
+    this.store.set(RECENT_KEY, undefined);
   }
 
   /** The windows to open at the next start, the last one in front. */

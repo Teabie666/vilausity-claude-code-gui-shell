@@ -18,8 +18,16 @@ const MAX_FILES = 20_000;
 /** File rows shown at once. */
 const MAX_ROWS = 50;
 
+/** The box's buttons, right of the name: the workspace folder in File Explorer, a terminal there. */
+const BOX_ACTIONS = [
+  { command: 'workspace.revealFolder', icon: 'folder-opened' },
+  { command: 'workspace.openTerminal', icon: 'terminal' },
+] as const;
+
 export const quickOpenModule: ShellModule = {
   id: 'quickOpen',
+  // The box's buttons run the workspace module's commands, and take their titles.
+  dependsOn: ['workspace'],
   activate({ services, subscriptions, logger }) {
     const commands = services.get(ICommands);
     const keybindings = services.get(IKeybindings);
@@ -68,6 +76,19 @@ export const quickOpenModule: ShellModule = {
       ].join('\n');
     });
     box.append(openButton);
+    for (const { command, icon } of BOX_ACTIONS) {
+      const title = commands.info(command)?.title;
+      if (!title || !folder) {
+        continue;
+      }
+      const action = document.createElement('button');
+      action.className = 'icon-button search-box-action';
+      action.style.setProperty('--icon', `var(--icon-${icon})`);
+      action.setAttribute('aria-label', title);
+      keybindings.bindTooltip(action, title, command);
+      action.addEventListener('click', () => void commands.execute(command));
+      box.append(action);
+    }
     services.get(ILayout).titleBarCenter.appendChild(box);
     subscriptions.add({ dispose: () => box.remove() });
 

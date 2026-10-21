@@ -92,6 +92,10 @@ export class DefaultsSplitPane implements EditorPane {
     return this.text.textEditorIds;
   }
 
+  get documentUri(): string {
+    return this.text.uri;
+  }
+
   layout(): void {
     this.text.layout();
   }

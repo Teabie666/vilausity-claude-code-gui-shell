@@ -7,9 +7,9 @@
  * asked about first); the conversations come back when the old folder is opened again.
  */
 
-import { CommandCategory } from '../../core/messages';
+import { CommandCategory, SettingsSection } from '../../core/messages';
 import type { ShellModule } from '../../core/module';
-import { ICommands, IDialogs, IExtensionHost, IKeybindings, INative, IQuickAccess, IWorkspace } from '../../core/serviceIds';
+import { ICommands, IDialogs, IExtensionHost, IKeybindings, INative, IQuickAccess, ISettings, IWorkspace } from '../../core/serviceIds';
 import type { QuickAccessItem } from '../../core/quickAccess';
 import type { QuickPickItemDto } from '../../platform/protocol';
 import { IContentPane } from '../contentPane';
@@ -165,6 +165,29 @@ export const workspaceModule: ShellModule = {
         category: CommandCategory.file,
       }),
     );
+    // A terminal of its own in the workspace folder (host/main/terminal.ts says which).
+    const openTerminal = async (): Promise<void> => {
+      if (!(await native.call('os.openTerminal', { folder: current }))) {
+        void dialogs.showMessage({ severity: 'error', message: t('terminalFailed'), modal: false, items: [] });
+      }
+    };
+    subscriptions.add(
+      commands.register('workspace.openTerminal', openTerminal, {
+        title: t('openTerminal'),
+        category: CommandCategory.file,
+      }),
+    );
+    subscriptions.add(
+      services.get(ISettings).register([
+        {
+          key: 'terminal.external.windowsExec',
+          section: SettingsSection.workbench,
+          order: 30,
+          showDescription: true,
+          schema: { type: 'string', default: '', description: t('terminalSetting') },
+        },
+      ]),
+    );
     // Not offered in the administrator instance itself.
     const elevated = workspace.elevated;
     const openAsAdministrator = (): Promise<void> => native.call('window.openFolderAsAdministrator', { folder: current });
@@ -245,6 +268,20 @@ export const workspaceModule: ShellModule = {
             if (!elevated) {
               items.push({ label: t('openAsAdministrator'), icon: 'shield', accept: () => openAsAdministrator() });
             }
+            items.push(
+              {
+                label: t('revealFolder'),
+                icon: 'folder-opened',
+                keybinding: keybindings.labelFor('workspace.revealFolder'),
+                accept: () => native.call('os.openFolder', { path: current }),
+              },
+              {
+                label: t('openTerminal'),
+                icon: 'terminal',
+                keybinding: keybindings.labelFor('workspace.openTerminal'),
+                accept: openTerminal,
+              },
+            );
           }
           return items.length > 0 ? { label: t('folders'), items } : undefined;
         },

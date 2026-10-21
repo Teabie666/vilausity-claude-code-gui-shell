@@ -64,7 +64,8 @@ Electron main ── 窗口、命令行参数、设置和状态存储（唯一�
 
 - **attached 文档**（有编辑器在显示的）：文字以 renderer 的 Monaco 模型为准（`features/editor/textModels.ts`，同一 URI 的模型被所有编辑器共用）。用户的修改以增量 `document.didChange` 发给 exthost，exthost 更新镜像并发 `onDidChangeTextDocument`；插件要改这些文档（`applyEdit`、`TextEditor.edit`）时，exthost 请 renderer 改模型，改动再照常传回来。脏状态是模型离上次保存的版本有多远（`document.didChangeDirty`）。
 - **没有编辑器的文档**由 exthost 自己读写（插件的 FileSystemProvider 也在 exthost）。
-- **保存**：renderer 调 `document.save`，exthost 发 `onWillSaveTextDocument`、写盘（或写插件的 provider）、发 `onDidSaveTextDocument`。
+- **保存**：renderer 调 `document.save`，exthost 发 `onWillSaveTextDocument`、写盘（或写插件的 provider）、发 `onDidSaveTextDocument`。保存、还原、与已保存的比较作用于当前标签页编辑的文档（`EditorPane.documentUri`）：普通文本编辑器的，也包括嵌在别的视图里的（Markdown 的预览和源码是同一份文档，settings.json / keybindings.json 和默认值左右对照时是右边那份）；diff 标签页的 Ctrl+S 存右边。
+- **自动保存**（`features/editor/autoSave.ts`）：VS Code 的 `files.autoSave` / `files.autoSaveDelay`，默认关。`afterDelay` 最后一次修改之后过一段时间存；`onFocusChange` 焦点离开这个文件的标签页（切到别的标签页、点进对话）时存，窗口失去焦点时全存；`onWindowChange` 只在窗口失去焦点时全存（焦点进 webview 也会让窗口 blur，所以看 `document.hasFocus()`）。只存磁盘上的文件：插件自己的文档（Claude 提议的改动的右边）不动。磁盘上被改过、又有未保存修改的文件不自动存（会盖掉磁盘上的），等用户自己存或重新载入。插件也读这个设置：关着时保存提议改动的右边等于接受（跟 VS Code 一样，对照 2.1.306），所以 compat 里它的默认值也是 `off`。
 - **磁盘被外部改了**（Claude 改文件）：exthost 监视 attached 的文件；文档干净就推 `document.reload`（renderer 用最小替换更新模型，光标和滚动位置不乱），有未保存的修改就推 `document.didChangeOnDisk`，编辑器上方出提示（重新载入 / 保留我的）。exthost 自己写盘时记下写入的内容，不会把自己的写入当成外部修改。
 - **编辑器状态**：标签页和编辑器的 id 由 exthost 分配（`compat/vscode/editors.ts` 的 EditorService）。`activeTextEditor` 是内容面板显示时当前标签页的编辑器（焦点在对话里也算，跟 VS Code 在旁边一列显示文件时一样），diff 标签页的左右两个都算可见、右边是 active；选区由 renderer 推给 exthost，插件据此在聊天框里带上当前文件和选中的行。
 - **diff**：`vscode.diff` 打开 Monaco 的 diff 编辑器标签页，`TabInputTextDiff` 在命令返回前就进 `tabGroups`（插件会轮询找它）。右边的文档可写时可以直接改。Claude 提议的改动（右边是插件的 `_claude_vscode_fs_right` 文档）带"接受 / 拒绝"按钮：先把这个标签页设为 active，再执行插件的接受 / 拒绝命令。
@@ -113,15 +114,15 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 
 - **全局和每个窗口**：`host/main/shellApp.ts` 持有窗口共用的东西（设置、插件的 globalState、主题、界面语言、webview 文档、`ccw:` 协议），`host/main/windowContext.ts` 是一个窗口：BrowserWindow、它的文件夹和 workspaceState、它的 extension host。渲染进程调主进程时按发送的窗口分发；设置、主题、语言变了通知所有窗口。插件的 globalState 所有窗口共用：一个窗口的 extension host 写了，主进程转给其他窗口的（`storage.didChange`，compat 的 Memento 跟着更新）。webview 的 id 是随机的，所以所有窗口的 webview 文档放在同一个表里，窗口关掉或插件进程重启时按窗口清掉。
 - **一个文件夹一个窗口**：打开一个已经有窗口的文件夹，就把那个窗口提到前面。在当前窗口打开别的文件夹（"打开文件夹…"、最近的文件夹、插件的"打开文件夹"按钮）先确认一句（有打开的对话或文件时），未保存的文件逐个问；然后主进程停掉这个窗口的 extension host（插件把打开的对话记在旧文件夹的 workspaceState 里，回到这个文件夹时恢复），换成新文件夹的 workspaceState，重新加载页面，页面加载完再起新的 extension host。界面在 `features/workspace`："打开最近的文件夹"（Ctrl+R，选择框里 Ctrl+Enter 在新窗口中打开）、新建窗口（Ctrl+Shift+N，选一个文件夹），以及搜索里的"文件夹"一组（标题栏的搜索框显示当前文件夹名，见下面的"标题栏搜索框"）。
-- **记住的东西**（`state/shell.json`，`host/main/windowHistory.ts`，跟插件的 globalState 分开）：每个文件夹的窗口位置（最多 50 个）、最近打开的文件夹、开着的窗口、所有窗口共用的缩放级别（同源页面的缩放在 Chromium 里本来就一起变）。开着的窗口随时更新，所以崩溃后也能恢复。启动时：命令行给了文件夹就只开它；没给就恢复上次开着的窗口，都没有才用主目录。一个个关窗口，最后一个关掉时退出，下次只恢复它；用"退出"命令或别处调 `app.quit()`（`before-quit` 被拦下来走同一条路）时开着几个记几个；换界面语言的重启（`app.relaunch`）不管命令行，恢复全部。
+- **记住的东西**（`state/shell.json`，`host/main/windowHistory.ts`，跟插件的 globalState 分开）：每个文件夹的窗口位置（最多 50 个）、开着的窗口、所有窗口共用的缩放级别。最近打开的文件夹单独放在 `state/recent-folders.json`（`host/main/recentFolders.ts`，最多 20 个），普通实例和管理员实例共用，每次读、改都直接读写文件（另一个进程可能刚写过）；以前版本记在各自 `shell.json` 里的，启动时并进来（同源页面的缩放在 Chromium 里本来就一起变）。开着的窗口随时更新，所以崩溃后也能恢复。启动时：命令行给了文件夹就只开它；没给就恢复上次开着的窗口，都没有才用主目录。一个个关窗口，最后一个关掉时退出，下次只恢复它；用"退出"命令或别处调 `app.quit()`（`before-quit` 被拦下来走同一条路）时开着几个记几个；换界面语言的重启（`app.relaunch`）不管命令行，恢复全部。
 - **单实例**：`app.requestSingleInstanceLock` 的锁在 userData 里，一个数据目录一个实例。第二次启动在写任何东西之前把原始参数和工作目录（`additionalData`）交给已经在跑的实例，然后退出；那边按自己的规则解析（相对路径按第二次启动的工作目录算）。参数交给哪个窗口：文件夹 → 它自己的窗口；文件（位置参数或 `--goto 文件:行:列`）→ 文件夹包含它的窗口，没有就交给最近的窗口；什么都没给 → 最近的窗口（`--new-window` 开一个主目录的新窗口）。`--session` / `--prompt` 在那个窗口里开对话：窗口是新开的，就放进插件进程的初始化数据，代替窗口默认打开的空对话；已经开着的，经 `conversation.open` 让插件进程执行插件的 `claude-vscode.primaryEditor.open`；某个标签页已经显示这个会话时（插件页面存的状态里有会话 id），只把那个标签页提到前面，不开第二个。`--prompt` 只是填进输入框，不会发出去。开发时（`electron <开关> <app 路径> <参数>`）用户参数是 app 路径之后的部分（`cli.ts` 的 `userArguments`，Playwright 会在 app 路径前面加 `--inspect=0`）。
 - **`vilaus://` 链接**：Windows 打开协议链接时把 URL 当参数传给程序，于是跟别的参数一样走单实例转发。`vilaus://<插件 id>/<路径>?<参数>` 交给那个插件用 `window.registerUriHandler` 注册的处理器（Claude Code 有 `/open?session=&prompt=`），之前照 VS Code 先问用户一次（网页也能放这种链接）。把协议登记进注册表在 M6 的安装包里做。
 - **插件调的 VS Code 内置命令**（`host/exthost/workbenchCommands.ts`）：`vscode.openFolder`（插件的"打开文件夹 / 在新窗口中打开"按钮，没给文件夹就弹选择框）交给渲染进程走上面同一套流程；`workbench.action.openSettings` 打开设置编辑器并填好搜索词；`revealFileInOS` 在资源管理器里选中文件。
 
 ## 标题栏搜索框和快速访问（M5.5）
 
-- **标题栏**：左边侧栏开关、logo 和软件名（见"标题栏 logo 和窗口图标"）、设置、API 接口按钮；中间搜索框（照 VS Code 的命令中心，显示"工作区：<文件夹名>"，用户主文件夹后面加"（全局）"——在那里 Claude 能动整台电脑；管理员实例在后面加"[管理员]"）；右边设置、内容面板开关。左右两边平分剩下的宽度，搜索框在窗口正中。
-- **快速访问**（`core/quickAccess.ts`，照 VS Code 的 quick access）：一个输入框，开头的字符决定交给谁：`>` 是命令（`features/commandPalette`），没有前缀是搜索。打开时盖在标题栏的搜索框上（跟 VS Code 开着命令中心时一样，所有快速输入都在这个位置），看起来是搜索框变大成了输入框、下面接着列表；避开两边的窗口按钮，不能拖动窗口。搜索由各模块登记的分组拼成（`registerSearchContributor`，分组的顺序可以随输入变）：对话（`features/sessionSearch`）、新建对话（`features/conversations`）、文件（`features/quickOpen`；输入像文件名或路径时排到最前，Ctrl+P、文件名、回车照样打开文件）、文件夹（`features/workspace`；没输入时还有打开文件夹、最近的文件夹、以管理员身份打开）、命令（没输入时：显示所有命令，加最近用过的两个）、"在所有文件夹中搜索"。异步的分组按 id 保留上一次的结果直到新结果回来，打字时列表不闪。命令面板照 VS Code 把最近用过的命令排在前面（在命令面板和搜索里执行的才算，存在 localStorage，各窗口共用）。快捷键：Ctrl+P / Ctrl+E 搜索，Ctrl+Shift+P / F1 命令，Ctrl+R 最近的文件夹。
+- **标题栏**：左边侧栏开关、logo 和软件名（见"标题栏 logo 和窗口图标"）、设置、API 接口按钮；中间搜索框（照 VS Code 的命令中心，显示"工作区：<文件夹名>"，用户主文件夹后面加"（全局）"——在那里 Claude 能动整台电脑；管理员实例在后面加"[管理员]"）；右边设置、内容面板开关。左右两边平分剩下的宽度，搜索框在窗口正中（左边自带 6px 的左右内边距，不算在平分的份额里，所以右边在靠搜索框那侧补同样多）。搜索框右端两个图标按钮：在文件资源管理器中显示工作区文件夹、在工作区打开终端（`workspace.revealFolder`、`workspace.openTerminal`，没输入时搜索里的"文件夹"一组和命令面板里也有）。终端由主进程起（`host/main/terminal.ts`）：设置 `terminal.external.windowsExec`（VS Code 的键名）填了就用它，没填时装了 Windows Terminal 用它（`-d .`），否则 PowerShell；照 VS Code 的外部终端走 `cmd /c start`，控制台程序才会有自己的窗口；管理员实例开的终端也是管理员的。
+- **快速访问**（`core/quickAccess.ts`，照 VS Code 的 quick access）：一个输入框，开头的字符决定交给谁：`>` 是命令（`features/commandPalette`），没有前缀是搜索。打开时盖在标题栏的搜索框上（跟 VS Code 开着命令中心时一样，所有快速输入都在这个位置），看起来是搜索框变大成了输入框、下面接着列表；左右按搜索框实际的位置摆（`Layout.quickInputLeft`，窗口窄、左边内容长时搜索框不在正中），夹在窗口左边和窗口按钮之间，不能拖动窗口。搜索由各模块登记的分组拼成（`registerSearchContributor`，分组的顺序可以随输入变）：对话（`features/sessionSearch`）、新建对话（`features/conversations`）、文件（`features/quickOpen`；输入像文件名或路径时排到最前，Ctrl+P、文件名、回车照样打开文件）、文件夹（`features/workspace`；没输入时还有打开文件夹、最近的文件夹、以管理员身份打开）、命令（没输入时：显示所有命令，加最近用过的两个）、"在所有文件夹中搜索"。异步的分组按 id 保留上一次的结果直到新结果回来，打字时列表不闪。命令面板照 VS Code 把最近用过的命令排在前面（在命令面板和搜索里执行的才算，存在 localStorage，各窗口共用）。快捷键：Ctrl+P / Ctrl+E 搜索，Ctrl+Shift+P / F1 命令，Ctrl+R 最近的文件夹。
 - **搜对话**：主进程读 Claude Code 的会话记录（`~/.claude/projects/<文件夹>/<会话 id>.jsonl`，`CLAUDE_CONFIG_DIR` 改了就跟着改；测试用 `VILAUS_SESSIONS_DIR` 指到别处）。这是 CLI 自己的存储格式，不是接口，所以只读、容错：不认识的行和字段跳过。只看标题（用户起的名字 > 旁路文件 `<会话 id>/custom-title.json` > 生成的标题 > 第一句话）、用户打的字和 Claude 的回复（不含工具输出、思考、IDE 和 CLI 附加的上下文），以及 Claude 读过和改过的文件。读取在主进程的 worker 线程里（`host/main/sessionSearch.ts`、`sessionSearchWorker.ts`，解析和匹配是纯函数 `sessionTranscripts.ts`），按文件大小和修改时间缓存，3 秒内的搜索直接用缓存。匹配不分大小写、整串子串匹配（中文直接能搜）：标题、文件、内容依次排，同类按时间新的在前。默认只搜当前文件夹的会话（按记录里的 `cwd`）。打开结果走主进程 `sessions.open`：找到（或打开）那个文件夹的窗口，再 `conversation.open`。
 
 ## 会话列表里壳加的东西（M5.5）
@@ -204,7 +205,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 ## 管理员实例（M4）
 
 - **怎么判断**（`host/main/elevation.ts`）：能列出 `System32\config\systemprofile` 就是管理员（只有 SYSTEM 和 Administrators 能读；没提升的令牌里 Administrators 只用于拒绝）。`VILAUS_ELEVATED=1` / `0` 强制指定：测试一律设 0，因为测试常从提升过权限的终端里启动。
-- **哪些分开、哪些共用**（`AppPaths`）：管理员实例的 `instanceRoot` 是 `<数据目录>\admin`，state（窗口、最近的文件夹、插件的 globalState / workspaceState）、logs、Chromium 配置、插件的 globalStorage / workspaceStorage 都在它下面。Electron 的 userData 也指向它，所以单实例锁也是自己的：管理员实例可以跟普通实例同时开，第二次启动只转发给同一种实例。settings.json、providers.json、`extensions\` 共用。
+- **哪些分开、哪些共用**（`AppPaths`）：管理员实例的 `instanceRoot` 是 `<数据目录>\admin`，state（窗口、插件的 globalState / workspaceState）、logs、Chromium 配置、插件的 globalStorage / workspaceStorage 都在它下面。Electron 的 userData 也指向它，所以单实例锁也是自己的：管理员实例可以跟普通实例同时开，第二次启动只转发给同一种实例。settings.json、providers.json、`extensions\`、最近打开的文件夹（`state\recent-folders.json`）共用。
 - **API 密钥共用**（`host/main/safeStorageKey.ts`）：safeStorage 加密用的主密钥存在 Chromium 配置的 `Local State` 里（`os_crypt.encrypted_key`，本身由 DPAPI 按 Windows 用户加密）。启动时（拿到单实例锁之后、Chromium 读 `Local State` 之前）互相同步：管理员实例用普通实例的主密钥；普通实例自己没有时才用管理员实例的。这依赖 Chromium 的 `Local State` 格式；格式哪天变了，后果只是管理员实例解不开普通实例存的密钥，在管理员实例里重新输入就行。实测：主密钥第一次生成后约 10 秒内写盘，正常退出时一定会写。
 - **插件目录共用**：store 每次修改都基于磁盘上最新的 `state.json`（`update()`），两个进程不会互相覆盖。清理旧版本时先改名再删：Windows 不允许给里面有打开文件的文件夹改名，所以另一个实例正在用的版本、正在写的下载不会被删掉一半。只有普通实例会自动检查更新；管理员实例里可以手动检查更新、回滚。
 - **怎么标出来**：标题栏搜索框里文件夹名后面加"[管理员]"（照 VSCodium 窗口标题的写法）；原生窗口标题后面加 " [Administrator]"（在 `page-title-updated` 里改，页面自己的 `document.title` 不变）。
@@ -300,7 +301,8 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 | `settings.json` | 用户设置（JSONC，键名沿用 VS Code / 插件的） | main |
 | `keybindings.json` | 用户的快捷键（JSONC，VS Code 的格式） | main |
 | `state\global.json`、`state\workspaces\<hash>.json` | 插件的 globalState / workspaceState | main |
-| `state\shell.json` | 窗口位置、最近打开的文件夹、要恢复的窗口、缩放级别 | main |
+| `state\shell.json` | 窗口位置、要恢复的窗口、缩放级别 | main |
+| `state\recent-folders.json` | 最近打开的文件夹（普通实例和管理员实例共用） | main（两种实例） |
 | `globalStorage\`、`workspaceStorage\` | 插件自己的存储目录 | 插件 |
 | `logs\<启动时间>\` | 本次启动的日志，保留最近 10 次：`main.log`，每个窗口一个 `window<N>\`（exthost.log、shim-unimplemented.log、output\） | main / extension host |
 | `providers.json` | API 接口（密钥用 safeStorage 加密） | main |

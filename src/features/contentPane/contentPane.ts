@@ -44,6 +44,8 @@ interface TabEntry extends ContentTab {
 export interface ContentPaneOptions {
   /** Called for each auxiliary window, e.g. to receive messages of webviews shown in it. */
   readonly watchWindow?: (target: Window) => IDisposable;
+  /** The tooltip of a tab's unsaved-changes dot (its close button then), asked on each hover. */
+  readonly unsavedTooltip?: () => string;
 }
 
 export class ContentPane {
@@ -502,6 +504,10 @@ export class ContentPane {
     close.className = 'tab-close icon-button';
     close.title = t('closeEditor');
     close.setAttribute('aria-label', t('closeEditor'));
+    close.addEventListener('pointerenter', () => {
+      const unsaved = tab.classList.contains('dirty') ? this.options.unsavedTooltip?.() : undefined;
+      close.title = unsaved ?? t('closeEditor');
+    });
     close.addEventListener('click', (event) => {
       event.stopPropagation();
       void this.close(input.id);

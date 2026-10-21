@@ -27,7 +27,11 @@ export interface QuickPickOptions {
 export class Dialogs {
   private readonly toasts: HTMLElement;
 
-  constructor(private readonly root: HTMLElement) {
+  constructor(
+    private readonly root: HTMLElement,
+    /** The left of a quick input box `width` wide (core/layout.ts); centered in the window without it. */
+    private readonly quickInputLeft?: (width: number) => number,
+  ) {
     this.toasts = document.createElement('div');
     this.toasts.className = 'toasts';
     root.appendChild(this.toasts);
@@ -39,8 +43,7 @@ export class Dialogs {
 
   showQuickPick(request: QuickPickRequest, options: QuickPickOptions = {}): Promise<number[] | undefined> {
     return new Promise((resolve) => {
-      const { box, finish } = this.openOverlay<number[] | undefined>(resolve, undefined);
-      box.classList.add('quick-input');
+      const { box, finish } = this.openOverlay<number[] | undefined>(resolve, undefined, { quickInput: true });
       const input = document.createElement('input');
       input.className = 'quick-input-filter';
       input.placeholder = request.placeHolder ?? request.title ?? '';
@@ -173,8 +176,7 @@ export class Dialogs {
 
   showInputBox(request: InputBoxRequest): Promise<string | undefined> {
     return new Promise((resolve) => {
-      const { box, finish } = this.openOverlay<string | undefined>(resolve, undefined);
-      box.classList.add('quick-input');
+      const { box, finish } = this.openOverlay<string | undefined>(resolve, undefined, { quickInput: true });
       if (request.title) {
         const title = document.createElement('div');
         title.className = 'quick-input-title';
@@ -291,14 +293,30 @@ export class Dialogs {
 
   /**
    * A box at the top of the window over a backdrop; Escape or a backdrop click resolves
-   * `cancelValue`. Quick access draws its picker in one too.
+   * `cancelValue`. Quick access draws its picker in one too. A quick input box sits over the
+   * title bar's search box (`quickInputLeft`), following it as the window resizes.
    */
-  openOverlay<T>(resolve: (value: T) => void, cancelValue: T): { box: HTMLElement; finish: (value: T) => void } {
+  openOverlay<T>(
+    resolve: (value: T) => void,
+    cancelValue: T,
+    options: { readonly quickInput?: boolean } = {},
+  ): { box: HTMLElement; finish: (value: T) => void } {
     const backdrop = document.createElement('div');
     backdrop.className = 'overlay-backdrop';
     const box = document.createElement('div');
     box.className = 'overlay-box';
     backdrop.appendChild(box);
+    const quickInputLeft = options.quickInput ? this.quickInputLeft : undefined;
+    const place = (): void => {
+      if (quickInputLeft) {
+        backdrop.style.justifyContent = 'flex-start';
+        box.style.marginLeft = `${quickInputLeft(box.offsetWidth)}px`;
+      }
+    };
+    if (options.quickInput) {
+      box.classList.add('quick-input');
+      window.addEventListener('resize', place);
+    }
     let settled = false;
     const finish = (value: T): void => {
       if (settled) {
@@ -307,6 +325,7 @@ export class Dialogs {
       settled = true;
       backdrop.remove();
       document.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('resize', place);
       resolve(value);
     };
     const onKey = (event: KeyboardEvent): void => {
@@ -324,6 +343,7 @@ export class Dialogs {
       }
     });
     this.root.appendChild(backdrop);
+    place();
     return { box, finish };
   }
 }

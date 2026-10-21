@@ -893,6 +893,8 @@ export type MainApiForRenderer = {
   'keybindings.edit': (p: { remove: readonly KeybindingEntry[]; add: readonly KeybindingEntry[] }) => void;
   /** Opens a folder in the system's file manager. */
   'os.openFolder': (p: { path: string }) => void;
+  /** Opens a terminal in a folder (host/main/terminal.ts); false when it could not be started. */
+  'os.openTerminal': (p: { folder: string }) => boolean;
   'window.toggleDevTools': (p: void) => void;
   /** Asks for a folder with the system's folder picker; undefined when cancelled. */
   'window.pickFolder': (p: void) => string | undefined;

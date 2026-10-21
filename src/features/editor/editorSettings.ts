@@ -7,6 +7,7 @@
 import { SettingsSection } from '../../core/messages';
 import type { SettingDefinition, SettingsService } from '../../core/settings';
 import { DEFAULT_FONTS } from '../../platform/defaults';
+import { AUTO_SAVE_MODES, DEFAULT_AUTO_SAVE_DELAY_MS } from './autoSave';
 import { t } from './messages';
 
 /** Keys whose change concerns editors. */
@@ -52,6 +53,17 @@ export function editorSettingDefinitions(): SettingDefinition[] {
         description: t('fontWeight'),
       },
       2,
+    ),
+    // First in the section: someone new to editors looks for it there (features/editor/autoSave.ts).
+    editor('files.autoSave', {
+      type: 'string',
+      default: 'off',
+      enum: [...AUTO_SAVE_MODES],
+      enumDescriptions: [t('autoSaveOff'), t('autoSaveAfterDelay'), t('autoSaveOnFocusChange'), t('autoSaveOnWindowChange')],
+      description: t('autoSave'),
+    }),
+    described(
+      editor('files.autoSaveDelay', { type: 'number', default: DEFAULT_AUTO_SAVE_DELAY_MS, minimum: 0, description: t('autoSaveDelay') }),
     ),
     described(editor('editor.lineHeight', { type: 'number', default: 0, minimum: 0, maximum: 150, description: t('lineHeight') })),
     editor('editor.fontLigatures', { type: 'boolean', default: false, description: t('fontLigatures') }),

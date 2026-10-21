@@ -157,6 +157,10 @@ export class TextEditorPane implements EditorPane {
     return this.data.document.uri;
   }
 
+  get documentUri(): string {
+    return this.uri;
+  }
+
   layout(): void {
     this.editor.layout();
   }

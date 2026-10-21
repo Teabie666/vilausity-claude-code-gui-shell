@@ -3,6 +3,8 @@ import { defineMessages } from '../../platform/nls';
 export const t = defineMessages('contentPane', {
   openEditors: 'Open editors',
   closeEditor: 'Close',
+  unsaved: 'Unsaved',
+  unsavedSaveWith: 'Unsaved ({0} to save)',
   noOpenEditors: 'No open editors',
   openFileHint: 'Open a file',
   toggleContentPane: 'Toggle Content Pane',

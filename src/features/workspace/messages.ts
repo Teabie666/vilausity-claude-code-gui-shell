@@ -8,6 +8,10 @@ export const t = defineMessages('workspace', {
   openRecent: 'Open Recent...',
   newWindow: 'New Window',
   revealFolder: 'Reveal Folder in File Explorer',
+  openTerminal: 'Open Terminal in Workspace',
+  terminalFailed: 'Could not open a terminal.',
+  terminalSetting:
+    'The terminal to open in the workspace folder: the path of its program. Empty: Windows Terminal when it is installed, else PowerShell.',
   openAsAdministrator: 'Open This Folder as Administrator',
   recent: 'recent',
   browse: 'Browse...',
