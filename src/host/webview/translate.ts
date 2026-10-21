@@ -13,7 +13,7 @@ import type { ExtensionTranslations } from '../../platform/protocol';
 
 const ATTRIBUTES = ['title', 'placeholder', 'data-placeholder'];
 /** Never translated: code, the head, and the shell's own elements. */
-const ALWAYS_LEFT_ALONE = 'head, script, style, pre, code, .vilaus-comments';
+const ALWAYS_LEFT_ALONE = 'head, script, style, pre, code, .vilaus-comments, .vilaus-markers';
 /** What a person types in; the element's own attributes (its placeholder) still are UI. */
 const EDITABLE = 'textarea, [contenteditable]:not([contenteditable="false"])';
 

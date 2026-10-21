@@ -35,6 +35,8 @@ const EXT_LOGOUT = 'claude-vscode.logout';
 
 /** Off: the tab row shows only with two or more conversations. */
 const ALWAYS_SHOW_TABS = 'vilaus.conversations.alwaysShowTabs';
+/** The markers by a conversation's scrollbar, one per message of the user's (host/webview/messageMarkers.ts). */
+const MESSAGE_MARKERS = 'vilaus.conversations.messageMarkers';
 
 export const conversationsModule: ShellModule = {
   id: 'conversations',
@@ -72,8 +74,24 @@ export const conversationsModule: ShellModule = {
           order: 10,
           schema: { type: 'boolean', default: false, description: t('alwaysShowTabsSetting') },
         },
+        {
+          key: MESSAGE_MARKERS,
+          section: SettingsSection.workbench,
+          order: 11,
+          schema: { type: 'boolean', default: true, description: t('messageMarkersSetting') },
+        },
       ]),
     );
+    // A page loaded later starts with them on: it is told when they are off.
+    const markersEnabled = (): boolean => settings.get(MESSAGE_MARKERS, true);
+    subscriptions.add(
+      frames.onDidLoad(() => {
+        if (!markersEnabled()) {
+          frames.setMessageMarkers(false);
+        }
+      }),
+    );
+    subscriptions.add(settings.onDidChange((keys) => keys.includes(MESSAGE_MARKERS) && frames.setMessageMarkers(markersEnabled())));
 
     const updateContext = (): void => {
       contextKeys.set('conversations.count', tabs.count);
@@ -118,6 +136,13 @@ export const conversationsModule: ShellModule = {
         frames.playEscape(panel.webviewId, action);
       }
     };
+    // The user's messages in the conversation in front, one by one (no keys by default).
+    const jumpToMessage = (direction: 'previous' | 'next') => () => {
+      const panel = tabs.active;
+      if (panel) {
+        frames.jumpToMessage(panel.webviewId, direction);
+      }
+    };
     const register = [
       commands.register('conversations.new', ext(EXT_OPEN_CHAT), { title: t('newConversation'), category: 'Claude' }),
       commands.register('conversations.close', () => tabs.requestClose(), {
@@ -155,6 +180,16 @@ export const conversationsModule: ShellModule = {
       }),
       commands.register('conversations.rewind', playEscape('rewind'), {
         title: t('rewind'),
+        category: 'Claude',
+        when: 'conversations.hasActive',
+      }),
+      commands.register('conversations.previousMessage', jumpToMessage('previous'), {
+        title: t('previousMessage'),
+        category: 'Claude',
+        when: 'conversations.hasActive',
+      }),
+      commands.register('conversations.nextMessage', jumpToMessage('next'), {
+        title: t('nextMessage'),
         category: 'Claude',
         when: 'conversations.hasActive',
       }),

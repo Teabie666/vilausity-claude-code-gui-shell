@@ -3009,6 +3009,139 @@ await step(
   },
 );
 
+await step(
+  'a long conversation: a thinking summary stays where it was clicked; markers by the scrollbar list your messages and go to one; the setting hides them; Go to Previous / Next Message',
+  async () => {
+    // An instance of its own, on a session of 14 turns, each with a thinking block.
+    const own = path.join(runDir, 'long-conversation');
+    const ownData = path.join(own, 'data');
+    const ownWorkspace = path.join(own, 'workspace');
+    const claudeDir = path.join(own, 'claude');
+    const project = path.join(claudeDir, 'projects', ownWorkspace.replace(/[^a-zA-Z0-9]/g, '-'));
+    for (const folder of [ownData, ownWorkspace, project]) mkdirSync(folder, { recursive: true });
+    const sessionId = 'd4d4d4d4-0000-4000-8000-000000000001';
+    const paragraphs = (count, words) =>
+      Array.from({ length: count }, (_, i) => `${words} line ${i + 1} of the paragraph, with some more words to wrap.`).join('\n\n');
+    const entries = [];
+    for (let turn = 1; turn <= 14; turn++) {
+      const common = { sessionId, cwd: ownWorkspace, timestamp: new Date().toISOString() };
+      entries.push({
+        ...common,
+        type: 'user',
+        uuid: `u${turn}`,
+        parentUuid: turn === 1 ? null : `a${turn - 1}`,
+        message: { role: 'user', content: `Question ${turn}: tell me about topic ${turn}` },
+      });
+      entries.push({
+        ...common,
+        type: 'assistant',
+        uuid: `a${turn}`,
+        parentUuid: `u${turn}`,
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: paragraphs(8, `Thinking ${turn}`), signature: 'x' },
+            { type: 'text', text: paragraphs(6, `Answer ${turn}`) },
+          ],
+        },
+      });
+    }
+    entries.push({ type: 'ai-title', aiTitle: 'Long session', sessionId });
+    writeFileSync(path.join(project, `${sessionId}.jsonl`), entries.map((entry) => JSON.stringify(entry)).join('\n'), 'utf8');
+    const ownSettings = path.join(ownData, 'settings.json');
+    const baseSettings = {
+      'claudeCode.hideOnboarding': true,
+      'claudeCode.disableLoginPrompt': true,
+      'vilaus.language': 'en',
+      'vilaus.extension.autoUpdate': false,
+    };
+    writeFileSync(ownSettings, JSON.stringify(baseSettings), 'utf8');
+    const other = await electron.launch({
+      executablePath: executable,
+      args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display', '--session', sessionId),
+      cwd: root,
+      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      timeout: 60_000,
+    });
+    try {
+      const otherPage = await other.firstWindow();
+      const conversation = await waitFor(
+        async () => {
+          for (const frame of otherPage.frames()) {
+            if (
+              frame.url().startsWith('ccw://wv') &&
+              (await frame
+                .locator('summary')
+                .count()
+                .catch(() => 0)) === 14
+            )
+              return frame;
+          }
+          return undefined;
+        },
+        30_000,
+        'the long conversation',
+      );
+      // At the bottom, the last thinking summary clicked: every block opens, the summary stays put.
+      const summary = conversation.locator('summary').last();
+      await conversation.evaluate(() => {
+        const container = document.querySelector('[class*="messagesContainer_"]');
+        container.scrollTop = container.scrollHeight;
+      });
+      await otherPage.waitForTimeout(500);
+      const before = (await summary.boundingBox()).y;
+      await summary.click();
+      await waitFor(async () => (await conversation.locator('details[open]').count()) === 14, 5000, 'every thinking block open');
+      await otherPage.waitForTimeout(1600);
+      const after = (await summary.boundingBox()).y;
+      if (Math.abs(after - before) > 2) throw new Error(`the summary moved from ${before} to ${after}`);
+
+      // The markers: one bar per message of the user's, the list on pointing, a click goes there.
+      const state = () =>
+        conversation.evaluate(() => ({
+          shown: !document.querySelector('.vilaus-markers').hidden,
+          bars: document.querySelectorAll('.vilaus-marker-bar').length,
+          current: Number(document.querySelector('.vilaus-marker-bar.current')?.dataset.index),
+        }));
+      await waitFor(async () => (await state()).bars === 14, 5000, 'a bar per message');
+      await conversation.locator('.vilaus-markers-bars').hover();
+      const items = conversation.locator('.vilaus-marker-item');
+      await waitFor(async () => (await items.count()) === 14, 5000, 'the list of messages');
+      if ((await items.nth(2).innerText()) !== 'Question 3: tell me about topic 3')
+        throw new Error(`the third item: ${await items.nth(2).innerText()}`);
+      await items.nth(2).click();
+      await waitFor(async () => (await state()).current === 2, 5000, 'the third message in view');
+
+      // Commands: the next and the previous message.
+      const runOtherCommand = async (title) => {
+        await other.evaluate(({ BrowserWindow }) => {
+          const contents = BrowserWindow.getAllWindows()[0].webContents;
+          contents.sendInputEvent({ type: 'keyDown', keyCode: 'P', modifiers: ['control', 'shift'] });
+          contents.sendInputEvent({ type: 'keyUp', keyCode: 'P', modifiers: ['control', 'shift'] });
+        });
+        const filter = otherPage.locator('.quick-input-filter');
+        await filter.waitFor({ timeout: 5000 });
+        await filter.fill(`>${title}`);
+        await waitFor(async () => (await otherPage.locator('.quick-input-item').count()) === 1, 5000, `the command ${title}`);
+        await filter.press('Enter');
+      };
+      await runOtherCommand('Go to Next Message of Yours');
+      await waitFor(async () => (await state()).current === 3, 5000, 'the fourth message in view');
+      await runOtherCommand('Go to Previous Message of Yours');
+      await waitFor(async () => (await state()).current === 2, 5000, 'the third message again');
+
+      // The setting hides them, and shows them again.
+      writeFileSync(ownSettings, JSON.stringify({ ...baseSettings, 'vilaus.conversations.messageMarkers': false }), 'utf8');
+      await waitFor(async () => !(await state()).shown, 5000, 'the markers hidden');
+      writeFileSync(ownSettings, JSON.stringify(baseSettings), 'utf8');
+      await waitFor(async () => (await state()).shown, 5000, 'the markers back');
+      return `summary at ${before} px before and after`;
+    } finally {
+      await other.close();
+    }
+  },
+);
+
 await step('administrator instance: runs next to the normal one, says so, and reads the API keys the normal one stored', async () => {
   const stored = readJson(path.join(dataDir, 'providers.json'))?.keys?.mock;
   if (!stored) throw new Error('the normal instance stored no key');

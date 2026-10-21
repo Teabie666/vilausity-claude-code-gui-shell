@@ -594,6 +594,15 @@ describe('ClaudeWebviewBridge, previews and the session list', () => {
     assert.equal(hints?.conversationEscapes?.doubleMs, 800);
     assert.equal(makePreviewBridge().pageHints(fakeWebview('list', 'claudeVSCodeSessionsList'))?.conversationEscapes, undefined);
   });
+
+  test('a conversation page gets its file links, the thinking summaries to keep in place and its turns; a session list none of them', () => {
+    const hints = makePreviewBridge().pageHints(fakeWebview('chat', 'claudeVSCodePanel'));
+    assert.ok(hints?.fileLinks?.selector.includes('mentionChip_'));
+    assert.ok(hints?.keepInPlace?.includes('thinkingSummary_'));
+    assert.deepEqual(hints?.messageMarkers, { turn: '.turn_07S1Yg', userMessage: '.userMessage_07S1Yg' });
+    const list = makePreviewBridge().pageHints(fakeWebview('list', 'claudeVSCodeSessionsList'));
+    assert.deepEqual([list?.fileLinks, list?.keepInPlace, list?.messageMarkers], [undefined, undefined, undefined]);
+  });
 });
 
 describe('ClaudeWebviewBridge and what Claude Code says', () => {

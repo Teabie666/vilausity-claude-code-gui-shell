@@ -300,6 +300,20 @@ export class WebviewFrames {
     this.get(webviewId)?.post(control);
   }
 
+  /** Shows or hides the markers by every conversation's scrollbar (pages with `hints.messageMarkers`). */
+  setMessageMarkers(enabled: boolean): void {
+    const control: ShellToWebviewControl = { ccwControl: 'messageMarkers', enabled };
+    for (const frame of this.frames.values()) {
+      frame.post(control);
+    }
+  }
+
+  /** Scrolls a conversation to the user's message before or after the one in view. */
+  jumpToMessage(webviewId: string, direction: 'previous' | 'next'): void {
+    const control: ShellToWebviewControl = { ccwControl: 'jumpToMessage', direction };
+    this.get(webviewId)?.post(control);
+  }
+
   /** Tells a page what to do with a file link's held message: pass it on to the extension, or drop it. */
   answerFileLink(webviewId: string, id: number, release: boolean): void {
     const control: ShellToWebviewControl = { ccwControl: 'fileLink', id, release };

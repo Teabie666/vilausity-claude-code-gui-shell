@@ -20,6 +20,7 @@ import type { ILogger } from '../../platform/log';
 import type {
   ConversationEscapeHints,
   FileLinkHints,
+  MessageMarkerHints,
   SessionActivity,
   SessionBusy,
   SessionRowHints,
@@ -126,6 +127,21 @@ export const FILE_LINKS: FileLinkHints = {
   ],
   path: ['request', 'filePath'],
 };
+
+/**
+ * A thinking block's summary (anthropic.claude-code 2.1.306): `details.thinking_aHyQPQ >
+ * summary.thinkingSummary_aHyQPQ`. One state opens or closes every thinking block of the
+ * conversation, so a click on one moves the others' content: the clicked summary is kept in
+ * place on screen.
+ */
+const THINKING_SUMMARY = 'details[class*="thinking_"] > summary[class*="thinkingSummary_"]';
+
+/**
+ * A conversation's turns (anthropic.claude-code 2.1.306): `div.messagesContainer_07S1Yg`
+ * (the scrolling element) holds a `div.turn_07S1Yg` per message of the user's, which starts
+ * with it (`.userMessage_07S1Yg`) and goes on with the replies.
+ */
+const MESSAGE_MARKERS: MessageMarkerHints = { turn: '.turn_07S1Yg', userMessage: '.userMessage_07S1Yg' };
 
 /** The session list view and the plan preview panel (anthropic.claude-code 2.1.282). */
 const SESSION_LIST_VIEW_TYPE = 'claudeVSCodeSessionsList';
@@ -1085,6 +1101,8 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
           conversationEscapes: CONVERSATION_ESCAPES,
           streamMerge: STREAM_MERGE,
           fileLinks: FILE_LINKS,
+          keepInPlace: THINKING_SUMMARY,
+          messageMarkers: MESSAGE_MARKERS,
         };
       case SESSION_LIST_VIEW_TYPE:
         return {

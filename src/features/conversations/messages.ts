@@ -14,6 +14,10 @@ export const t = defineMessages('conversations', {
   interrupt: 'Interrupt Claude',
   rewind: 'Rewind to…',
   findInConversation: 'Find in Conversation',
+  previousMessage: 'Go to Previous Message of Yours',
+  nextMessage: 'Go to Next Message of Yours',
+  messageMarkersSetting:
+    "Show a marker for each of your messages by the conversation's scrollbar; pointing at them lists the messages, a click goes to one.",
   showLogs: 'Show Logs',
   signOut: 'Sign Out',
   noConversation: 'No conversation open',

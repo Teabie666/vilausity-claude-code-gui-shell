@@ -196,6 +196,24 @@ export interface WebviewPageHints {
   readonly streamMerge?: StreamMergeHints;
   /** The files a conversation page links to, which Shift+click and the right-click menu open the shell's way (see the type). */
   readonly fileLinks?: FileLinkHints;
+  /**
+   * CSS selector of elements kept where they are on screen for a moment after a click on one
+   * changes the page around it (a thinking block's summary: every thinking block opens at once).
+   */
+  readonly keepInPlace?: string;
+  /** A conversation's turns, for the markers by its scrollbar (see the type). */
+  readonly messageMarkers?: MessageMarkerHints;
+}
+
+/**
+ * A conversation's turns, for the markers by its scrollbar: a bar for each message of the
+ * user's, and a list of their first lines (the page script's `MessageMarkers`).
+ */
+export interface MessageMarkerHints {
+  /** A turn: one message of the user's and what answers it. */
+  readonly turn: string;
+  /** The user's message within a turn. */
+  readonly userMessage: string;
 }
 
 /** A message is the one meant when the value at each path is the one given. */
@@ -1216,4 +1234,8 @@ export type ShellToWebviewControl =
   /** The bar above the message input (pages with `commentsAnchor`); null: none. */
   | { readonly ccwControl: 'providerNotice'; readonly notice: ProviderNoticeDto | null }
   /** What to do with a file link's held message: pass it on to the extension (`release`), or drop it. */
-  | { readonly ccwControl: 'fileLink'; readonly id: number; readonly release: boolean };
+  | { readonly ccwControl: 'fileLink'; readonly id: number; readonly release: boolean }
+  /** Show the markers by a conversation's scrollbar or not (pages with `hints.messageMarkers`). */
+  | { readonly ccwControl: 'messageMarkers'; readonly enabled: boolean }
+  /** Scroll a conversation to the user's message before or after the one in view (pages with `hints.messageMarkers`). */
+  | { readonly ccwControl: 'jumpToMessage'; readonly direction: 'previous' | 'next' };

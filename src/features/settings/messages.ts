@@ -38,6 +38,7 @@ export const settingTitleName = defineNames('settingTitles', {
   'workbench.fontSize': 'Workbench: Font Size',
   'vilaus.translateExtensionUi': 'Vilaus: Translate Extension Ui',
   'vilaus.conversations.alwaysShowTabs': 'Vilaus › Conversations: Always Show Tabs',
+  'vilaus.conversations.messageMarkers': 'Vilaus › Conversations: Message Markers',
   'vilaus.provider.default': 'Vilaus › Provider: Default',
   'vilaus.sessions.currentProviderOnly': 'Vilaus › Sessions: Current Provider Only',
   'vilaus.sessions.keepForever': 'Vilaus › Sessions: Keep Forever',

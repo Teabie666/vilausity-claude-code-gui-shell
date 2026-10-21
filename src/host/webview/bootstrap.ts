@@ -19,11 +19,13 @@ import { CommentsHost } from './comments';
 import { DEFAULT_WEBVIEW_STYLES } from './defaultStyles';
 import { FileLinks } from './fileLinks';
 import { InPageFinder } from './find';
+import { MessageMarkers } from './messageMarkers';
 import { ProviderNotice } from './providerNotice';
 import { filterButtonOnly, SessionProviderMarks } from './sessionProviders';
 import { watchSessionRows } from './sessionRows';
 import { StatusFilter } from './statusFilter';
 import { installStreamMerging } from './streamMerge';
+import { installScrollKeeper } from './scrollKeeper';
 import { PageTranslator } from './translate';
 import { UsageBlock } from './usageBlock';
 import { UsageResets } from './usageResets';
@@ -161,6 +163,22 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
       marks.set(pendingMarks);
     });
   }
+  // A thinking block's summary stays where it was clicked while every thinking block opens.
+  const keepInPlace = data.hints?.keepInPlace;
+  if (keepInPlace) {
+    installScrollKeeper(keepInPlace);
+  }
+  // Markers by a conversation's scrollbar; the shell may turn them off before the body is there.
+  const markerHints = data.hints?.messageMarkers;
+  let markers: MessageMarkers | undefined;
+  let markersEnabled = true;
+  if (markerHints) {
+    onDomReady(() => {
+      markers = new MessageMarkers(markerHints);
+      markers.setEnabled(markersEnabled);
+    });
+  }
+
   // A conversation says when it last ran under another provider than the window's.
   let notice: ProviderNotice | undefined;
   let pendingNotice: ProviderNoticeDto | null = null;
@@ -244,6 +262,13 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
           break;
         case 'fileLink':
           fileLinks?.answer(control.id, control.release);
+          break;
+        case 'messageMarkers':
+          markersEnabled = control.enabled;
+          markers?.setEnabled(control.enabled);
+          break;
+        case 'jumpToMessage':
+          markers?.jump(control.direction);
           break;
       }
     },
