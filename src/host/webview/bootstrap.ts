@@ -17,6 +17,7 @@ import type {
 } from '../../platform/protocol';
 import { CommentsHost } from './comments';
 import { DEFAULT_WEBVIEW_STYLES } from './defaultStyles';
+import { FileLinks } from './fileLinks';
 import { InPageFinder } from './find';
 import { ProviderNotice } from './providerNotice';
 import { filterButtonOnly, SessionProviderMarks } from './sessionProviders';
@@ -76,10 +77,22 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
   applyThemeVariables(theme);
   onDomReady(() => applyBodyTheme(theme));
 
+  // The files a conversation links to: Shift+click and the right-click menu are the shell's.
+  const fileLinkHints = data.hints?.fileLinks;
+  const fileLinks = fileLinkHints
+    ? new FileLinks(
+        fileLinkHints,
+        (request) => post({ kind: 'fileLink', ...request }),
+        (message) => post({ kind: 'message', message }),
+      )
+    : undefined;
+
   let state = data.state;
   const api: VsCodeApi = Object.freeze({
     postMessage(message: unknown): void {
-      post({ kind: 'message', message });
+      if (!fileLinks?.intercept(message)) {
+        post({ kind: 'message', message });
+      }
     },
     setState<T>(next: T): T {
       state = next;
@@ -229,6 +242,9 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
             pendingNotice = control.notice;
           }
           break;
+        case 'fileLink':
+          fileLinks?.answer(control.id, control.release);
+          break;
       }
     },
     true,
@@ -239,7 +255,14 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
     installStreamMerging(streamMerge);
   }
 
-  window.addEventListener('click', (event) => handleClick(event, post));
+  window.addEventListener('click', (event) => {
+    if (fileLinks?.playing) {
+      // A click played to learn a link's file: it must not follow the link either.
+      event.preventDefault();
+      return;
+    }
+    handleClick(event, post);
+  });
   window.addEventListener('auxclick', (event) => {
     // A middle click on a link would try to open it in a new window.
     if (event.button === 1 && findAnchor(event)) {

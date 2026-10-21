@@ -2855,6 +2855,160 @@ await step("a conversation of another folder, found by searching all folders, op
   }
 });
 
+await step(
+  "files a conversation links to: Shift+click opens one with its program; right-click shows the shell's menu (editor, program, File Explorer, paths, link); web links keep the page's menu",
+  async () => {
+    // An instance of its own, opened on a session whose transcript links to a file three ways.
+    const own = path.join(runDir, 'file-links');
+    const ownData = path.join(own, 'data');
+    const ownWorkspace = path.join(own, 'workspace');
+    const claudeDir = path.join(own, 'claude');
+    const project = path.join(claudeDir, 'projects', ownWorkspace.replace(/[^a-zA-Z0-9]/g, '-'));
+    for (const folder of [ownData, ownWorkspace, project]) mkdirSync(folder, { recursive: true });
+    const notes = path.join(ownWorkspace, 'notes.md');
+    writeFileSync(notes, '# Notes\n', 'utf8');
+    const sessionId = 'f1f1f1f1-0000-4000-8000-000000000001';
+    const line = (fields) => ({ sessionId, cwd: ownWorkspace, timestamp: new Date().toISOString(), ...fields });
+    writeFileSync(
+      path.join(project, `${sessionId}.jsonl`),
+      [
+        line({ type: 'user', uuid: 'u1', parentUuid: null, message: { role: 'user', content: 'Look at @notes.md please' } }),
+        line({
+          type: 'assistant',
+          uuid: 'a1',
+          parentUuid: 'u1',
+          message: {
+            role: 'assistant',
+            content: [{ type: 'tool_use', id: 'toolu_01', name: 'Read', input: { file_path: notes.replace(/\\/g, '/') } }],
+          },
+        }),
+        line({
+          type: 'user',
+          uuid: 'u2',
+          parentUuid: 'a1',
+          message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_01', content: '# Notes' }] },
+        }),
+        line({
+          type: 'assistant',
+          uuid: 'a2',
+          parentUuid: 'u2',
+          message: {
+            role: 'assistant',
+            content: [{ type: 'text', text: 'See [the notes](notes.md) and [the site](https://example.com/).' }],
+          },
+        }),
+        { type: 'ai-title', aiTitle: 'Links session', sessionId },
+      ]
+        .map((entry) => JSON.stringify(entry))
+        .join('\n'),
+      'utf8',
+    );
+    writeFileSync(
+      path.join(ownData, 'settings.json'),
+      JSON.stringify({
+        'claudeCode.hideOnboarding': true,
+        'claudeCode.disableLoginPrompt': true,
+        'vilaus.language': 'en',
+        'vilaus.extension.autoUpdate': false,
+      }),
+      'utf8',
+    );
+    const other = await electron.launch({
+      executablePath: executable,
+      args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display', '--session', sessionId),
+      cwd: root,
+      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      timeout: 60_000,
+    });
+    try {
+      const otherPage = await other.firstWindow();
+      // Nothing opens for real: main's shell, clipboard and menus record instead.
+      await other.evaluate(({ shell, clipboard, Menu }) => {
+        globalThis.vilausDone = [];
+        shell.openPath = async (target) => {
+          globalThis.vilausDone.push(`open ${target}`);
+          return '';
+        };
+        shell.showItemInFolder = (target) => globalThis.vilausDone.push(`reveal ${target}`);
+        clipboard.writeText = (text) => globalThis.vilausDone.push(`copy ${text}`);
+        Menu.prototype.popup = function () {
+          globalThis.vilausLastMenu = this;
+        };
+      });
+      const done = () => other.evaluate(() => globalThis.vilausDone);
+      const menuLabels = () =>
+        other.evaluate(() => globalThis.vilausLastMenu?.items.map((item) => (item.type === 'separator' ? '---' : item.label)));
+      const choose = (label) =>
+        other.evaluate((_electron, label) => {
+          const menu = globalThis.vilausLastMenu;
+          delete globalThis.vilausLastMenu;
+          menu.items.find((item) => item.label === label).click();
+        }, label);
+      const conversation = await waitFor(
+        async () => {
+          for (const frame of otherPage.frames()) {
+            if (
+              frame.url().startsWith('ccw://wv') &&
+              (await frame
+                .locator('a', { hasText: 'the notes' })
+                .count()
+                .catch(() => 0)) === 1
+            )
+              return frame;
+          }
+          return undefined;
+        },
+        30_000,
+        'the conversation with its links',
+      );
+      const markdownLink = conversation.locator('a', { hasText: 'the notes' });
+      const mention = conversation.locator('[class*="mentionChip_"][role="button"]');
+      const toolFile = conversation.locator('[class*="toolNameTextSecondary_"] a');
+      const tabs = otherPage.locator('#content-pane .content-tab');
+
+      // Shift+click: with its program, and the editor does not open it.
+      await markdownLink.click({ modifiers: ['Shift'] });
+      await waitFor(async () => (await done()).includes(`open ${notes}`), 5000, 'notes.md opened with its program');
+      await otherPage.waitForTimeout(500);
+      if ((await tabs.count()) !== 0) throw new Error('Shift+click opened the file in the editor too');
+
+      // Right-click on the tool call's file name: the shell's menu.
+      await toolFile.click({ button: 'right' });
+      const fileMenu = await waitFor(menuLabels, 5000, 'the menu');
+      const expected = 'Open in Editor,Open with Default Program,Reveal in File Explorer,---,Copy Path,Copy Relative Path';
+      if (fileMenu.join() !== expected) throw new Error(`the menu: ${fileMenu.join()}`);
+      await choose('Reveal in File Explorer');
+      await waitFor(async () => (await done()).includes(`reveal ${notes}`), 5000, 'notes.md shown in File Explorer');
+
+      // The mention: its path relative to the workspace.
+      await mention.click({ button: 'right' });
+      await waitFor(menuLabels, 5000, 'the menu');
+      await choose('Copy Relative Path');
+      await waitFor(async () => (await done()).includes('copy notes.md'), 5000, 'the relative path copied');
+
+      // A Markdown link also copies its link; Open in Editor opens it as a plain click does.
+      await markdownLink.click({ button: 'right' });
+      const linkMenu = await waitFor(menuLabels, 5000, 'the menu');
+      if (!linkMenu.join().endsWith('---,Copy Link')) throw new Error(`the link's menu: ${linkMenu.join()}`);
+      await choose('Open in Editor');
+      await waitFor(
+        async () => (await tabs.count()) === 1 && (await tabs.first().innerText()).includes('notes.md'),
+        10_000,
+        'notes.md in the editor',
+      );
+
+      // A web link is no file: the page keeps its own menu, the shell shows none.
+      await conversation.locator('a', { hasText: 'the site' }).click({ button: 'right' });
+      await otherPage.waitForTimeout(500);
+      if (await menuLabels()) throw new Error(`a web link got the shell's menu: ${(await menuLabels()).join()}`);
+      if ((await done()).some((entry) => entry.includes('example.com'))) throw new Error('right-clicking the web link opened it');
+      return (await done()).join('; ');
+    } finally {
+      await other.close();
+    }
+  },
+);
+
 await step('administrator instance: runs next to the normal one, says so, and reads the API keys the normal one stored', async () => {
   const stored = readJson(path.join(dataDir, 'providers.json'))?.keys?.mock;
   if (!stored) throw new Error('the normal instance stored no key');

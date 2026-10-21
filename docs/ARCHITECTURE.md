@@ -125,6 +125,15 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **快速访问**（`core/quickAccess.ts`，照 VS Code 的 quick access）：一个输入框，开头的字符决定交给谁：`>` 是命令（`features/commandPalette`），没有前缀是搜索。打开时盖在标题栏的搜索框上（跟 VS Code 开着命令中心时一样，所有快速输入都在这个位置），看起来是搜索框变大成了输入框、下面接着列表；左右按搜索框实际的位置摆（`Layout.quickInputLeft`，窗口窄、左边内容长时搜索框不在正中），夹在窗口左边和窗口按钮之间，不能拖动窗口。搜索由各模块登记的分组拼成（`registerSearchContributor`，分组的顺序可以随输入变）：对话（`features/sessionSearch`）、新建对话（`features/conversations`）、文件（`features/quickOpen`；输入像文件名或路径时排到最前，Ctrl+P、文件名、回车照样打开文件）、文件夹（`features/workspace`；没输入时还有打开文件夹、最近的文件夹、以管理员身份打开）、命令（没输入时：显示所有命令，加最近用过的两个）、"在所有文件夹中搜索"。异步的分组按 id 保留上一次的结果直到新结果回来，打字时列表不闪。命令面板照 VS Code 把最近用过的命令排在前面（在命令面板和搜索里执行的才算，存在 localStorage，各窗口共用）。快捷键：Ctrl+P / Ctrl+E 搜索，Ctrl+Shift+P / F1 命令，Ctrl+R 最近的文件夹。
 - **搜对话**：主进程读 Claude Code 的会话记录（`~/.claude/projects/<文件夹>/<会话 id>.jsonl`，`CLAUDE_CONFIG_DIR` 改了就跟着改；测试用 `VILAUS_SESSIONS_DIR` 指到别处）。这是 CLI 自己的存储格式，不是接口，所以只读、容错：不认识的行和字段跳过。只看标题（用户起的名字 > 旁路文件 `<会话 id>/custom-title.json` > 生成的标题 > 第一句话）、用户打的字和 Claude 的回复（不含工具输出、思考、IDE 和 CLI 附加的上下文），以及 Claude 读过和改过的文件。读取在主进程的 worker 线程里（`host/main/sessionSearch.ts`、`sessionSearchWorker.ts`，解析和匹配是纯函数 `sessionTranscripts.ts`），按文件大小和修改时间缓存，3 秒内的搜索直接用缓存。匹配不分大小写、整串子串匹配（中文直接能搜）：标题、文件、内容依次排，同类按时间新的在前。默认只搜当前文件夹的会话（按记录里的 `cwd`）。打开结果走主进程 `sessions.open`：找到（或打开）那个文件夹的窗口，再 `conversation.open`。
 
+## 对话里的文件链接（M6.5）
+
+对话页里能点开文件的地方（Claude 回复里的 Markdown 链接、用户消息里的 @提及、Read / Edit 这类工具调用的文件名），点一下由插件在编辑器里打开：页面在点击里同步发出 `open_file` 请求。壳加了两种点法，都是"把这条请求扣下来，让壳先决定"：
+
+- **Shift+点击**：用系统默认程序打开（`shell.openPath`，文件夹就是资源管理器）。页面脚本（`host/webview/fileLinks.ts`）在捕获阶段记下这次点击按着 Shift，点击处理期间页面发出的、符合页面提示的打开请求不交给插件，改发给壳；壳（`features/fileLinks`）找到文件就自己打开、丢掉请求，找不到就放行，插件照常处理（它会自己搜）。
+- **右键**：壳的菜单：在编辑器中打开、用默认程序打开、在文件资源管理器中显示、复制路径、复制相对路径；Markdown 链接再加"复制链接"（代替插件自己画的只有 "Copy Link" 的菜单）；文件夹只有"在文件资源管理器中打开"和复制路径。页面脚本先要知道右键的是哪个文件：在捕获阶段对这个元素放一次点击，期间页面发的所有消息都扣下不发、链接的默认动作也拦掉，从扣下的打开请求里取出路径；没有打开请求（网页链接发的是 `open_url`）就当没发生过，页面自己的菜单照常出来。"在编辑器中打开"把扣下的请求放行，插件照样定位到链接的那一行。菜单是主进程的原生菜单（`window.popupMenu`）。
+- **哪些元素、哪条消息**由 bridge 的页面提示给（`WebviewPageHints.fileLinks`：选择器、请求的匹配规则、路径在哪个字段，对照 2.1.306），页面脚本自己不认识插件的消息。只对选择器认的元素放点击：消息里的附件小块没算进去，有的点了会预览图片。
+- **路径**（`platform/fileLinks.ts`）：页面里是 Claude 写的样子，绝对路径、`file:` 链接、Git Bash 的 `/c/...`，或者相对工作区；带 `:12`、`#L12` 这类行号的，先按原样找，找不到再去掉行号找。
+
 ## 会话列表里壳加的东西（M5.5）
 
 都是页面脚本照 bridge 的页面提示做的（对照插件 2.1.296）；插件改了类名就退回插件原样。数据靠 bridge 旁听插件发给页面的消息（`observeToWebview`），再用控制消息（`ShellToWebviewControl`）交给页面脚本。页面上的显示都走 `data-vilaus-*` 属性加 bridge 的样式，React 管的内容不动。

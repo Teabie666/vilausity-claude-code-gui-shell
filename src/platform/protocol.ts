@@ -194,6 +194,26 @@ export interface WebviewPageHints {
   readonly usageBlock?: UsageBlockHints;
   /** The messages a conversation page gets a token at a time, which the page script merges (see the type). */
   readonly streamMerge?: StreamMergeHints;
+  /** The files a conversation page links to, which Shift+click and the right-click menu open the shell's way (see the type). */
+  readonly fileLinks?: FileLinkHints;
+}
+
+/** A message is the one meant when the value at each path is the one given. */
+export type MessageMatch = readonly (readonly [MessagePath, string | number | boolean | null])[];
+
+/**
+ * The files a page links to: clicking one makes the page post a message that asks to open
+ * it. The page script holds that message back when the shell has its own say: on a click
+ * with Shift (the file opens with its program), and for the right-click menu, which it
+ * learns the file for by a click it plays and keeps from the extension.
+ */
+export interface FileLinkHints {
+  /** The elements that open a file when clicked (a click on others is never played). */
+  readonly selector: string;
+  /** The message a click on one posts. */
+  readonly request: MessageMatch;
+  /** Where the file's path is in it (as the page has it: maybe relative to the workspace). */
+  readonly path: MessagePath;
 }
 
 /**
@@ -220,7 +240,7 @@ export type MessagePath = readonly string[];
  */
 export interface StreamMergeRule {
   /** A message is the rule's when the value at each path is the one given. */
-  readonly match: readonly (readonly [MessagePath, string | number | boolean | null])[];
+  readonly match: MessageMatch;
   readonly key: readonly MessagePath[];
   readonly append?: MessagePath;
   readonly sum?: readonly MessagePath[];
@@ -505,6 +525,12 @@ export interface ContextMenuItemDto {
   /** Sent back in the `contextMenuAction` event when the item is clicked. */
   readonly id: string;
   readonly label: string;
+}
+
+/** An item of a menu the renderer has main show (`window.popupMenu`); without an id, a separator. */
+export interface PopupMenuItemDto {
+  readonly id?: string;
+  readonly label?: string;
 }
 
 // ---- documents and editors (the content pane) ----
@@ -893,6 +919,13 @@ export type MainApiForRenderer = {
   'keybindings.edit': (p: { remove: readonly KeybindingEntry[]; add: readonly KeybindingEntry[] }) => void;
   /** Opens a folder in the system's file manager. */
   'os.openFolder': (p: { path: string }) => void;
+  /** Opens a file with its program (a folder in the file manager); false when it could not. */
+  'os.openPath': (p: { path: string }) => boolean;
+  /** Shows a file or folder selected in the system's file manager. */
+  'os.revealPath': (p: { path: string }) => void;
+  /** What is at a path: a file, a folder, or nothing. */
+  'os.pathKind': (p: { path: string }) => 'file' | 'folder' | undefined;
+  'os.clipboardWrite': (p: { text: string }) => void;
   /** Opens a terminal in a folder (host/main/terminal.ts); false when it could not be started. */
   'os.openTerminal': (p: { folder: string }) => boolean;
   'window.toggleDevTools': (p: void) => void;
@@ -982,6 +1015,8 @@ export type MainApiForRenderer = {
    * separator between groups). No groups removes them.
    */
   'window.setWebviewMenu': (p: { webviewId: string; groups: readonly (readonly ContextMenuItemDto[])[] }) => void;
+  /** Shows a menu where the mouse is; the id of the item chosen, undefined when it closed without one. */
+  'window.popupMenu': (p: { items: readonly PopupMenuItemDto[] }) => string | undefined;
 };
 
 /** Events main pushes to the renderer (through the preload, as window messages). */
@@ -1134,7 +1169,20 @@ export type WebviewToShellMessage =
   /** The session list's "this API only" toggle. */
   | { readonly ccw: string; readonly kind: 'toggleProviderFilter' }
   /** The provider notice's button: switch the window to `providerId` and open the session again. */
-  | { readonly ccw: string; readonly kind: 'switchProvider'; readonly providerId: string; readonly sessionId: string };
+  | { readonly ccw: string; readonly kind: 'switchProvider'; readonly providerId: string; readonly sessionId: string }
+  /**
+   * A file link's message held back (pages with `hints.fileLinks`): Shift+clicked (`system`), or
+   * right-clicked (`menu`; `link` is the href of a Markdown link). The shell answers with a
+   * `fileLink` control.
+   */
+  | {
+      readonly ccw: string;
+      readonly kind: 'fileLink';
+      readonly id: number;
+      readonly path: string;
+      readonly intent: 'system' | 'menu';
+      readonly link?: string;
+    };
 
 export type FindDirection = 'restart' | 'next' | 'previous';
 
@@ -1166,4 +1214,6 @@ export type ShellToWebviewControl =
   /** The sessions' providers (session lists: pages with `hints.sessionRows`). */
   | { readonly ccwControl: 'sessionProviders'; readonly view: SessionProvidersDto | null }
   /** The bar above the message input (pages with `commentsAnchor`); null: none. */
-  | { readonly ccwControl: 'providerNotice'; readonly notice: ProviderNoticeDto | null };
+  | { readonly ccwControl: 'providerNotice'; readonly notice: ProviderNoticeDto | null }
+  /** What to do with a file link's held message: pass it on to the extension (`release`), or drop it. */
+  | { readonly ccwControl: 'fileLink'; readonly id: number; readonly release: boolean };

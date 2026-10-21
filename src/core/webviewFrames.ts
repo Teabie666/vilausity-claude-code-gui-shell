@@ -35,6 +35,18 @@ export interface WebviewKeyEvent {
   readonly event: KeyEventDto;
 }
 
+/** A file link's message a page holds back for the shell (pages with `hints.fileLinks`); answer with `answerFileLink`. */
+export interface FileLinkRequest {
+  readonly webviewId: string;
+  readonly id: number;
+  /** As the page has it: maybe relative to the workspace. */
+  readonly path: string;
+  /** Shift+clicked: open it with its program; right-clicked: the menu. */
+  readonly intent: 'system' | 'menu';
+  /** A Markdown link's href. */
+  readonly link: string | undefined;
+}
+
 export interface WebviewInfo {
   readonly webviewId: string;
   /** The panel's viewType or the view's id; VS Code's `webviewId` context key. */
@@ -167,6 +179,9 @@ export class WebviewFrames {
   private readonly navigateEmitter = new Emitter<'back' | 'forward'>();
   /** The mouse's back or forward button was released over a webview. */
   readonly onDidRequestNavigate: Event<'back' | 'forward'> = this.navigateEmitter.event;
+  private readonly fileLinkEmitter = new Emitter<FileLinkRequest>();
+  /** A file link was Shift+clicked or right-clicked (pages with `hints.fileLinks`). */
+  readonly onDidRequestFileLink: Event<FileLinkRequest> = this.fileLinkEmitter.event;
 
   constructor(
     private readonly connection: ExtensionHostConnection,
@@ -285,6 +300,12 @@ export class WebviewFrames {
     this.get(webviewId)?.post(control);
   }
 
+  /** Tells a page what to do with a file link's held message: pass it on to the extension, or drop it. */
+  answerFileLink(webviewId: string, id: number, release: boolean): void {
+    const control: ShellToWebviewControl = { ccwControl: 'fileLink', id, release };
+    this.frames.get(webviewId)?.post(control);
+  }
+
   /** The iframe that shows a webview, e.g. to place shell UI over a spot of its page. */
   element(webviewId: string): HTMLIFrameElement | undefined {
     return this.frames.get(webviewId)?.iframe;
@@ -359,6 +380,12 @@ export class WebviewFrames {
       case 'switchProvider':
         if (typeof data.providerId === 'string' && typeof data.sessionId === 'string') {
           this.switchProviderEmitter.fire({ providerId: data.providerId, sessionId: data.sessionId });
+        }
+        break;
+      case 'fileLink':
+        if (typeof data.id === 'number' && typeof data.path === 'string' && (data.intent === 'system' || data.intent === 'menu')) {
+          const link = typeof data.link === 'string' ? data.link : undefined;
+          this.fileLinkEmitter.fire({ webviewId, id: data.id, path: data.path, intent: data.intent, link });
         }
         break;
       default:

@@ -9,7 +9,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { app, dialog, ipcMain, nativeTheme, net, safeStorage, session, shell } from 'electron';
+import { app, clipboard, dialog, ipcMain, Menu, nativeTheme, net, safeStorage, session, shell } from 'electron';
 import {
   AUTO_UPDATE_SETTING,
   DEFAULT_OPEN_VSX_URL,
@@ -1021,6 +1021,32 @@ export class ShellApp extends Disposable implements WindowHost {
         return this.currentZoom;
       },
       'window.setWebviewMenu': ({ webviewId, groups }, window) => window.window.setWebviewMenu(webviewId, groups),
+      'window.popupMenu': ({ items }, window) =>
+        new Promise<string | undefined>((resolve) => {
+          let chosen: string | undefined;
+          const menu = Menu.buildFromTemplate(
+            items.map((item) =>
+              item.id === undefined
+                ? { type: 'separator' as const }
+                : { label: item.label ?? '', click: () => resolve((chosen = item.id)) },
+            ),
+          );
+          // A click may come after the menu reports it closed: give it a moment.
+          menu.popup({ window: window.browserWindow, callback: () => setTimeout(() => resolve(chosen), 100) });
+        }),
+      'os.openPath': async ({ path: target }) => {
+        const error = await shell.openPath(target);
+        if (error) {
+          this.logger.warn(`cannot open ${target}: ${error}`);
+        }
+        return !error;
+      },
+      'os.revealPath': ({ path: target }) => shell.showItemInFolder(target),
+      'os.pathKind': ({ path: target }) => {
+        const stats = fs.statSync(target, { throwIfNoEntry: false });
+        return stats?.isDirectory() ? 'folder' : stats?.isFile() ? 'file' : undefined;
+      },
+      'os.clipboardWrite': ({ text }) => clipboard.writeText(text),
     };
     ipcMain.handle(IpcChannel.Rpc, async (event, method: unknown, params: unknown) => {
       if (!event.senderFrame?.url.startsWith(`${APP_ORIGIN}/`)) {

@@ -12,6 +12,7 @@ import { commentsModule } from '../../features/comments';
 import { contentPaneModule } from '../../features/contentPane';
 import { conversationsModule } from '../../features/conversations';
 import { editorModule } from '../../features/editor';
+import { fileLinksModule } from '../../features/fileLinks';
 import { fontsModule } from '../../features/fonts';
 import { keybindingsModule } from '../../features/keybindings';
 import { markdownModule } from '../../features/markdown';
@@ -39,6 +40,7 @@ const modules: ShellModule[] = [
   editorModule,
   markdownModule,
   commentsModule,
+  fileLinksModule,
   quickOpenModule,
   settingsModule,
   keybindingsModule,

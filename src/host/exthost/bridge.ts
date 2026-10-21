@@ -19,6 +19,7 @@ import type { OsBackend } from '../../compat/vscode/host';
 import type { ILogger } from '../../platform/log';
 import type {
   ConversationEscapeHints,
+  FileLinkHints,
   SessionActivity,
   SessionBusy,
   SessionRowHints,
@@ -106,6 +107,24 @@ export const STREAM_MERGE: StreamMergeHints = {
     },
   ],
   intervalMs: 50,
+};
+
+/**
+ * What opens a file in a conversation page (anthropic.claude-code 2.1.306): a click on a link
+ * in Claude's Markdown (`a[href]`, which the page also uses for web links: those post
+ * `open_url`), on an @-mention in a user message (`span.mentionChip_*[role=button]`), or on the
+ * file name of a tool call such as Read or Edit (`a[href="#"]` in `.toolNameTextSecondary_*`).
+ * Each posts `{type: 'request', channelId, requestId, request: {type: 'open_file', filePath,
+ * location}}` from the click itself; the extension answers `open_file_response`. The
+ * attachment pills of a message are left out: some of them preview an image when clicked.
+ */
+export const FILE_LINKS: FileLinkHints = {
+  selector: ['.root_-a7MRw a[href]', '[class*="mentionChip_"][role="button"]', '[class*="toolNameTextSecondary_"] a[href]'].join(', '),
+  request: [
+    [['type'], 'request'],
+    [['request', 'type'], 'open_file'],
+  ],
+  path: ['request', 'filePath'],
 };
 
 /** The session list view and the plan preview panel (anthropic.claude-code 2.1.282). */
@@ -1065,6 +1084,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
           usageBars: USAGE_BARS,
           conversationEscapes: CONVERSATION_ESCAPES,
           streamMerge: STREAM_MERGE,
+          fileLinks: FILE_LINKS,
         };
       case SESSION_LIST_VIEW_TYPE:
         return {
