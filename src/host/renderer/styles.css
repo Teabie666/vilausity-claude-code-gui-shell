@@ -2304,6 +2304,11 @@ body.resizing {
   background: var(--vscode-editorGroup-dropBackground);
 }
 
+/* Cut from the conversation (the content pane hidden): a line marks where. */
+.file-drop-zone.strip {
+  border-left: 1px solid var(--vscode-editorGroup-dropIntoPromptBorder, var(--vscode-widget-border, var(--vscode-focusBorder)));
+}
+
 .file-drop-label {
   display: flex;
   flex-direction: column;
@@ -2324,16 +2329,6 @@ body.resizing {
 
 .file-drop-zone.active .file-drop-label {
   border-color: var(--vscode-focusBorder);
-}
-
-/* Below a low place (the search box). */
-.file-drop-label.below {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
-  max-width: none;
-  transform: translateX(-50%);
-  white-space: nowrap;
 }
 
 .file-drop-detail {

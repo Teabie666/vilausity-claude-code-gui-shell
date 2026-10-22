@@ -16,18 +16,18 @@ import type { WebviewFrames } from '../../core/webviewFrames';
 import { DisposableStore, toDisposable, type IDisposable } from '../../platform/lifecycle';
 import { zoneAt, type DropAction, type DropZone, type ZoneRect } from './zones';
 
-/** A place that takes files, as the module describes it when a drag starts. */
+/** A place that takes files, as the module describes it when a drag starts (`rect` in the window). */
 export interface ZoneSpec {
   readonly action: DropAction;
-  readonly element: HTMLElement;
+  readonly rect: ZoneRect;
   readonly title: string;
   readonly detail?: string;
+  /** Cut from a place that does something else (the conversation): a line marks where. */
+  readonly strip?: boolean;
 }
 
 /** Leaving one page or element for the next: the drag is over once nothing has it for this long (ms). */
 const LEAVE_DELAY_MS = 100;
-/** A place lower than this shows its label below it (the search box). */
-const LABEL_INSIDE_MIN_HEIGHT = 60;
 
 interface ShownZone extends DropZone {
   readonly box: HTMLElement;
@@ -151,13 +151,11 @@ export class FileDropOverlay implements IDisposable {
 
   private show(): void {
     this.shown = true;
-    this.zones = this.describe().flatMap((spec) => {
-      const rect = spec.element.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) {
-        return [];
-      }
-      return [{ action: spec.action, rect: toZoneRect(rect), box: this.box(spec, rect) }];
-    });
+    this.zones = this.describe().flatMap((spec) =>
+      spec.rect.right > spec.rect.left && spec.rect.bottom > spec.rect.top
+        ? [{ action: spec.action, rect: spec.rect, box: this.box(spec) }]
+        : [],
+    );
     this.root.replaceChildren(...this.zones.map((zone) => zone.box));
     this.root.hidden = false;
   }
@@ -173,13 +171,19 @@ export class FileDropOverlay implements IDisposable {
   }
 
   /** A place's box: over pages it takes their drag events, except the conversation's, which takes the drop. */
-  private box(spec: ZoneSpec, rect: DOMRect): HTMLElement {
+  private box(spec: ZoneSpec): HTMLElement {
+    const { rect } = spec;
     const box = document.createElement('div');
-    box.className = `file-drop-zone${spec.action === 'attach' ? ' passes' : ''}`;
+    box.className = `file-drop-zone${spec.action === 'attach' ? ' passes' : ''}${spec.strip ? ' strip' : ''}`;
     box.dataset.action = spec.action;
-    Object.assign(box.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` });
+    Object.assign(box.style, {
+      left: `${rect.left}px`,
+      top: `${rect.top}px`,
+      width: `${rect.right - rect.left}px`,
+      height: `${rect.bottom - rect.top}px`,
+    });
     const label = document.createElement('div');
-    label.className = `file-drop-label${rect.height < LABEL_INSIDE_MIN_HEIGHT ? ' below' : ''}`;
+    label.className = 'file-drop-label';
     const title = document.createElement('div');
     title.className = 'file-drop-title';
     title.textContent = spec.title;
@@ -199,6 +203,8 @@ function hasFiles(event: DragEvent): boolean {
   return event.dataTransfer?.types.includes('Files') === true;
 }
 
-function toZoneRect(rect: DOMRect): ZoneRect {
-  return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+/** Where an element is in the window. */
+export function rectOf(element: HTMLElement): ZoneRect {
+  const { left, top, right, bottom } = element.getBoundingClientRect();
+  return { left, top, right, bottom };
 }

@@ -143,9 +143,9 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 
 从资源管理器把文件拖进窗口，松手的地方决定做什么（`features/fileDrop`）：
 
-- **分区**：侧栏会话列表和标题栏搜索框 = 在对话里引用；对话区 = 作为附件加到消息里（插件自己收）；内容面板 = 在编辑器中打开（收起时没有这个区）。标题栏别的地方、标签页那一行不收。
-- **遮罩**（`overlay.ts`）：拖着文件进来时整个窗口压一层 `widget.shadow`，每个区中间一个标签写松手会做什么（搜索框太矮，标签放在它下面），鼠标所在的区用 `editorGroup.dropBackground` 亮起来，标签是 VS Code 拖进编辑器时那个提示的颜色（`editorGroup.dropIntoPrompt*`）。
-- **iframe 的问题**：插件页面在 iframe 里，拖到它上面时拖动事件只到 iframe。每个页面的引导脚本察觉到拖着文件（`dataTransfer.types` 有 `Files`）就报给壳（`fileDrag`：`over` 带位置、离开整个页面时 `leave`、松手 `drop`），壳马上盖上遮罩。侧栏和内容面板上的区接鼠标事件，盖上以后拖动就转到壳的页面，松手时壳拿到文件（`webUtils.getPathForFile` 取路径）。对话区上的区不接鼠标事件（`pointer-events: none`），文件直接落进插件页面，插件照原样收成附件；页面报的位置让壳把这个区亮起来。
+- **分区**：侧栏会话列表 = 在对话里引用；对话区 = 作为附件上传至消息中（插件自己收）；内容面板 = 在编辑器中打开，内容面板收起时从对话区右边割一条做这个（`zones.ts` 的 `splitOpenStrip`：窗口宽度的 20%，至少 160px，最多对话区的 40%，左边一条 1px 的线）。标题栏（搜索框也是）、标签页那一行不收。
+- **遮罩**（`overlay.ts`）：拖着文件进来时整个窗口压一层 `widget.shadow`，每个区中间一个标签写松手会做什么，鼠标所在的区用 `editorGroup.dropBackground` 亮起来，标签是 VS Code 拖进编辑器时那个提示的颜色（`editorGroup.dropIntoPrompt*`）。各区的位置在拖动开始时按元素算好（`ZoneSpec.rect`）。
+- **iframe 的问题**：插件页面在 iframe 里，拖到它上面时拖动事件只到 iframe。每个页面的引导脚本察觉到拖着文件（`dataTransfer.types` 有 `Files`）就报给壳（`fileDrag`：`over` 带位置、离开整个页面时 `leave`、松手 `drop`），壳马上盖上遮罩。侧栏、内容面板和对话区右边那条上的区接鼠标事件，盖上以后拖动就转到壳的页面，松手时壳拿到文件（`webUtils.getPathForFile` 取路径）。对话区上的区不接鼠标事件（`pointer-events: none`），文件直接落进插件页面，插件照原样收成附件；页面报的位置让壳把这个区亮起来。
 - **什么时候收起**：壳的页面（按 dragenter / dragleave 计数）和所有插件页面都离开了（等 100ms，换元素、换页面时先离开后进入），或者松手了，或者鼠标又动了（拖动中不会有鼠标事件，所以取消以后第一次移动就收；插件页面里的移动由页面脚本报 `end`）。
 - **引用**：路径交给主进程（`files.placeInWorkspace`，`host/main/attachments.ts`）：工作区里的原样用，工作区外的复制进工作区的附件文件夹（设置 `vilaus.conversations.attachmentsFolder`，默认 `attachments`，没有就建；指到工作区外就用默认的），同名的加 " (1)"，文件夹整个复制。然后渲染进程经插件进程让 bridge 给对话页发插件的 `insert_at_mention`（`conversation.insertMention`，每个文件一次），页面插入 `@相对路径`（`/` 分隔，有空格就加引号），跟插件自己的"插入 @提及"一样变成小块。没有打开的对话就新开一个，引用填进它的输入框（`conversation.open` 带 prompt）。
 - **测试**：CDP 的 `Input.dispatchDragEvent` 能拖真实文件，走的是跟系统拖放一样的路，但一次拖动只会发给开始时所在的页面，中途不会像真实拖放那样换到另一个页面；界面测试因此每次都从松手的那个页面开始拖。CDP 的取消也不给页面发 dragleave。

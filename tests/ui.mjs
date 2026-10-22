@@ -3356,7 +3356,7 @@ await step(
 );
 
 await step(
-  'files dropped onto the window: the session list and the search box mention them in the conversation (copied into the workspace when outside it), the conversation attaches them, the content pane opens them; while dragged, the window shows which does what',
+  "files dropped onto the window: the session list mentions them in the conversation (copied into the workspace when outside it), the conversation attaches them, the content pane (hidden: a strip at the conversation's right) opens them, the title bar takes none; while dragged, the window shows which does what",
   async () => {
     // An instance of its own, on a short session; files outside its workspace and one inside.
     const own = path.join(runDir, 'file-drop');
@@ -3458,19 +3458,15 @@ await step(
       const titleBar = [20, 20];
       const attachments = path.join(ownWorkspace, 'attachments');
 
-      // Onto the search box: copied into the workspace and mentioned.
-      let shown = await drag([notes], [titleBar, await center('#titlebar-center')]);
-      if (shown !== 'mention mention* attach') throw new Error(`over the search box the window shows ${shown}`);
+      // Onto the session list: copied into the workspace and mentioned.
+      let shown = await drag([notes], [titleBar, await center('#sidebar')]);
+      if (shown !== 'mention* attach open') throw new Error(`over the session list the window shows ${shown}`);
       await waitFor(async () => (await input.innerText()).includes('@attachments/notes.txt'), 5000, 'the mention in the input');
       if (readFileSync(path.join(attachments, 'notes.txt'), 'utf8') !== 'notes\n') throw new Error('the copy differs');
       if ((await overlay()) !== '') throw new Error('the window still shows the places after the drop');
 
-      // Onto the session list: a file again (a free name), a folder (whole), a file of the workspace (not copied).
-      shown = await drag(
-        [notes, path.join(outside, 'folder'), path.join(ownWorkspace, 'inside.txt')],
-        [titleBar, await center('#sidebar')],
-      );
-      if (shown !== 'mention* mention attach') throw new Error(`over the session list the window shows ${shown}`);
+      // Again: a file (a free name), a folder (whole), a file of the workspace (not copied).
+      await drag([notes, path.join(outside, 'folder'), path.join(ownWorkspace, 'inside.txt')], [titleBar, await center('#sidebar')]);
       await waitFor(async () => (await input.innerText()).includes('@inside.txt'), 5000, 'the three mentions');
       const mentioned = await input.innerText();
       for (const expected of ['attachments/notes (1).txt', '@attachments/folder', '@inside.txt'])
@@ -3478,9 +3474,18 @@ await step(
       if (!existsSync(path.join(attachments, 'folder', 'inner.txt'))) throw new Error('the folder was not copied whole');
       if (existsSync(path.join(attachments, 'inside.txt'))) throw new Error('a file of the workspace was copied');
 
+      // The title bar (its search box too) takes nothing.
+      shown = await drag([notes], [titleBar, await center('#titlebar-center')]);
+      if (shown !== 'mention attach open') throw new Error(`over the search box the window shows ${shown}`);
+      await otherPage.waitForTimeout(500);
+      if (readdirSync(attachments).length !== 3)
+        throw new Error(`a drop on the search box did something: ${readdirSync(attachments).join(', ')}`);
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: titleBar[0] + 30, y: titleBar[1] });
+
       // Onto the conversation: the page attaches it, the shell lets it through.
       await input.fill('');
-      const [cx, cy] = await center('#main');
+      const conversationBox = await otherPage.locator('#main').boundingBox();
+      const [cx, cy] = [conversationBox.x + conversationBox.width / 3, conversationBox.y + conversationBox.height / 2];
       shown = await drag(
         [notes],
         [
@@ -3488,20 +3493,22 @@ await step(
           [cx + 10, cy - 100],
         ],
       );
-      if (shown !== 'mention mention attach*') throw new Error(`over the conversation the window shows ${shown}`);
+      if (shown !== 'mention attach* open') throw new Error(`over the conversation the window shows ${shown}`);
       await waitFor(async () => (await conversation.locator('form').innerText()).includes('notes.txt'), 5000, 'the attachment');
       await waitFor(async () => (await overlay()) === '', 5000, 'the places gone after the drop on the page');
 
-      // Onto the content pane: opened in the editor.
-      await otherPage.locator('.icon-content-pane').click();
+      // The content pane hidden: a strip at the conversation's right opens it in the editor.
+      if (await otherPage.locator('#content-pane').isVisible()) throw new Error('the content pane shows already');
+      shown = await drag([notes], [titleBar, [conversationBox.x + conversationBox.width - 40, cy]]);
+      if (shown !== 'mention attach open*') throw new Error(`over the conversation's right edge the window shows ${shown}`);
+      const tab = (name) => otherPage.locator('#content-pane .content-tab', { hasText: name });
+      await waitFor(async () => (await tab('notes.txt').count()) === 1, 10_000, 'the tab');
+
+      // The content pane shown: it opens them.
       await waitFor(() => otherPage.locator('#content-pane').isVisible(), 5000, 'the content pane');
-      shown = await drag([notes], [titleBar, await center('#content-pane')]);
-      if (shown !== 'mention mention attach open*') throw new Error(`over the content pane the window shows ${shown}`);
-      await waitFor(
-        async () => (await otherPage.locator('#content-pane .content-tab', { hasText: 'notes.txt' }).count()) === 1,
-        10_000,
-        'the tab',
-      );
+      shown = await drag([path.join(ownWorkspace, 'inside.txt')], [titleBar, await center('#content-pane')]);
+      if (shown !== 'mention attach open*') throw new Error(`over the content pane the window shows ${shown}`);
+      await waitFor(async () => (await tab('inside.txt').count()) === 1, 10_000, 'the second tab');
 
       // A cancelled drag: the places go once the mouse moves again, over the shell's page or the
       // conversation's. (A real cancel also leaves the pages, which takes them away at once; the
@@ -3516,17 +3523,18 @@ await step(
         await waitFor(async () => (await overlay()) === '', 5000, `the places gone after the cancel over ${label}`);
       }
 
-      // The folder copies go to is a setting; the places say which it is.
+      // The folder copies go to is a setting; the session list's label names it.
       writeFileSync(ownSettings, JSON.stringify({ ...baseSettings, 'vilaus.conversations.attachmentsFolder': 'inbox' }), 'utf8');
       await waitFor(
         async () => {
-          await drag([notes], [titleBar, await center('#titlebar-center')], 'dragCancel');
-          return lastDetails.includes('copied to inbox');
+          await drag([notes], [titleBar, await center('#sidebar')], 'dragCancel');
+          await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: titleBar[0] + 30, y: titleBar[1] });
+          return lastDetails.includes('workspace/inbox');
         },
         5000,
-        'the places to name the new folder',
+        'the label to name the new folder',
       );
-      await drag([notes], [titleBar, await center('#titlebar-center')]);
+      await drag([notes], [titleBar, await center('#sidebar')]);
       await waitFor(() => existsSync(path.join(ownWorkspace, 'inbox', 'notes.txt')), 5000, 'the copy in the new folder');
       return `copies: ${readdirSync(attachments).join(', ')}; inbox/notes.txt`;
     } finally {

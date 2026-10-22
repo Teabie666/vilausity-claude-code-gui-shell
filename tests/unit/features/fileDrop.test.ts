@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mentionText, zoneAt, type DropZone } from '../../../src/features/fileDrop/zones';
+import { mentionText, splitOpenStrip, zoneAt, type DropZone } from '../../../src/features/fileDrop/zones';
 
 describe('zoneAt', () => {
   const zones: DropZone[] = [
@@ -19,6 +19,23 @@ describe('zoneAt', () => {
   test('finds none outside them (the title bar)', () => {
     assert.equal(zoneAt(zones, 500, 10), undefined);
     assert.equal(zoneAt(zones, 1400, 100), undefined);
+  });
+});
+
+describe('splitOpenStrip', () => {
+  const main = { left: 280, top: 35, right: 1280, bottom: 800 };
+
+  test("cuts a fifth of the window's width from the conversation's right", () => {
+    assert.deepEqual(splitOpenStrip(main, 1280), {
+      attach: { left: 280, top: 35, right: 1024, bottom: 800 },
+      open: { left: 1024, top: 35, right: 1280, bottom: 800 },
+    });
+  });
+
+  test('takes at least 160 px, and at most 40 % of the conversation', () => {
+    assert.equal(splitOpenStrip(main, 600).open.left, 1280 - 160);
+    const narrow = { left: 280, top: 35, right: 680, bottom: 800 };
+    assert.equal(splitOpenStrip(narrow, 1920).open.left, 680 - 160);
   });
 });
 

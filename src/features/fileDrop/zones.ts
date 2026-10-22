@@ -19,6 +19,21 @@ export interface DropZone {
   readonly rect: ZoneRect;
 }
 
+/** While the content pane is hidden, the strip at the conversation's right that opens files takes this share of the window's width... */
+const OPEN_STRIP_SHARE = 0.2;
+/** ...but at least this much (px)... */
+const OPEN_STRIP_MIN = 160;
+/** ...and at most this share of the conversation's width. */
+const OPEN_STRIP_MAX_SHARE = 0.4;
+
+/** The conversation's area split into what attaches files and, at its right, a strip that opens them. */
+export function splitOpenStrip(main: ZoneRect, windowWidth: number): { attach: ZoneRect; open: ZoneRect } {
+  const mainWidth = main.right - main.left;
+  const width = Math.round(Math.min(mainWidth * OPEN_STRIP_MAX_SHARE, Math.max(OPEN_STRIP_MIN, windowWidth * OPEN_STRIP_SHARE)));
+  const edge = main.right - width;
+  return { attach: { ...main, right: edge }, open: { ...main, left: edge } };
+}
+
 /** The zone at a point of the window, if any. */
 export function zoneAt<T extends DropZone>(zones: readonly T[], x: number, y: number): T | undefined {
   return zones.find(({ rect }) => x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom);

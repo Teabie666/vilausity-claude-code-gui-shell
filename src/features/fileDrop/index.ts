@@ -1,10 +1,10 @@
 /**
- * Files dropped onto the window go where they are dropped: onto the session list or the search
- * box, they are mentioned in the conversation (`@path` in its input; files from outside the
- * workspace are copied into it first, host/main/attachments.ts); onto the conversation, they
- * are attached to the message (the extension's page takes them); onto the content pane, they
- * open in the editor. While they are dragged, the window shows which place does what
- * (overlay.ts).
+ * Files dropped onto the window go where they are dropped: onto the session list, they are
+ * mentioned in the conversation (`@path` in its input; files from outside the workspace are
+ * copied into it first, host/main/attachments.ts); onto the conversation, they are attached to
+ * the message (the extension's page takes them); onto the content pane, or a strip at the
+ * conversation's right while the pane is hidden, they open in the editor. While they are
+ * dragged, the window shows which place does what (overlay.ts).
  */
 
 import { URI } from 'vscode-uri';
@@ -14,8 +14,8 @@ import { IDialogs, IExtensionHost, ILayout, INative, ISettings, IWebviewFrames, 
 import { pathInFolder } from '../../platform/fileLinks';
 import { IConversations } from '../conversations';
 import { t } from './messages';
-import { FileDropOverlay, type ZoneSpec } from './overlay';
-import { mentionText, type DropAction } from './zones';
+import { FileDropOverlay, rectOf, type ZoneSpec } from './overlay';
+import { mentionText, splitOpenStrip, type DropAction } from './zones';
 
 /** Where files from outside the workspace are copied (in the workspace) to be mentioned. */
 const ATTACHMENTS_FOLDER = 'vilaus.conversations.attachmentsFolder';
@@ -46,20 +46,24 @@ export const fileDropModule: ShellModule = {
     const attachmentsFolder = (): string => settings.get(ATTACHMENTS_FOLDER, ATTACHMENTS_DEFAULT).trim() || ATTACHMENTS_DEFAULT;
 
     const zones = (): ZoneSpec[] => {
-      const mention = { action: 'mention', title: t('mention'), detail: t('mentionDetail', attachmentsFolder()) } as const;
       const specs: ZoneSpec[] = [];
       if (folder && layout.sidebarVisible) {
-        specs.push({ ...mention, element: layout.sidebar });
+        specs.push({
+          action: 'mention',
+          rect: rectOf(layout.sidebar),
+          title: t('mention'),
+          detail: t('mentionDetail', attachmentsFolder()),
+        });
       }
-      if (folder) {
-        specs.push({ ...mention, element: layout.titleBarCenter });
-      }
+      // With the content pane hidden, a strip at the conversation's right opens files.
+      const main = rectOf(layout.main);
+      const { attach, open } = layout.contentPaneVisible
+        ? { attach: main, open: rectOf(layout.contentPane) }
+        : splitOpenStrip(main, window.innerWidth);
       if (conversations.active) {
-        specs.push({ action: 'attach', element: layout.main, title: t('attach') });
+        specs.push({ action: 'attach', rect: attach, title: t('attach') });
       }
-      if (layout.contentPaneVisible) {
-        specs.push({ action: 'open', element: layout.contentPane, title: t('open') });
-      }
+      specs.push({ action: 'open', rect: open, title: t('open'), strip: !layout.contentPaneVisible && conversations.active !== undefined });
       return specs;
     };
 
