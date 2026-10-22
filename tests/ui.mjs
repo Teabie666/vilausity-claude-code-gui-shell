@@ -477,16 +477,26 @@ await step('right-click in a conversation offers the extension menu; Rename Sess
       throw new Error(`menu was: ${labels.join(' | ')}`);
     }
 
-    await clickRecordedMenuItem('Rename Session Tab');
-    const outcome = await waitFor(
-      async () => {
-        if (await page.locator('.quick-input-filter').count()) return 'input box';
-        const toast = page.locator('.toast-message');
-        return (await toast.count()) ? `message "${await toast.first().innerText()}"` : undefined;
-      },
-      10_000,
-      'the rename command to answer',
-    );
+    // Right after the window opens the extension may not know the tab as its session's yet (it
+    // says "No active Claude Code session tab"): a faster build gets here sooner. Ask again then.
+    const deadline = Date.now() + 20_000;
+    let outcome;
+    for (;;) {
+      await clickRecordedMenuItem('Rename Session Tab');
+      outcome = await waitFor(
+        async () => {
+          if (await page.locator('.quick-input-filter').count()) return 'input box';
+          const toast = page.locator('.toast-message');
+          return (await toast.count()) ? `message "${await toast.first().innerText()}"` : undefined;
+        },
+        10_000,
+        'the rename command to answer',
+      );
+      if (outcome === 'input box' || !outcome.includes('No active') || Date.now() > deadline) break;
+      await page.locator('.toast-close').first().click();
+      await page.waitForTimeout(1000);
+      await openContextMenu(activeConversation());
+    }
     if (outcome === 'input box') {
       // The extension's validateInput refuses an empty name; the shell asks again with its message.
       await page.locator('.quick-input-filter').fill('');
