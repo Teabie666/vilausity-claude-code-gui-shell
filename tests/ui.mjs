@@ -3142,6 +3142,219 @@ await step(
   },
 );
 
+await step(
+  "the conversation's own text: a selection in Claude's reply, its thinking or your message offers Comment (Ctrl+Alt+M too); the text stays highlighted; its source scrolls there and flashes it; a click into the page closes an untouched form",
+  async () => {
+    // An instance of its own, on a session of 6 turns, each with thinking and a reply.
+    const own = path.join(runDir, 'conversation-comments');
+    const ownData = path.join(own, 'data');
+    const ownWorkspace = path.join(own, 'workspace');
+    const claudeDir = path.join(own, 'claude');
+    const project = path.join(claudeDir, 'projects', ownWorkspace.replace(/[^a-zA-Z0-9]/g, '-'));
+    for (const folder of [ownData, ownWorkspace, project]) mkdirSync(folder, { recursive: true });
+    const sessionId = 'e5e5e5e5-0000-4000-8000-000000000001';
+    const paragraphs = (count, words) =>
+      Array.from({ length: count }, (_, i) => `${words} line ${i + 1} of the paragraph, with some more words to wrap.`).join('\n\n');
+    const entries = [];
+    for (let turn = 1; turn <= 6; turn++) {
+      const common = { sessionId, cwd: ownWorkspace, timestamp: new Date().toISOString() };
+      entries.push({
+        ...common,
+        type: 'user',
+        uuid: `u${turn}`,
+        parentUuid: turn === 1 ? null : `a${turn - 1}`,
+        message: { role: 'user', content: `Question ${turn}: tell me about topic ${turn}` },
+      });
+      entries.push({
+        ...common,
+        type: 'assistant',
+        uuid: `a${turn}`,
+        parentUuid: `u${turn}`,
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: paragraphs(3, `Thinking ${turn}`), signature: 'x' },
+            { type: 'text', text: paragraphs(5, `Answer ${turn}`) },
+          ],
+        },
+      });
+    }
+    entries.push({ type: 'ai-title', aiTitle: 'Commented session', sessionId });
+    writeFileSync(path.join(project, `${sessionId}.jsonl`), entries.map((entry) => JSON.stringify(entry)).join('\n'), 'utf8');
+    writeFileSync(
+      path.join(ownData, 'settings.json'),
+      JSON.stringify({
+        'claudeCode.hideOnboarding': true,
+        'claudeCode.disableLoginPrompt': true,
+        'vilaus.language': 'en',
+        'vilaus.extension.autoUpdate': false,
+      }),
+      'utf8',
+    );
+    const other = await electron.launch({
+      executablePath: executable,
+      args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display', '--session', sessionId),
+      cwd: root,
+      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      timeout: 60_000,
+    });
+    try {
+      const otherPage = await other.firstWindow();
+      const conversation = await waitFor(
+        async () => {
+          for (const frame of otherPage.frames()) {
+            if (
+              frame.url().startsWith('ccw://wv') &&
+              (await frame
+                .locator('summary')
+                .count()
+                .catch(() => 0)) === 6
+            )
+              return frame;
+          }
+          return undefined;
+        },
+        30_000,
+        'the conversation',
+      );
+      // Selects `text` in the `index`th element `selector` matches, in view, and ends the selection
+      // as the mouse does (Playwright's drags in the page select only now and then).
+      const select = (selector, index, text) =>
+        conversation.evaluate(
+          ([selector, index, text]) => {
+            const walker = document.createTreeWalker(document.querySelectorAll(selector)[index], NodeFilter.SHOW_TEXT);
+            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+              const at = node.data.indexOf(text);
+              if (at >= 0) {
+                node.parentElement.scrollIntoView({ block: 'center' });
+                const range = document.createRange();
+                range.setStart(node, at);
+                range.setEnd(node, at + text.length);
+                getSelection().removeAllRanges();
+                getSelection().addRange(range);
+                window.dispatchEvent(new MouseEvent('mouseup', { button: 0 }));
+                return;
+              }
+            }
+            throw new Error(`no "${text}" in ${selector}`);
+          },
+          [selector, index, text],
+        );
+      const button = conversation.locator('.vilaus-comment-button');
+      const form = otherPage.locator('.comment-form-overlay .comment-form');
+      const formSource = async () => {
+        await form.waitFor({ timeout: 5000 });
+        return form.locator('.comment-form-source').innerText();
+      };
+      const submit = async (text) => {
+        await form.locator('.comment-form-input').fill(text);
+        await form.locator('.comment-form-input').press('Enter');
+        await waitFor(async () => (await form.count()) === 0, 5000, 'the form to close');
+      };
+      const blocks = conversation.locator('.vilaus-comments .vilaus-comment');
+      const highlighted = () =>
+        conversation.evaluate(() =>
+          [...(CSS.highlights.get('vilaus-comment') ?? [])]
+            .map((range) => (range instanceof Range ? range.toString() : ''))
+            .sort()
+            .join(' | '),
+        );
+
+      // Claude's reply, by the Comment button. The page shows the messages a moment after they are
+      // there (extension 2.1.306 holds them for its plugins), and a selection's text is what it shows.
+      await waitFor(
+        () =>
+          conversation.evaluate(() =>
+            [...document.querySelectorAll('[data-transcript-message]')].every(
+              (message) => getComputedStyle(message).visibility === 'visible',
+            ),
+          ),
+        10_000,
+        'the messages shown',
+      );
+      await select('[data-bookmark-uuid="a2"]', 0, 'Answer 2 line 3');
+      await waitFor(() => button.isVisible(), 5000, 'the Comment button');
+      await button.click();
+      if ((await formSource()) !== "Claude's reply") throw new Error(`the form says ${await formSource()}`);
+      await submit('Why line 3?');
+      await waitFor(async () => (await blocks.count()) === 1, 5000, 'a block');
+      await waitFor(async () => (await highlighted()) === 'Answer 2 line 3', 5000, 'the reply highlighted');
+
+      // The user's message, by Ctrl+Alt+M with the focus in the page.
+      await conversation.locator('[class*="messagesContainer_"]').focus();
+      await select('[class*="userMessage_"]', 2, 'topic 3');
+      await other.evaluate(({ BrowserWindow }) => {
+        const contents = BrowserWindow.getAllWindows()[0].webContents;
+        contents.sendInputEvent({ type: 'keyDown', keyCode: 'M', modifiers: ['control', 'alt'] });
+        contents.sendInputEvent({ type: 'keyUp', keyCode: 'M', modifiers: ['control', 'alt'] });
+      });
+      if ((await formSource()) !== 'Your message') throw new Error(`the form says ${await formSource()}`);
+      await submit('I meant topic 4.');
+
+      // Thinking, open, by the button; then closed again.
+      await conversation.locator('summary').nth(3).click();
+      await waitFor(async () => (await conversation.locator('details[open]').count()) === 6, 5000, 'the thinking open');
+      await select('[class*="thinkingContent_"]', 3, 'Thinking 4 line 2');
+      await waitFor(() => button.isVisible(), 5000, 'the Comment button');
+      await button.click();
+      if ((await formSource()) !== "Claude's thinking") throw new Error(`the form says ${await formSource()}`);
+      await submit('Good point.');
+      await conversation.locator('summary').nth(3).click();
+      await waitFor(async () => (await conversation.locator('details[open]').count()) === 0, 5000, 'the thinking closed');
+      // The clicked summary is kept in place for 1.5 s, against scrolling done by a script too.
+      await otherPage.waitForTimeout(1600);
+      const all = 'Answer 2 line 3 | Thinking 4 line 2 | topic 3';
+      await waitFor(async () => (await highlighted()) === all, 5000, 'the three texts highlighted');
+
+      // A source scrolls to its text and flashes it; closed thinking opens first.
+      const scroller = '[class*="messagesContainer_"]';
+      const toBottom = () => conversation.evaluate((scroller) => (document.querySelector(scroller).scrollTop = 1e6), scroller);
+      const inView = (text) =>
+        conversation.evaluate(
+          ([scroller, text]) => {
+            const range = [...(CSS.highlights.get('vilaus-comment') ?? [])].find(
+              (candidate) => candidate instanceof Range && candidate.toString() === text,
+            );
+            const shown = range?.getBoundingClientRect();
+            const view = document.querySelector(scroller).getBoundingClientRect();
+            return shown !== undefined && shown.height > 0 && shown.top >= view.top && shown.bottom <= view.bottom;
+          },
+          [scroller, text],
+        );
+      const flashed = () => conversation.evaluate(() => [...(CSS.highlights.get('vilaus-comment-flash') ?? [])].map(String).join());
+      const source = (label) => blocks.locator('.vilaus-comment-source', { hasText: label });
+      await toBottom();
+      await otherPage.waitForTimeout(300);
+      if (await inView('Answer 2 line 3')) throw new Error('the reply is in view at the bottom already');
+      if ((await source("Claude's reply").getAttribute('title')) !== 'Show in the conversation')
+        throw new Error('the source has no tooltip');
+      await source("Claude's reply").click();
+      await waitFor(async () => (await flashed()) === 'Answer 2 line 3', 1000, 'the reply flashed');
+      await waitFor(() => inView('Answer 2 line 3'), 5000, 'the reply in view');
+      await toBottom();
+      await otherPage.waitForTimeout(300);
+      await source("Claude's thinking").click();
+      await waitFor(async () => (await conversation.locator('details[open]').count()) === 6, 5000, 'the thinking opened');
+      await waitFor(() => inView('Thinking 4 line 2'), 5000, 'the thinking in view');
+
+      // A click into the page closes the form while nothing is typed in it.
+      await select('[data-bookmark-uuid="a5"]', 0, 'Answer 5 line 1');
+      await waitFor(() => button.isVisible(), 5000, 'the Comment button');
+      await button.click();
+      await form.waitFor({ timeout: 5000 });
+      await conversation.locator('[data-bookmark-uuid="a5"] p', { hasText: 'Answer 5 line 2' }).click();
+      await waitFor(async () => (await form.count()) === 0, 5000, 'the form closed by the click');
+
+      // Clearing the comments takes the highlights away.
+      await conversation.locator('.vilaus-comments [data-action="clear"]').click();
+      await waitFor(async () => (await blocks.count()) === 0 && (await highlighted()) === '', 5000, 'no comments, no highlights');
+      return all;
+    } finally {
+      await other.close();
+    }
+  },
+);
+
 await step('administrator instance: runs next to the normal one, says so, and reads the API keys the normal one stored', async () => {
   const stored = readJson(path.join(dataDir, 'providers.json'))?.keys?.mock;
   if (!stored) throw new Error('the normal instance stored no key');

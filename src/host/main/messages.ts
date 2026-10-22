@@ -9,6 +9,8 @@ export const t = defineMessages('main', {
   resetsAt: 'Resets {0}',
   /** On the session list's filter button while sessions wait for the user (like the page's "Active · 3"). */
   needsInput: 'Needs input · {0}',
+  /** The button by text selected in a conversation (like the one by a selection in the editor). */
+  comment: 'Comment',
   /** The session list's usage block, in place of the extension's "Account & usage" ({0}: the API provider). */
   usageTitle: 'Usage · {0}',
   usageTooltip:

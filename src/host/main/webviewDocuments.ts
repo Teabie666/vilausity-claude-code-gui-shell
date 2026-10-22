@@ -69,11 +69,12 @@ export class WebviewDocumentStore {
       translations: document.hints?.untranslated !== undefined ? this.getTranslations() : undefined,
       fontFaces: this.fontFaces || undefined,
       labels:
-        document.hints?.sessionRows || document.hints?.usageBars || document.hints?.statusFilter
+        document.hints?.sessionRows || document.hints?.usageBars || document.hints?.statusFilter || document.hints?.conversationComments
           ? {
               deleteSession: t('deleteSession'),
               resetsAt: t('resetsAt'),
               needsInput: t('needsInput'),
+              comment: t('comment'),
               locale: htmlLang(getUiLanguage()),
             }
           : undefined,

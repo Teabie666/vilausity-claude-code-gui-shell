@@ -6,9 +6,9 @@ import { CommentStore, formatComments } from '../../../src/host/exthost/comments
 import { NullLogger } from '../../../src/platform/log';
 import { CHAT_PANEL_VIEW_TYPE, type WebviewImpl } from '../../../src/compat/vscode/webviews';
 import type { OsBackend } from '../../../src/compat/vscode/host';
-import type { CommentDto } from '../../../src/platform/protocol';
+import type { FileCommentDto } from '../../../src/platform/protocol';
 
-function comment(id: string, overrides: Partial<CommentDto> = {}): CommentDto {
+function comment(id: string, overrides: Partial<FileCommentDto> = {}): FileCommentDto {
   return {
     id,
     quote: `quote ${id}`,

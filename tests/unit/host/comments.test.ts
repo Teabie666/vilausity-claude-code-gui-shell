@@ -11,9 +11,9 @@ import {
   type CommentPanels,
 } from '../../../src/host/exthost/comments';
 import { Emitter, Event } from '../../../src/platform/event';
-import type { CommentDto } from '../../../src/platform/protocol';
+import type { ConversationCommentDto, ConversationPlaceDto, FileCommentDto } from '../../../src/platform/protocol';
 
-function comment(id: string, overrides: Partial<CommentDto> = {}): CommentDto {
+function comment(id: string, overrides: Partial<FileCommentDto> = {}): FileCommentDto {
   return {
     id,
     quote: `quote ${id}`,
@@ -234,6 +234,30 @@ describe('formatComments', () => {
   test('cuts a quote longer than 200 characters to 200 with an ellipsis', () => {
     const c = comment('c1', { quote: 'x'.repeat(250) });
     assert.equal(formatComments([c], ['C:\\work\\proj']), `Comments on selected text:\n\n[Re: "${'x'.repeat(199)}…" — c1.ts:1] note c1`);
+  });
+
+  test("says whose words commented text of the conversation is, in the user's words, among file comments", () => {
+    const said = (id: string, role: ConversationPlaceDto['role'], quote: string, text: string): ConversationCommentDto => ({
+      kind: 'conversation',
+      id,
+      quote,
+      text,
+      place: { role, uuid: role === 'user' ? undefined : `uuid-${id}`, turn: 1, offset: 0 },
+    });
+    const comments = [
+      said('c1', 'reply', 'Apples are\nred', 'Not all of them.'),
+      comment('c2', { quote: 'const a', path: 'C:\\work\\proj\\a.ts' }),
+      said('c3', 'thinking', 'check the tests', 'Yes, do.'),
+      said('c4', 'user', 'topic 3', 'I meant topic 4.'),
+    ];
+    assert.equal(
+      formatComments(comments, ['C:\\work\\proj']),
+      'Comments on selected text:\n\n' +
+        '[Re: "Apples are red" — your earlier reply] Not all of them.\n\n' +
+        '[Re: "const a" — a.ts:1] note c2\n\n' +
+        '[Re: "check the tests" — your earlier thinking] Yes, do.\n\n' +
+        '[Re: "topic 3" — my earlier message] I meant topic 4.',
+    );
   });
 });
 

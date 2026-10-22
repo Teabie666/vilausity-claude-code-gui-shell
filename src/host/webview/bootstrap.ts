@@ -6,6 +6,7 @@
  */
 
 import type {
+  ConversationQuoteDto,
   KeyEventDto,
   ProviderNoticeDto,
   SessionProvidersDto,
@@ -16,6 +17,7 @@ import type {
   WebviewToShellMessage,
 } from '../../platform/protocol';
 import { CommentsHost } from './comments';
+import { ConversationQuotes } from './conversationQuotes';
 import { DEFAULT_WEBVIEW_STYLES } from './defaultStyles';
 import { FileLinks } from './fileLinks';
 import { InPageFinder } from './find';
@@ -112,6 +114,18 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
   // Pages that have a place for comment blocks (a conversation's input) say where it is.
   const anchor = data.hints?.commentsAnchor;
   const comments = anchor ? new CommentsHost(anchor, (event) => post({ kind: 'comments', event })) : undefined;
+  // A conversation's own text can be commented on; the commented text may come before the body.
+  const quoteHints = data.hints?.conversationComments;
+  let quotes: ConversationQuotes | undefined;
+  let pendingQuotes: readonly ConversationQuoteDto[] = [];
+  if (quoteHints && labels) {
+    onDomReady(() => {
+      quotes = new ConversationQuotes(quoteHints, labels.comment, (selection, id) =>
+        post({ kind: 'comments', event: { type: 'selection', selection, id } }),
+      );
+      quotes.setQuotes(pendingQuotes);
+    });
+  }
   // Pages whose content the bridge knows can show the extension's UI text translated.
   const untranslated = data.hints?.untranslated;
   const translator = untranslated !== undefined ? new PageTranslator(untranslated) : undefined;
@@ -217,8 +231,20 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
         case 'comments': {
           const view = control.view;
           onDomReady(() => comments?.update(view));
+          pendingQuotes = view?.quotes ?? [];
+          quotes?.setQuotes(pendingQuotes);
           break;
         }
+        case 'commentSelection':
+          if (quotes) {
+            quotes.answer(control.id);
+          } else {
+            post({ kind: 'comments', event: { type: 'selection', selection: null, id: control.id } });
+          }
+          break;
+        case 'revealQuote':
+          quotes?.reveal(control.quote);
+          break;
         case 'translations':
           translator?.set(control.translations ?? undefined);
           break;

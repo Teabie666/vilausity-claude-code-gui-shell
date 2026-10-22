@@ -151,7 +151,9 @@ describe('WebviewDocumentStore', () => {
     assert.ok(
       store
         .render('list')!
-        .includes('"labels":{"deleteSession":"Delete session","resetsAt":"Resets {0}","needsInput":"Needs input · {0}","locale":"en"}'),
+        .includes(
+          '"labels":{"deleteSession":"Delete session","resetsAt":"Resets {0}","needsInput":"Needs input · {0}","comment":"Comment","locale":"en"}',
+        ),
     );
     assert.ok(!store.render('other')!.includes('labels'));
   });

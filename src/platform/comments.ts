@@ -1,6 +1,6 @@
 /** Comment helpers shared by the renderer (labels) and the extension host (messages). */
 
-import type { CommentDto, RangeDto } from './protocol';
+import type { CommentDto, ConversationCommentDto, ConversationPlaceDto, FileCommentDto, RangeDto } from './protocol';
 
 /**
  * The 1-based first and last line of a range. A selection that ends at the very start of a
@@ -36,19 +36,39 @@ function isPosition(value: unknown): value is { line: number; character: number 
   );
 }
 
+const ROLES: readonly unknown[] = ['reply', 'thinking', 'user'] satisfies ConversationPlaceDto['role'][];
+
+function isPlace(value: unknown): value is ConversationPlaceDto {
+  const place = value as Partial<Record<keyof ConversationPlaceDto, unknown>> | null;
+  return (
+    typeof place === 'object' &&
+    place !== null &&
+    ROLES.includes(place.role) &&
+    (place.uuid === undefined || typeof place.uuid === 'string') &&
+    Number.isInteger(place.turn) &&
+    (place.turn as number) >= 0 &&
+    Number.isInteger(place.offset) &&
+    (place.offset as number) >= 0
+  );
+}
+
 /** Whether `value` is a well-formed comment (they cross processes and come back from storage). */
 export function isComment(value: unknown): value is CommentDto {
-  const comment = value as Partial<Record<keyof CommentDto, unknown>> | null;
+  const comment = value as Partial<Record<keyof FileCommentDto | keyof ConversationCommentDto, unknown>> | null;
   if (typeof comment !== 'object' || comment === null) {
     return false;
   }
+  if (typeof comment.id !== 'string' || typeof comment.quote !== 'string' || typeof comment.text !== 'string') {
+    return false;
+  }
+  if (comment.kind === 'conversation') {
+    return isPlace(comment.place);
+  }
   const range = comment.range as { start?: unknown; end?: unknown } | null;
   return (
-    typeof comment.id === 'string' &&
-    typeof comment.quote === 'string' &&
+    (comment.kind === undefined || comment.kind === 'file') &&
     typeof comment.uri === 'string' &&
     typeof comment.path === 'string' &&
-    typeof comment.text === 'string' &&
     typeof range === 'object' &&
     range !== null &&
     isPosition(range.start) &&

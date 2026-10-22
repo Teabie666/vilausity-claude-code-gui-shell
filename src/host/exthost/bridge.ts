@@ -18,6 +18,7 @@ import { CHAT_PANEL_VIEW_TYPE, type WebviewImpl, type WebviewMessageInterceptor 
 import type { OsBackend } from '../../compat/vscode/host';
 import type { ILogger } from '../../platform/log';
 import type {
+  ConversationCommentHints,
   ConversationEscapeHints,
   FileLinkHints,
   MessageMarkerHints,
@@ -142,6 +143,24 @@ const THINKING_SUMMARY = 'details[class*="thinking_"] > summary[class*="thinking
  * with it (`.userMessage_07S1Yg`) and goes on with the replies.
  */
 const MESSAGE_MARKERS: MessageMarkerHints = { turn: '.turn_07S1Yg', userMessage: '.userMessage_07S1Yg' };
+
+/**
+ * A conversation's messages (anthropic.claude-code 2.1.306): each is a `div.message_07S1Yg
+ * [role=article][data-transcript-message]` in its turn. Claude's carry their uuid in
+ * `data-bookmark-uuid`: a reply (Markdown in `span.root_-a7MRw`), a tool call, or the thinking
+ * (`details.thinking_aHyQPQ > summary.thinkingSummary_aHyQPQ + div.thinkingContent_aHyQPQ`;
+ * the content is there while the block is closed), or several of these when one message of the
+ * transcript has them. The user's carries no uuid; its words are in `.userMessage_07S1Yg`, after
+ * a hidden heading and the time.
+ */
+const CONVERSATION_COMMENTS: ConversationCommentHints = {
+  message: '[data-transcript-message]',
+  uuidAttribute: 'data-bookmark-uuid',
+  userText: '.userMessage_07S1Yg',
+  thinking: '[class*="thinkingContent_"]',
+  thinkingToggle: 'details[class*="thinking_"] > summary[class*="thinkingSummary_"]',
+  turn: '.turn_07S1Yg',
+};
 
 /** The session list view and the plan preview panel (anthropic.claude-code 2.1.282). */
 const SESSION_LIST_VIEW_TYPE = 'claudeVSCodeSessionsList';
@@ -1103,6 +1122,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
           fileLinks: FILE_LINKS,
           keepInPlace: THINKING_SUMMARY,
           messageMarkers: MESSAGE_MARKERS,
+          conversationComments: CONVERSATION_COMMENTS,
         };
       case SESSION_LIST_VIEW_TYPE:
         return {

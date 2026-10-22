@@ -1,6 +1,7 @@
 /**
- * Comments on text selected in the content pane. They belong to a conversation's session
- * until the next message the user sends there, which carries them (bridge.ts): closing the
+ * Comments on text selected in the content pane or in the conversation. They belong to a
+ * conversation's session until the next message the user sends there, which carries them
+ * (bridge.ts): closing the
  * conversation keeps them, and they show again wherever the session is opened next. A new
  * conversation's session only counts once it has a transcript (bridge.ts); until then its
  * comments wait on its panel and go to the session after that. The renderer adds, edits and
@@ -15,7 +16,7 @@ import { flattenQuote, isComment, linesLabel } from '../../platform/comments';
 import { Emitter, type Event } from '../../platform/event';
 import type { IDisposable } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
-import type { CommentDto } from '../../platform/protocol';
+import type { CommentDto, ConversationPlaceDto } from '../../platform/protocol';
 import type { RendererRpc } from './compatHost';
 
 /** Opens the block of comments a message carries. */
@@ -287,14 +288,25 @@ export function displayPath(file: string, workspaceFolders: readonly string[]): 
   return file;
 }
 
+/** Where commented text of the conversation is, in the words of the user, who sends the message. */
+const CONVERSATION_PLACES: Readonly<Record<ConversationPlaceDto['role'], string>> = {
+  reply: 'your earlier reply',
+  thinking: 'your earlier thinking',
+  user: 'my earlier message',
+};
+
 /**
  * The text a message carries for its comments, oldest first, one paragraph each, in the
- * extension's plan-comment style with the place added: `[Re: "<quote>" — <file>:<lines>] <comment>`.
+ * extension's plan-comment style with the place added: `[Re: "<quote>" — <file>:<lines>] <comment>`,
+ * or for text of the conversation `[Re: "<quote>" — your earlier reply] <comment>`.
  */
 export function formatComments(comments: readonly CommentDto[], workspaceFolders: readonly string[]): string {
   const paragraphs = comments.map((comment) => {
     const quote = flattenQuote(comment.quote, MESSAGE_QUOTE_LIMIT);
-    const place = `${displayPath(comment.path, workspaceFolders)}:${linesLabel(comment.range)}`;
+    const place =
+      comment.kind === 'conversation'
+        ? CONVERSATION_PLACES[comment.place.role]
+        : `${displayPath(comment.path, workspaceFolders)}:${linesLabel(comment.range)}`;
     return `[Re: "${quote}" — ${place}] ${comment.text.trim()}`;
   });
   return `${COMMENTS_HEADER}\n\n${paragraphs.join('\n\n')}`;

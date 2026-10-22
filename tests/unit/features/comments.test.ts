@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 
 import { basename, COLLAPSE_ABOVE, commentsView, QUOTE_LIMIT, sourceLabel } from '../../../src/features/comments/view';
 import { countLineBreaks, lineMarker, locateLines, plainMarkdownLine } from '../../../src/features/markdown/sourceLines';
-import type { CommentDto, RangeDto } from '../../../src/platform/protocol';
+import type { ConversationCommentDto, ConversationPlaceDto, FileCommentDto, RangeDto } from '../../../src/platform/protocol';
 
-function comment(id: string, overrides: Partial<CommentDto> = {}): CommentDto {
+function comment(id: string, overrides: Partial<FileCommentDto> = {}): FileCommentDto {
   return {
     id,
     quote: `quote ${id}`,
@@ -62,6 +62,32 @@ describe('commentsView', () => {
   test('sets the source tooltip to the full path', () => {
     const c = comment('c1', { path: 'C:\\work\\proj\\src\\a.ts' });
     assert.equal(commentsView([c])!.blocks[0]!.sourceTitle, 'Go to C:\\work\\proj\\src\\a.ts:1');
+  });
+
+  test("names whose words commented text of the conversation is, and lists it to highlight; file comments' text is not", () => {
+    const said = (id: string, role: ConversationPlaceDto['role']): ConversationCommentDto => ({
+      kind: 'conversation',
+      id,
+      quote: `quote ${id}`,
+      text: `note ${id}`,
+      place: { role, uuid: role === 'user' ? undefined : `uuid-${id}`, turn: 2, offset: 5 },
+    });
+    const view = commentsView([said('c1', 'reply'), comment('c2'), said('c3', 'thinking'), said('c4', 'user')])!;
+    assert.deepEqual(
+      view.blocks.map((block) => [block.id, block.source, block.sourceTitle]),
+      [
+        ['c4', 'Your message', 'Show in the conversation'],
+        ['c3', "Claude's thinking", 'Show in the conversation'],
+        ['c2', 'c2.ts:1', 'Go to C:\\work\\proj\\c2.ts:1'],
+        ['c1', "Claude's reply", 'Show in the conversation'],
+      ],
+    );
+    assert.deepEqual(view.quotes, [
+      { quote: 'quote c1', place: { role: 'reply', uuid: 'uuid-c1', turn: 2, offset: 5 } },
+      { quote: 'quote c3', place: { role: 'thinking', uuid: 'uuid-c3', turn: 2, offset: 5 } },
+      { quote: 'quote c4', place: { role: 'user', uuid: undefined, turn: 2, offset: 5 } },
+    ]);
+    assert.deepEqual(commentsView([comment('c5')])!.quotes, []);
   });
 });
 

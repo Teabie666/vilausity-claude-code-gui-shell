@@ -246,17 +246,27 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **`--provider` 和主题**：带 `--provider` 启动（接口的快捷方式就是这样）时，主进程等页面加载完才切接口，新主题可能在页面开始监听之前就发来了，以前会出现接口名对了、颜色还是订阅的。所以 `core/workbench.ts` 在第一个 await 之前就开始听 `themeChanged`，用最后收到的那份。
 - **测试**：单元测试覆盖 logo 的颜色规则和对比度、扫描线填充（对齐像素的方块、半个像素、总面积跟多边形面积一致）、PNG 和 ICO 的格式、图标文件的缓存、bridge 数状态。界面测试在 API 接口那步检查 logo 跟着订阅、自定义颜色、VS Code 默认、假接口变色，图标文件画出来了，给假接口发消息时 logo 从闲着到干活再回来。smoke 检查真实回复时 logo 干活再停下，审批改文件时 logo 和会话列表都显示在等输入。
 
-## 评论（M3）
+## 评论（M3，对话里的评论 M6.5）
 
-在内容面板里选中文字写评论，评论显示在对话输入框正上方，随下一条消息发给 Claude（照插件计划评论的做法）。
+在内容面板里或对话里选中文字写评论，评论显示在对话输入框正上方，随下一条消息发给 Claude（照插件计划评论的做法）。
 
-- **选中按钮**是一个通用的菜单贡献点 `editor/selection`（`MenuId.EditorSelection`）：编辑器里有选区时，这个菜单的按钮浮在选区旁边；命令收到 `EditorSelectionContext`（选中的文字、文档 URI、文件路径、范围，以及 `showWidget`，用来在按钮的位置显示自己的界面）。文本和 diff 编辑器用 Monaco 的 content widget（`features/editor/selectionMenu.ts`）；Markdown 预览自己摆放（渲染时在每个顶层块前插一个隐藏的源码行号标记，选区按最近的标记换算回源码行，`features/markdown/sourceLines.ts`）。评论模块（`features/comments`）往这个菜单里登记"评论"，以后别的功能也可以加按钮。快捷键 Ctrl+Alt+M 作用于当前标签页的选区（`EditorPane.selectionContext`）。
+- **选中按钮**是一个通用的菜单贡献点 `editor/selection`（`MenuId.EditorSelection`）：编辑器里有选区时，这个菜单的按钮浮在选区旁边；命令收到 `EditorSelectionContext`（选中的文字、文档 URI、文件路径、范围，以及 `showWidget`，用来在按钮的位置显示自己的界面）。文本和 diff 编辑器用 Monaco 的 content widget（`features/editor/selectionMenu.ts`）；Markdown 预览自己摆放（渲染时在每个顶层块前插一个隐藏的源码行号标记，选区按最近的标记换算回源码行，`features/markdown/sourceLines.ts`）。评论模块（`features/comments`）往这个菜单里登记"评论"，以后别的功能也可以加按钮。快捷键 Ctrl+Alt+M：键盘焦点在对话页里时先问页面选中了什么（见下面"对话里的评论"），那里没有选区再用当前标签页的选区（`EditorPane.selectionContext`）。
 - **数据在插件进程**：`host/exthost/comments.ts` 的 ConversationComments 按会话（session）存评论，对外按聊天面板的 webview 提供：面板现在显示哪个会话，就读写哪个会话的评论（会话 id 取自插件页面存的 webview 状态，解析写在 bridge 里）。渲染进程用 `comments.add / update / remove` 修改，收 `comments.didChange` 显示。bridge 在用户发消息（`io_message`）时同步取出评论，作为一个单独的 text 块附在用户打的字后面（斜杠命令不带），然后清空。
 - **跟着会话走**：关掉对话标签页，没发的评论留在会话名下，之后从会话列表、Ctrl+Shift+T 或者重启恢复打开这个会话，评论还在；面板换到别的会话，就显示那个会话的评论。会话的评论存在工作区存储（`vilaus.comments`），随时写入。新对话一打开就有会话 id，但发出第一条消息之前会话还没有记录（插件页面在状态里标成 `sessionWithNoTranscript`），这种会话不会被恢复（重启后换一个新 id 重开），所以不算数：这期间的评论先挂在面板上（跟面板的恢复记录一起存，重启后回来），会话有了记录再并进去；一条消息都没发就关掉的对话，评论随面板丢弃。
 - **评论块在插件页面里**：块该放在哪个元素前面是插件页面的知识，只写在 bridge 里，以 `WebviewPageHints.commentsAnchor`（输入框所在 form 的选择器）随页面文档交给引导脚本（`host/webview/comments.ts`）。引导脚本把块插在锚点前，用 MutationObserver 在插件重新渲染后放回原位；块里的事件不会冒泡到插件页面；所有文字由壳算好（包括翻译）再发进去，引导脚本里没有界面文案。编辑在壳里进行（小窗盖在块的位置上）。插件页面会量输入区的高度给消息列表垫底，所以块不会挡住最后一条消息。
 - **后备**：页面一直找不到锚点（插件改了界面，或者输入框还没出来）时，壳在对话下方显示内容相同的评论栏（`features/comments/fallbackBar.ts`），功能不受影响。
-- **发出去的格式**：以 `Comments on selected text:` 开头，每条评论一段：`[Re: "<片段>" — <文件>:<行>] <评论>`。片段压成一行、过长截断；文件是相对工作区的路径；行是 `12` 或 `12-15`。
+- **发出去的格式**：以 `Comments on selected text:` 开头，每条评论一段：`[Re: "<片段>" — <文件>:<行>] <评论>`。片段压成一行、过长截断；文件是相对工作区的路径；行是 `12` 或 `12-15`。对话里的文字把位置换成谁说的（用户的口吻，消息是用户发的）：`your earlier reply`（Claude 的回复，工具调用也算）、`your earlier thinking`、`my earlier message`。
 - 点评论块上的 `文件名:行号` 回到原文：打开着的标签页（文本、diff、Markdown 预览）用 `EditorPane.revealSelection` 选中那段文字，没打开就经插件进程打开文件再选中。
+- **评论小窗**点别处就关（写了字的不关）。点进插件页面（iframe）时壳的 document 收不到 mousedown，所以另外看窗口失焦：焦点进了 iframe 就算点了别处。
+
+### 对话里的评论（M6.5）
+
+- **页面提示**：对话页里哪些元素是消息、谁的消息、消息的 uuid 在哪个属性，是插件页面的知识，由 bridge 以 `WebviewPageHints.conversationComments` 给出（对照 2.1.306）：消息、Claude 消息上的 uuid 属性（回复、思考、工具调用都有；一条记录里同时有思考和正文时是一个元素）、用户消息里的文字部分（用户消息没有 uuid）、思考内容和展开它的标题、每一轮。按钮上的字随引导数据的 `labels` 给（`main.comment`）。
+- **选中按钮**画在页面里（`host/webview/conversationQuotes.ts`，样子照壳的选区按钮）：鼠标选完、选区在一条消息之内时，按钮出在选区末尾下方；选区滚出视野就藏起来，Escape 收起。点了把选区交给壳（评论事件 `selection`：原文、位置、选区末行的框），壳把评论小窗盖在 iframe 里对应的位置。Ctrl+Alt+M 走控制消息 `commentSelection`，页面用同一个事件带上请求的 id 回答（没有选区回 null）。
+- **位置**（`ConversationPlaceDto`）：谁的话（`reply` / `thinking` / `user`）、Claude 消息的 uuid、第几轮、原文在这条消息文字里的起点。评论 `kind: 'conversation'`（`ConversationCommentDto`），文件的评论是 `kind: 'file'`；M3 存下的评论没有 `kind`，当文件的评论读。
+- **找回原文**：页面每次重绘都可能换掉文本节点，所以按原文找：先在原来那条消息里找（Claude 的按 uuid，用户的按第几轮），空白宽松匹配（选区文字在块之间有换行，页面的文字不一定有），出现多次取离原起点最近的；找不到再去同类的其他消息里找，离原来那轮近的先找。
+- **淡高亮**：评论块的数据（`CommentsViewDto.quotes`）带上对话里被评论的原文，页面脚本用 CSS Custom Highlight API 标出来（`vilaus-comment`，颜色是 VS Code 评论范围的 `editorCommentsWidget.rangeBackground`），不改插件的 DOM；页面一变就在下一帧检查，原来的范围失效了再找。评论发出去，块和高亮一起没了。
+- **转到原文**：点块上的来源（"Claude 的回复"等）→ 壳发控制消息 `revealQuote` → 页面把原文滚到对话中间，闪两下（`vilaus-comment-flash`，`editor.findMatchHighlightBackground`）。在收起的思考里就先点一下思考块的标题（插件的所有思考块共用一个展开状态，会一起展开），等它画出来再滚。
 
 ## 插件界面汉化（M3.5）
 

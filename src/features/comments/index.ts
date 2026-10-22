@@ -1,8 +1,9 @@
 /**
  * Comments on selected text for Claude, like the extension's plan comments but anywhere in
- * the content pane: select text in an editor, a diff or a Markdown preview, click Comment
- * (or Ctrl+Alt+M), write it; it shows above the conversation's input and goes out with the
- * next message. See docs/ARCHITECTURE.md ("评论").
+ * the content pane and in the conversation itself: select text in an editor, a diff, a
+ * Markdown preview or the conversation, click Comment (or Ctrl+Alt+M), write it; it shows
+ * above the conversation's input and goes out with the next message. See
+ * docs/ARCHITECTURE.md ("评论").
  */
 
 import type { EditorSelectionContext } from '../../core/editors';
@@ -46,7 +47,11 @@ export const commentsModule: ShellModule = {
       commands.register(
         'comments.add',
         async (argument) => {
-          // From the selection's buttons with its context; from a keybinding, the focused tab's selection.
+          // From the selection's buttons with its context; from a keybinding, the selection in the
+          // conversation that has the focus, else in the focused tab.
+          if (!isSelectionContext(argument) && (await controller.addInFocusedConversation())) {
+            return;
+          }
           const context = isSelectionContext(argument) ? argument : contentPane.current?.pane.selectionContext?.();
           if (context) {
             controller.add(context);

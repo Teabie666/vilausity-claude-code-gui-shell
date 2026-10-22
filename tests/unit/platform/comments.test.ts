@@ -93,4 +93,38 @@ describe('isComment', () => {
     assert.equal(isComment([]), false);
     assert.equal(isComment('comment'), false);
   });
+
+  test("accepts a file comment marked as one, and rejects a kind it doesn't know", () => {
+    assert.equal(isComment({ ...valid, kind: 'file' }), true);
+    assert.equal(isComment({ ...valid, kind: 'note' }), false);
+  });
+
+  describe('on text of the conversation', () => {
+    const conversation = {
+      kind: 'conversation',
+      id: 'c2',
+      quote: 'Apples are red',
+      text: 'Not all of them',
+      place: { role: 'reply', uuid: 'a1', turn: 0, offset: 7 },
+    };
+
+    test('accepts the three roles, the user message without a uuid', () => {
+      assert.equal(isComment(conversation), true);
+      assert.equal(isComment({ ...conversation, place: { ...conversation.place, role: 'thinking' } }), true);
+      assert.equal(isComment({ ...conversation, place: { role: 'user', turn: 2, offset: 0 } }), true);
+    });
+
+    test('rejects a missing or malformed place', () => {
+      const { place: _place, ...withoutPlace } = conversation;
+      assert.equal(isComment(withoutPlace), false);
+      assert.equal(isComment({ ...conversation, place: { ...conversation.place, role: 'tool' } }), false);
+      assert.equal(isComment({ ...conversation, place: { ...conversation.place, uuid: 3 } }), false);
+      assert.equal(isComment({ ...conversation, place: { ...conversation.place, turn: -1 } }), false);
+      assert.equal(isComment({ ...conversation, place: { ...conversation.place, offset: 1.5 } }), false);
+    });
+
+    test('does not take a file comment for one: the kind decides', () => {
+      assert.equal(isComment({ ...valid, kind: 'conversation' }), false);
+    });
+  });
 });

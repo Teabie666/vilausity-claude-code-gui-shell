@@ -10,6 +10,7 @@ import type { ILogger } from '../platform/log';
 import type {
   CommentsHostEvent,
   CommentsViewDto,
+  ConversationQuoteDto,
   ExtensionTranslations,
   FindDirection,
   KeyEventDto,
@@ -283,12 +284,25 @@ export class WebviewFrames {
   }
 
   /**
-   * The comment blocks a webview shows above its input (pages with a place for them, see
-   * WebviewPageHints). A new document starts without: send them again on `onDidLoad`.
+   * The comment blocks a webview shows above its input, and the text of its own they are on
+   * (pages with a place for them, see WebviewPageHints). A new document starts without: send
+   * them again on `onDidLoad`.
    */
   setComments(webviewId: string, view: CommentsViewDto | null): void {
     const control: ShellToWebviewControl = { ccwControl: 'comments', view };
     this.frames.get(webviewId)?.post(control);
+  }
+
+  /** Asks a conversation page for its selected text: the answer is a `selection` comments event with `id`. */
+  requestCommentSelection(webviewId: string, id: number): void {
+    const control: ShellToWebviewControl = { ccwControl: 'commentSelection', id };
+    this.get(webviewId)?.post(control);
+  }
+
+  /** Scrolls a conversation page to commented text of its own and flashes it. */
+  revealQuote(webviewId: string, quote: ConversationQuoteDto): void {
+    const control: ShellToWebviewControl = { ccwControl: 'revealQuote', quote };
+    this.get(webviewId)?.post(control);
   }
 
   /**

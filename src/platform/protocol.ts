@@ -203,6 +203,27 @@ export interface WebviewPageHints {
   readonly keepInPlace?: string;
   /** A conversation's turns, for the markers by its scrollbar (see the type). */
   readonly messageMarkers?: MessageMarkerHints;
+  /** A conversation's messages, whose text can be commented on (see the type). */
+  readonly conversationComments?: ConversationCommentHints;
+}
+
+/**
+ * A conversation's messages, for comments on their text: text selected within one gets a
+ * Comment button, and the commented text is found again to highlight it and scroll to it.
+ */
+export interface ConversationCommentHints {
+  /** A message: the user's, or one of Claude's (a reply, its thinking, a tool call). */
+  readonly message: string;
+  /** The attribute of Claude's messages that holds the message's uuid. */
+  readonly uuidAttribute: string;
+  /** Within a message, the user's own words (not the message's heading or time). */
+  readonly userText: string;
+  /** Within a message, Claude's thinking (not its summary line). */
+  readonly thinking: string;
+  /** What opens the thinking: a click on it shows every thinking block. */
+  readonly thinkingToggle: string;
+  /** A turn: one message of the user's and what answers it. */
+  readonly turn: string;
 }
 
 /**
@@ -395,6 +416,8 @@ export interface WebviewLabels {
   readonly resetsAt: string;
   /** How many sessions wait for the user; `{0}` is the count. */
   readonly needsInput: string;
+  /** The button by text selected in a conversation. */
+  readonly comment: string;
   /** The display language as a BCP 47 tag, for formatting times. */
   readonly locale: string;
 }
@@ -636,20 +659,58 @@ export interface ShowDiffEditorParams {
 
 // ---- comments ----
 //
-// Comments on text selected in the content pane belong to a conversation (by its webview)
-// until the next message, which carries them. The extension host keeps them (the bridge
-// needs them when a message goes out); the renderer adds, edits and shows them.
+// Comments on selected text (in the content pane, or in the conversation itself) belong to a
+// conversation (by its webview) until the next message, which carries them. The extension host
+// keeps them (the bridge needs them when a message goes out); the renderer adds, edits and
+// shows them.
 
-export interface CommentDto {
+export type CommentDto = FileCommentDto | ConversationCommentDto;
+
+interface CommentBaseDto {
   readonly id: string;
   /** The text the comment is about, as selected. */
   readonly quote: string;
+  readonly text: string;
+}
+
+/** On text of a document. (Comments saved before conversation comments existed have no `kind`.) */
+export interface FileCommentDto extends CommentBaseDto {
+  readonly kind?: 'file';
   /** The document it was selected in (`vscode.Uri.toString()`), and the file's path. */
   readonly uri: string;
   readonly path: string;
   /** Where in that document; for a rendered view (Markdown preview), the lines it came from. */
   readonly range: RangeDto;
-  readonly text: string;
+}
+
+/** On text of the conversation the comment goes to. */
+export interface ConversationCommentDto extends CommentBaseDto {
+  readonly kind: 'conversation';
+  readonly place: ConversationPlaceDto;
+}
+
+/** Where text of a conversation is, as its page showed it (see ConversationCommentHints). */
+export interface ConversationPlaceDto {
+  /** Whose words: one of Claude's messages (a reply, a tool call), its thinking, or the user's own message. */
+  readonly role: 'reply' | 'thinking' | 'user';
+  /** Claude's message's uuid (the page shows none for the user's). */
+  readonly uuid?: string;
+  /** Which turn of the conversation it is in (0-based): finds the user's message, and the nearest repeat of the text. */
+  readonly turn: number;
+  /** Where the quote starts in the message's text, to tell repeats of it apart. */
+  readonly offset: number;
+}
+
+/** Text of a conversation that a comment is about. */
+export interface ConversationQuoteDto {
+  readonly quote: string;
+  readonly place: ConversationPlaceDto;
+}
+
+/** Text selected in a conversation page, to comment on. */
+export interface ConversationSelectionDto extends ConversationQuoteDto {
+  /** The end of the selection (its last line's box) in the page, where the shell opens its form. */
+  readonly rect: RectDto;
 }
 
 export interface RendererInitData {
@@ -1133,6 +1194,8 @@ export interface CommentsViewDto {
   readonly blocks: readonly CommentBlockDto[];
   /** Whether they start folded into the header (there are many) until the user unfolds them. */
   readonly collapsed: boolean;
+  /** The conversation's own text that comments are on, highlighted faintly until they go out. */
+  readonly quotes: readonly ConversationQuoteDto[];
   readonly labels: {
     /** E.g. `3 comments`. */
     readonly header: string;
@@ -1155,7 +1218,12 @@ export type CommentsHostEvent =
   | { readonly type: 'remove'; readonly id: string }
   /** The source link was clicked: show the commented text. */
   | { readonly type: 'reveal'; readonly id: string }
-  | { readonly type: 'clear' };
+  | { readonly type: 'clear' }
+  /**
+   * Text selected in the conversation is to be commented on: its Comment button was clicked,
+   * or (with the `id` of a `commentSelection` control) the shell asked; null: none selected.
+   */
+  | { readonly type: 'selection'; readonly selection: ConversationSelectionDto | null; readonly id?: number };
 
 export interface KeyEventDto {
   readonly key: string;
@@ -1238,4 +1306,8 @@ export type ShellToWebviewControl =
   /** Show the markers by a conversation's scrollbar or not (pages with `hints.messageMarkers`). */
   | { readonly ccwControl: 'messageMarkers'; readonly enabled: boolean }
   /** Scroll a conversation to the user's message before or after the one in view (pages with `hints.messageMarkers`). */
-  | { readonly ccwControl: 'jumpToMessage'; readonly direction: 'previous' | 'next' };
+  | { readonly ccwControl: 'jumpToMessage'; readonly direction: 'previous' | 'next' }
+  /** Report the text selected in the conversation (a `selection` comments event with this id; pages with `hints.conversationComments`). */
+  | { readonly ccwControl: 'commentSelection'; readonly id: number }
+  /** Scroll to commented text of the conversation and flash it (pages with `hints.conversationComments`). */
+  | { readonly ccwControl: 'revealQuote'; readonly quote: ConversationQuoteDto };
