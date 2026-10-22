@@ -48,6 +48,14 @@ export interface FileLinkRequest {
   readonly link: string | undefined;
 }
 
+/** Files dragged over a webview's page (`end`: the drag ended otherwise); `x`, `y` in the page's viewport. */
+export interface WebviewFileDrag {
+  readonly webviewId: string;
+  readonly phase: 'over' | 'leave' | 'drop' | 'end';
+  readonly x: number;
+  readonly y: number;
+}
+
 export interface WebviewInfo {
   readonly webviewId: string;
   /** The panel's viewType or the view's id; VS Code's `webviewId` context key. */
@@ -183,6 +191,9 @@ export class WebviewFrames {
   private readonly fileLinkEmitter = new Emitter<FileLinkRequest>();
   /** A file link was Shift+clicked or right-clicked (pages with `hints.fileLinks`). */
   readonly onDidRequestFileLink: Event<FileLinkRequest> = this.fileLinkEmitter.event;
+  private readonly fileDragEmitter = new Emitter<WebviewFileDrag>();
+  /** Files are dragged over a webview, left it or were dropped on it (which the page takes itself). */
+  readonly onDidDragFiles: Event<WebviewFileDrag> = this.fileDragEmitter.event;
 
   constructor(
     private readonly connection: ExtensionHostConnection,
@@ -414,6 +425,15 @@ export class WebviewFrames {
         if (typeof data.id === 'number' && typeof data.path === 'string' && (data.intent === 'system' || data.intent === 'menu')) {
           const link = typeof data.link === 'string' ? data.link : undefined;
           this.fileLinkEmitter.fire({ webviewId, id: data.id, path: data.path, intent: data.intent, link });
+        }
+        break;
+      case 'fileDrag':
+        if (
+          (data.phase === 'over' || data.phase === 'leave' || data.phase === 'drop' || data.phase === 'end') &&
+          typeof data.x === 'number' &&
+          typeof data.y === 'number'
+        ) {
+          this.fileDragEmitter.fire({ webviewId, phase: data.phase, x: data.x, y: data.y });
         }
         break;
       default:

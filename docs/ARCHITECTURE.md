@@ -139,6 +139,17 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **展开思考时保持位置**（`host/webview/scrollKeeper.ts`）：插件一个对话的所有思考块共用一个展开状态，点一个就全部展开 / 收起；上面的思考块一起变长，浏览器的滚动锚定挑的是别的元素，被点的标题就跑了（实测往下跑一个思考块的高度），在底部时插件还会把视图拉到新的底部。点思考块标题（页面提示 `keepInPlace`）之后 1.5 秒内，每次变化都把滚动位置挪回去，让被点的标题停在原处：每帧（rAF）一次，另外一个 ResizeObserver 在布局之后、绘制之前补一次（排在插件自己的观察者之后），所以变化那一帧就补上，看不到跳动。用户自己滚动（滚轮、按键、点滚动条）就停手。只展开被点的那一块不做（ROADMAP ③）。
 - **消息定位点**（`host/webview/messageMarkers.ts`，照 DeepSeek 网页版）：对话的滚动条左边竖着一列短横线，一条用户消息一条，当前那条用焦点色（跟着接口的强调色）；消息多时只画当前附近的 15 条。鼠标移上去弹出列表（每条消息的第一行，右对齐，当前那条焦点色，菜单的颜色，8px 圆角），点一条就平滑滚到那一轮。"当前"是顶端在对话区顶上 48px 以内的最后一轮。轮次和用户消息的选择器来自页面提示（`messageMarkers`），滚动容器找最近的可滚动祖先；页面变了（MutationObserver，不算自己的改动）、滚动、窗口大小变了都按帧重算。设置 `vilaus.conversations.messageMarkers`（默认开，壳在页面加载和设置变化时告诉页面）；命令"转到我的上一条 / 下一条消息"（默认不绑键）。
 
+## 拖文件进窗口（M6.5）
+
+从资源管理器把文件拖进窗口，松手的地方决定做什么（`features/fileDrop`）：
+
+- **分区**：侧栏会话列表和标题栏搜索框 = 在对话里引用；对话区 = 作为附件加到消息里（插件自己收）；内容面板 = 在编辑器中打开（收起时没有这个区）。标题栏别的地方、标签页那一行不收。
+- **遮罩**（`overlay.ts`）：拖着文件进来时整个窗口压一层 `widget.shadow`，每个区中间一个标签写松手会做什么（搜索框太矮，标签放在它下面），鼠标所在的区用 `editorGroup.dropBackground` 亮起来，标签是 VS Code 拖进编辑器时那个提示的颜色（`editorGroup.dropIntoPrompt*`）。
+- **iframe 的问题**：插件页面在 iframe 里，拖到它上面时拖动事件只到 iframe。每个页面的引导脚本察觉到拖着文件（`dataTransfer.types` 有 `Files`）就报给壳（`fileDrag`：`over` 带位置、离开整个页面时 `leave`、松手 `drop`），壳马上盖上遮罩。侧栏和内容面板上的区接鼠标事件，盖上以后拖动就转到壳的页面，松手时壳拿到文件（`webUtils.getPathForFile` 取路径）。对话区上的区不接鼠标事件（`pointer-events: none`），文件直接落进插件页面，插件照原样收成附件；页面报的位置让壳把这个区亮起来。
+- **什么时候收起**：壳的页面（按 dragenter / dragleave 计数）和所有插件页面都离开了（等 100ms，换元素、换页面时先离开后进入），或者松手了，或者鼠标又动了（拖动中不会有鼠标事件，所以取消以后第一次移动就收；插件页面里的移动由页面脚本报 `end`）。
+- **引用**：路径交给主进程（`files.placeInWorkspace`，`host/main/attachments.ts`）：工作区里的原样用，工作区外的复制进工作区的附件文件夹（设置 `vilaus.conversations.attachmentsFolder`，默认 `attachments`，没有就建；指到工作区外就用默认的），同名的加 " (1)"，文件夹整个复制。然后渲染进程经插件进程让 bridge 给对话页发插件的 `insert_at_mention`（`conversation.insertMention`，每个文件一次），页面插入 `@相对路径`（`/` 分隔，有空格就加引号），跟插件自己的"插入 @提及"一样变成小块。没有打开的对话就新开一个，引用填进它的输入框（`conversation.open` 带 prompt）。
+- **测试**：CDP 的 `Input.dispatchDragEvent` 能拖真实文件，走的是跟系统拖放一样的路，但一次拖动只会发给开始时所在的页面，中途不会像真实拖放那样换到另一个页面；界面测试因此每次都从松手的那个页面开始拖。CDP 的取消也不给页面发 dragleave。
+
 ## 会话列表里壳加的东西（M5.5）
 
 都是页面脚本照 bridge 的页面提示做的（对照插件 2.1.296）；插件改了类名就退回插件原样。数据靠 bridge 旁听插件发给页面的消息（`observeToWebview`），再用控制消息（`ShellToWebviewControl`）交给页面脚本。页面上的显示都走 `data-vilaus-*` 属性加 bridge 的样式，React 管的内容不动。

@@ -57,6 +57,7 @@ import { extensionTranslations } from '../../nls/extensionPacks';
 import { languagePack } from '../../nls/packs';
 import { isSubPath } from '../node/paths';
 import type { AppPaths } from './appPaths';
+import { placeInWorkspace } from './attachments';
 import { installCcwProtocol } from './ccwProtocol';
 import type { CliArgs } from './cli';
 import { locateClaudeExtension, type LocatedExtension } from './extensionLocator';
@@ -1042,6 +1043,7 @@ export class ShellApp extends Disposable implements WindowHost {
         return !error;
       },
       'os.revealPath': ({ path: target }) => shell.showItemInFolder(target),
+      'files.placeInWorkspace': ({ paths, folder, subfolder }) => placeInWorkspace(paths, folder, subfolder, this.logger),
       'os.pathKind': ({ path: target }) => {
         const stats = fs.statSync(target, { throwIfNoEntry: false });
         return stats?.isDirectory() ? 'folder' : stats?.isFile() ? 'file' : undefined;

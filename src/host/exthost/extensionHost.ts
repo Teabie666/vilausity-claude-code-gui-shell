@@ -148,6 +148,13 @@ export class ExtensionHost {
     webviews.interceptor = bridge;
     this.bridge = bridge;
     renderer.handle('sessions.busy', ({ sessionId }) => bridge.sessionBusy(sessionId));
+    renderer.handle('conversation.insertMention', ({ webviewId, text }) => {
+      const panel = webviews.allPanels.find((candidate) => candidate.webview.id === webviewId);
+      if (panel) {
+        bridge.insertMention(panel.webview, text);
+      }
+    });
+    renderer.handle('conversation.open', (request) => this.openConversation(request));
     renderer.handle('panel.didPin', ({ panelId }) => {
       const panel = webviews.allPanels.find((candidate) => candidate.id === panelId);
       if (panel) {

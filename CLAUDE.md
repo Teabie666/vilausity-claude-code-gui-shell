@@ -43,6 +43,7 @@ run-dev.cmd          # 在资源管理器里双击：构建并启动（手动试
 
 - **从 VSCodium 里的 Claude 会话启动 Electron**：环境里带着 `ELECTRON_RUN_AS_NODE=1` 和一堆 `VSCODE_*`，electron.exe 会变成纯 Node。开发时用 `node scripts/launch.mjs` 或 `run-dev.cmd`；程序本身启动 extension host 时会用 `cleanEnvironment()` 清掉这些变量。
 - **Playwright 的模拟按键**走 DevTools 协议，会绕过主进程的 `before-input-event`，测不到我们拦截的快捷键。测试里用 `webContents.sendInputEvent`，见 `tests/ui.mjs` 的 `press()`。**鼠标反过来**：`sendInputEvent` 的鼠标事件只进顶层页面，不会分发进跨进程的 webview iframe，右键会被算到壳的页面上；测右键菜单用 Playwright 的 `page.mouse`（见 `rightClick()`）。
+- **测拖文件进窗口**：用 CDP 的 `Input.dispatchDragEvent`（带真实文件路径，先发一次 `mouseMoved`），见界面测试 "files dropped onto the window"。它的一次拖动只发给开始时所在的页面，不会像真实拖放那样中途换到另一个 iframe；它的 `dragCancel` 也不给页面发 dragleave；拖动中别再发鼠标移动（壳把它当成拖动结束）。
 - **测对话页里的选区**：Playwright 的鼠标拖选在插件页面里时灵时不灵，测试里用脚本设好选区再派发 `mouseup`（见界面测试 "the conversation's own text"）。插件 2.1.306 刚打开会话时消息会先隐藏一会儿（`visibility: hidden`），这时选区的文字是空的，要等消息显示出来；点过思考块标题后 1.5 秒内壳会把标题按在原位，脚本设的滚动会被拉回去。
 - **页面内查找**不能用 `webContents.findInPage`：查找输入框跟被搜索的内容在同一个页面里时，它会抢焦点，还会悄悄丢掉请求。现在的实现在 webview 里用 CSS Custom Highlight API 自己找（`src/host/webview/find.ts`）。
 - **插件 CSS 里的图标字体是 `data:` 内嵌的**，但插件自己的 CSP `font-src` 不放行 `data:`，图标会显示成方框。注入时会给 `font-src` 补上 `data:`（`allowInlineFonts`）。

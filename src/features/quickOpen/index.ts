@@ -7,7 +7,6 @@
 
 import { URI } from 'vscode-uri';
 import type { ShellModule } from '../../core/module';
-import { native } from '../../core/native';
 import { ICommands, IDialogs, IExtensionHost, IKeybindings, ILayout, IQuickAccess, IWorkspace } from '../../core/serviceIds';
 import { folderLabel } from '../workspace';
 import { matchRanges, scorePath } from './fuzzy';
@@ -28,7 +27,7 @@ export const quickOpenModule: ShellModule = {
   id: 'quickOpen',
   // The box's buttons run the workspace module's commands, and take their titles.
   dependsOn: ['workspace'],
-  activate({ services, subscriptions, logger }) {
+  activate({ services, subscriptions }) {
     const commands = services.get(ICommands);
     const keybindings = services.get(IKeybindings);
     const dialogs = services.get(IDialogs);
@@ -133,34 +132,5 @@ export const quickOpenModule: ShellModule = {
         },
       }),
     );
-
-    // Files dropped onto the shell (the content pane, empty states...) open as tabs.
-    const onDragOver = (event: DragEvent): void => {
-      if (event.dataTransfer?.types.includes('Files')) {
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'copy';
-      }
-    };
-    const onDrop = (event: DragEvent): void => {
-      const files = [...(event.dataTransfer?.files ?? [])];
-      if (files.length === 0) {
-        return;
-      }
-      event.preventDefault();
-      for (const file of files) {
-        const path = native.pathForFile(file);
-        if (path) {
-          void open(path, false).catch((error: unknown) => logger.error(`opening dropped ${path} failed`, error));
-        }
-      }
-    };
-    document.addEventListener('dragover', onDragOver);
-    document.addEventListener('drop', onDrop);
-    subscriptions.add({
-      dispose: () => {
-        document.removeEventListener('dragover', onDragOver);
-        document.removeEventListener('drop', onDrop);
-      },
-    });
   },
 };

@@ -2273,6 +2273,74 @@ body.resizing {
   pointer-events: auto;
 }
 
+/* ---- dropping files onto the window (features/fileDrop) ------------------------- */
+
+/* A shade over the window while files are dragged over it; each place that takes them says what it does. */
+.overlays > .file-drop {
+  position: fixed;
+  inset: 0;
+  background: var(--vscode-widget-shadow);
+  pointer-events: none;
+}
+
+.file-drop[hidden] {
+  display: none;
+}
+
+/* Over a page it takes the drag events (the shell takes the drop); over the conversation it lets them through. */
+.file-drop-zone {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.file-drop-zone.passes {
+  pointer-events: none;
+}
+
+.file-drop-zone.active {
+  background: var(--vscode-editorGroup-dropBackground);
+}
+
+.file-drop-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  max-width: calc(100% - 16px);
+  padding: 6px 12px;
+  color: var(--vscode-editorGroup-dropIntoPromptForeground, var(--vscode-foreground));
+  background: var(--vscode-editorGroup-dropIntoPromptBackground, var(--vscode-editorWidget-background));
+  border: 1px solid var(--vscode-editorGroup-dropIntoPromptBorder, var(--vscode-widget-border, transparent));
+  border-radius: var(--vscode-cornerRadius-small);
+  box-shadow: var(--vscode-shadow-lg);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size, 13px);
+  text-align: center;
+  pointer-events: none;
+}
+
+.file-drop-zone.active .file-drop-label {
+  border-color: var(--vscode-focusBorder);
+}
+
+/* Below a low place (the search box). */
+.file-drop-label.below {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  max-width: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.file-drop-detail {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
 .toasts {
   position: absolute;
   right: 12px;

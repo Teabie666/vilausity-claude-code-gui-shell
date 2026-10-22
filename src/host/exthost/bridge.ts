@@ -1108,6 +1108,17 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     }
   }
 
+  /**
+   * Puts `@<path>` into a conversation's input as a mention, as the extension's own "insert
+   * @-mention" does (anthropic.claude-code 2.1.306: `{type: 'request', channelId: '', requestId: '',
+   * request: {type: 'insert_at_mention', text}}`; the page adds it as a chip, once, and focuses
+   * the input; a path with spaces is in double quotes).
+   */
+  insertMention(webview: WebviewImpl, text: string): void {
+    const request = { type: 'request', channelId: '', requestId: '', request: { type: 'insert_at_mention', text } };
+    void webview.postMessage({ type: 'from-extension', message: request });
+  }
+
   pageHints(webview: WebviewImpl): WebviewPageHints | undefined {
     switch (webview.viewType) {
       case CHAT_PANEL_VIEW_TYPE:

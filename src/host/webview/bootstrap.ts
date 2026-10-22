@@ -393,6 +393,49 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
   );
   window.addEventListener('focus', () => post({ kind: 'focus' }));
   window.addEventListener('blur', () => post({ kind: 'blur' }));
+  // Files dragged over the page: the shell shows where in the window they can go. The page
+  // takes what is dropped on it (a conversation attaches it). Moving between its elements
+  // leaves one and enters the next: only leaving the last one leaves the page.
+  let dragDepth = 0;
+  /** Over the page since its last report: no mouse events come during a drag, so one says it ended. */
+  let dragging = false;
+  const reportDrag = (event: MouseEvent, phase: 'over' | 'leave' | 'drop' | 'end'): void => {
+    dragging = phase === 'over';
+    post({ kind: 'fileDrag', phase, x: event.clientX, y: event.clientY });
+  };
+  window.addEventListener('mousemove', (event) => dragging && reportDrag(event, 'end'), true);
+  const hasFiles = (event: DragEvent): boolean => event.dataTransfer?.types.includes('Files') === true;
+  window.addEventListener(
+    'dragenter',
+    (event) => {
+      if (hasFiles(event)) {
+        dragDepth++;
+        reportDrag(event, 'over');
+      }
+    },
+    true,
+  );
+  window.addEventListener('dragover', (event) => hasFiles(event) && reportDrag(event, 'over'), true);
+  window.addEventListener(
+    'dragleave',
+    (event) => {
+      if (hasFiles(event) && --dragDepth <= 0) {
+        dragDepth = 0;
+        reportDrag(event, 'leave');
+      }
+    },
+    true,
+  );
+  window.addEventListener(
+    'drop',
+    (event) => {
+      if (hasFiles(event)) {
+        dragDepth = 0;
+        reportDrag(event, 'drop');
+      }
+    },
+    true,
+  );
 })();
 
 function installDefaultStyles(fontFaces: string | undefined): void {

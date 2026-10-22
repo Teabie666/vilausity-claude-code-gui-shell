@@ -904,6 +904,12 @@ export type ExtHostApiForRenderer = {
   /** The user closed a text or diff tab. */
   'tab.didClose': (p: { tabId: string }) => void;
 
+  // ---- conversations ----
+  /** Puts `text` (`@<path>`) into a conversation's input as a mention of a file. */
+  'conversation.insertMention': (p: { webviewId: string; text: string }) => void;
+  /** Opens a new conversation (with `prompt` in its input). */
+  'conversation.open': (p: ConversationRequest) => void;
+
   // ---- comments (answered by `comments.didChange`) ----
   'comments.add': (p: { webviewId: string; comment: CommentDto }) => void;
   'comments.update': (p: { webviewId: string; id: string; text: string }) => void;
@@ -1007,6 +1013,14 @@ export type MainApiForRenderer = {
   'os.clipboardWrite': (p: { text: string }) => void;
   /** Opens a terminal in a folder (host/main/terminal.ts); false when it could not be started. */
   'os.openTerminal': (p: { folder: string }) => boolean;
+  /**
+   * Files and folders to mention in a conversation, by their place in the workspace `folder`:
+   * those outside it are copied into its `subfolder` first (host/main/attachments.ts).
+   */
+  'files.placeInWorkspace': (p: { paths: readonly string[]; folder: string; subfolder: string }) => {
+    placed: string[];
+    failed: string[];
+  };
   'window.toggleDevTools': (p: void) => void;
   /** Asks for a folder with the system's folder picker; undefined when cancelled. */
   'window.pickFolder': (p: void) => string | undefined;
@@ -1268,6 +1282,18 @@ export type WebviewToShellMessage =
       readonly path: string;
       readonly intent: 'system' | 'menu';
       readonly link?: string;
+    }
+  /**
+   * Files are dragged over the page (`over`, at x, y in the page), left it (`leave`), were
+   * dropped on it (`drop`, which the page takes itself), or the drag ended otherwise (`end`: the
+   * mouse moves again): the shell shows where files can go meanwhile.
+   */
+  | {
+      readonly ccw: string;
+      readonly kind: 'fileDrag';
+      readonly phase: 'over' | 'leave' | 'drop' | 'end';
+      readonly x: number;
+      readonly y: number;
     };
 
 export type FindDirection = 'restart' | 'next' | 'previous';
