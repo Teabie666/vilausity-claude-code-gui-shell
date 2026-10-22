@@ -19,6 +19,9 @@
 - `src/core`、`src/features`、`src/host/renderer`（渲染进程）和 `src/host/exthost`、`src/compat`（插件进程）：build 后执行命令 "Developer: Reload Window"（`window.reload`）。
 - `src/host/main`（主进程）和 `src/host/webview`（引导脚本在主进程启动时读入）：重启实例。
 - DevTools："Developer: Toggle Developer Tools"（插件页面是其中的 iframe）。日志：`<数据目录>\logs\<启动时间>\main.log`、`window<N>\exthost.log`、`window<N>\shim-unimplemented.log`（插件调了没实现的 VS Code API）。
+- 数据目录里：`settings.json`、`keybindings.json`、`providers.json`、`state\`、`extensions\`（自装的插件版本）、`logs\`。
+- 启动参数全表见 `src/host/main/cli.ts`（`--help`）；开发常用 `--folder <dir>`、`--extension-dir <dir>`、`--user-data-dir <dir>`、`--theme <id>`、`--log-level <lv>`、`--devtools`、`--secondary-display`（窗口开在副屏）。
+- 内置主题 `resources/themes/` 是从本机 VSCodium 抓的：`npm run capture-themes` 重抓。
 
 硬约束：
 - 开发实例里不打开进行中的会话（会话列表带绿点、标 "now"）：会起第二个 Claude 进程写同一会话。
@@ -56,6 +59,8 @@ export const myFeatureModule: ShellModule = {
 ### 界面文字
 
 `src/features/<名字>/messages.ts`：`export const t = defineMessages('<命名空间>', { key: 'English' })`（命名空间不能重名）。中文进 `src/nls/zh-cn.json`，键 `命名空间.key`；`npm run nls -- --todo` 列缺译，`npm run nls -- --sort` 排序。用词按 `design.md`"文案"。日志、本地接口的描述不翻译。
+
+界面语言：设置 `vilaus.language`（`auto` / `zh-cn` / `en`，重启生效）。插件自己的界面在中文下按 `src/nls/zh-cn.extension.json` 翻（键是原文的哈希，只存译文；`vilaus.translateExtensionUi` 关掉，即时生效）。维护：`node tools/extension-strings/extract.mjs` 在本地整理插件的界面文字，`npm run nls -- --todo-extension` 导出待译条目，`node tools/extension-strings/merge.mjs <译文.json>` 合并。
 
 ### 命令和快捷键
 
