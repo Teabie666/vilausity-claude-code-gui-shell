@@ -13,6 +13,7 @@
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
     "start": "node scripts/build.mjs && node scripts/launch.mjs",
+    "dev": "node scripts/dev.mjs",
     "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json && tsc -p tsconfig.preload.json && tsc -p tsconfig.test.json",
     "lint": "oxlint --type-aware --deny-warnings && prettier --check .",
     "format": "prettier --write .",

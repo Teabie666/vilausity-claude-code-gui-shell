@@ -6,12 +6,15 @@
 
 ## 开发
 
+想给自己的 Vilausity 加功能：看 [二次开发指南](docs/DEVELOPING.md)（克隆、在 Vilausity 里让 Claude 改、试用、打包、跟上游同步）。不改代码、只想让别的程序读写 Vilausity：看 [本地接口](docs/local-api.md)。
+
 需要 Node 24+。
 
 ```powershell
 npm install
 npm run build        # 打包到 dist/
-npm start            # 构建并启动（自动清理从 VS Code 系环境继承的 ELECTRON_RUN_AS_NODE 等变量）
+npm run dev          # 构建并启动一个独立的开发实例（数据在 .test-data\dev，不影响正在用的 Vilausity）
+npm start            # 构建并启动（用 %APPDATA%\Vilausity 的数据；自动清理从 VS Code 系环境继承的 ELECTRON_RUN_AS_NODE 等变量）
 npm run typecheck    # 四套 tsconfig：node 侧 / 网页侧 / preload / 单元测试
 npm test             # 单元测试（esbuild 打包后用 node:test 跑），再检查语言包
 npm run nls          # 语言包检查；-- --todo 输出还没翻译的条目
@@ -38,6 +41,8 @@ electron . [文件夹] [--folder <dir>] [--extension-dir <dir>] [--user-data-dir
 - [docs/ROADMAP.md](docs/ROADMAP.md)：M0–M6 的勾选清单和下一步
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：分层、进程、数据流，以及"加一个功能该改哪里"
 - [docs/design.md](docs/design.md)：视觉规范
+- [docs/DEVELOPING.md](docs/DEVELOPING.md)：二次开发指南
+- [docs/local-api.md](docs/local-api.md)：本地接口（给外部程序用的 HTTP 接口）
 - [docs/adr/](docs/adr/)：关键决策记录
 
 ## 许可证

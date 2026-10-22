@@ -4,6 +4,7 @@ Vilausity：在 VS Code 之外原样运行官方 Claude Code 插件的 Electron 
 
 - 计划和阶段：`docs/PLAN.md`（立项时定下的完整计划，别删别改原意）；进度和下一步见 `docs/ROADMAP.md`。
 - 架构和分层规矩：`docs/ARCHITECTURE.md`；视觉规范：`docs/design.md`；关键决策：`docs/adr/`。
+- 常见改动（加模块、命令、设置、按钮、本地接口的操作、往插件页面加东西）的写法和例子：`docs/DEVELOPING.md`；本地接口的用法：`docs/local-api.md`。
 - 插件内部的逆向笔记（消息格式、diff 流程、会话标签页和标题、M4 用的环境变量）在本地的 `.local/extension-internals.md`，不进仓库（`.gitignore` 了）。
 - 如果根目录有 `HANDOFF.md`，先读它，里面是上一个对话留下的待办。
 
@@ -22,7 +23,8 @@ npm run icons        # 重新生成 resources/icon/ 的图标（SVG + .ico），
 npm run package      # 正式构建 + electron-builder：release\win-unpacked\ 和 NSIS 安装包
 npm run package:dir  # 只出 release\win-unpacked\（快，测打包版用）
 node tests/installer.mjs   # 静默装、查、启动、卸载 release\ 里的安装包（--all-users 装进 Program Files，要管理员 shell）；会真写快捷方式和注册表，跑完恢复
-run-dev.cmd          # 在资源管理器里双击：构建并启动（手动试用就用它）
+run-dev.cmd          # 在资源管理器里双击：构建并启动（用 %APPDATA%\Vilausity 的数据；那个数据目录已有实例在跑时参数会交给它）
+npm run dev          # 构建并启动独立的开发实例（数据在 .test-data\dev，跟正在用的 Vilausity 互不影响）
 ```
 
 改完代码的顺序：typecheck，`npm run lint`（格式不对就先 `npm run format`），然后 `npm test`，然后 `node tests/ui.mjs`。动了插件私有协议相关的代码（bridge、compat）才跑 smoke。动了打包相关的（electron-builder 配置、构建脚本、读程序文件的路径）就 `npm run package:dir`，再用 `VILAUS_EXECUTABLE=release\win-unpacked\Vilausity.exe` 跑界面测试（smoke 也认）。`npm run package` 之后 `dist/` 是正式构建，`npm run build` 换回开发版。

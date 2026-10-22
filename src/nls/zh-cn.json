@@ -677,6 +677,7 @@
   "window.sampleWarning": "示例警告。不带按钮的通知过一会儿会自动消失。",
   "window.showSampleNotifications": "显示示例通知",
   "window.toggleDevTools": "切换开发人员工具",
+  "window.reloadWindow": "重新加载窗口",
   "window.zoomIn": "放大",
   "window.zoomOut": "缩小",
   "workspace.browse": "浏览...",

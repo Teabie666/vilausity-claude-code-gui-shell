@@ -13,7 +13,8 @@ import time
 import urllib.error
 import urllib.request
 
-API_FILE = os.path.expandvars(r"%APPDATA%\Vilausity\api.json")
+# Another instance's (a dev instance, the administrator one) with VILAUS_API_FILE.
+API_FILE = os.environ.get("VILAUS_API_FILE") or os.path.expandvars(r"%APPDATA%\Vilausity\api.json")
 # Not through the system's proxy: a proxy program may not pass 127.0.0.1 on.
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 

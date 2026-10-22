@@ -123,6 +123,13 @@ function main(): void {
   // instance has its own lock: it runs next to the normal one.
   const secondStart: SecondStart = { argv, cwd: process.cwd() };
   if (!app.requestSingleInstanceLock(secondStart)) {
+    if (!app.isPackaged) {
+      // A build of one's own started next to the Vilausity in use would otherwise vanish without a word.
+      process.stdout.write(
+        `Vilausity already runs with the data folder ${paths.instanceRoot}: the arguments went to it.\n` +
+          'For a separate instance give it a folder of its own: --user-data-dir <folder> (npm run dev does).\n',
+      );
+    }
     app.quit();
     return;
   }

@@ -13,6 +13,7 @@ export const t = defineMessages('window', {
   zoomOut: 'Zoom Out',
   resetZoom: 'Reset Zoom',
   toggleDevTools: 'Toggle Developer Tools',
+  reloadWindow: 'Reload Window',
   showSampleNotifications: 'Show Sample Notifications',
   sampleInfo: 'Sample information notification. One with buttons stays until a button or × is clicked.',
   sampleWarning: 'Sample warning. One without buttons closes by itself after a while.',

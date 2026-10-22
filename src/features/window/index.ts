@@ -59,6 +59,11 @@ export const windowModule: ShellModule = {
         title: t('toggleDevTools'),
         category: CommandCategory.developer,
       }),
+      // The page and the extension host start again from what is built now (main's own code needs a restart).
+      commands.register('window.reload', () => native.call('window.reload', undefined), {
+        title: t('reloadWindow'),
+        category: CommandCategory.developer,
+      }),
       commands.register('window.showSampleNotifications', showSampleNotifications, {
         title: t('showSampleNotifications'),
         category: CommandCategory.developer,
