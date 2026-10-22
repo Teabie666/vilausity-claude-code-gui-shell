@@ -4,6 +4,7 @@ out/
 release/
 *.log
 .scratch/
+doc-drafts/
 # Local-only notes, e.g. reverse-engineered details of the extension.
 .local/
 .test-data/
