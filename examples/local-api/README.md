@@ -1,6 +1,6 @@
 # 本地接口的例子
 
-先在 Vilausity 里打开本地接口：设置（Ctrl+,）→"本地接口"→"启用本地接口"。接口的说明见 [docs/local-api.md](../../docs/local-api.md)。
+先在 Vilausity 里打开本地接口：设置（Ctrl+,）→"本地接口"→"启用本地接口"。接口参考见 [docs/local-api.md](../../docs/local-api.md)。
 
 | 文件 | 做什么 |
 | --- | --- |
