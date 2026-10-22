@@ -206,6 +206,36 @@ export interface WebviewPageHints {
   readonly messageMarkers?: MessageMarkerHints;
   /** A conversation's messages, whose text can be commented on (see the type). */
   readonly conversationComments?: ConversationCommentHints;
+  /** Where a conversation's message input is, for the shell to send a message as Enter does (`submitPrompt`). */
+  readonly promptSubmit?: PromptSubmitHints;
+}
+
+export interface PromptSubmitHints {
+  /** The message input (an editable element; Enter in it sends). */
+  readonly input: string;
+}
+
+/**
+ * How a `submitPrompt` went: sent; the input held other text (the user's, left alone); no input
+ * showed up; or the page did not take the message.
+ */
+export type PromptSubmitOutcome = 'sent' | 'notEmpty' | 'noInput' | 'notSent';
+
+/**
+ * A page's answer to a `submitPrompt` control. It goes the way the page's messages to the
+ * extension go, and the bridge takes it out.
+ */
+export interface PromptSubmitReply {
+  readonly ccwReply: 'submitPrompt';
+  readonly id: number;
+  readonly outcome: PromptSubmitOutcome;
+}
+
+/** `conversation.send`: how it went, and the conversation's session (unknown for a new one at times). */
+export interface ConversationSendResult {
+  /** `busyElsewhere`: another process (window, VS Code, the CLI) holds the session. */
+  readonly outcome: PromptSubmitOutcome | 'busyElsewhere';
+  readonly sessionId?: string;
 }
 
 /**
@@ -850,6 +880,8 @@ export type ExtHostApiForMain = {
   'storage.didChange': (p: { scope: StorageScope; key: string; value: unknown }) => void;
   /** Opens a conversation once the extension is active (the command line's --session / --prompt). */
   'conversation.open': (p: ConversationRequest) => void;
+  /** Sends `prompt` in the session's conversation (opened if need be), or in a new one, as Enter does (the local API). */
+  'conversation.send': (p: { sessionId?: string; prompt: string }) => ConversationSendResult;
   /** Opens a file in the content pane (the command line's --goto); false if it cannot be read. */
   'documents.show': (p: { uri: string; selection?: RangeDto }) => boolean;
   /** A `vilaus://<extension id>/...` link from outside, for the extension's URI handler; asks the user first. */
@@ -1373,4 +1405,6 @@ export type ShellToWebviewControl =
   /** Report the text selected in the conversation (a `selection` comments event with this id; pages with `hints.conversationComments`). */
   | { readonly ccwControl: 'commentSelection'; readonly id: number }
   /** Scroll to commented text of the conversation and flash it (pages with `hints.conversationComments`). */
-  | { readonly ccwControl: 'revealQuote'; readonly quote: ConversationQuoteDto };
+  | { readonly ccwControl: 'revealQuote'; readonly quote: ConversationQuoteDto }
+  /** Send `text` as the user does (pages with `hints.promptSubmit`); answered with a `PromptSubmitReply`. */
+  | { readonly ccwControl: 'submitPrompt'; readonly id: number; readonly text: string };

@@ -100,6 +100,16 @@ describe('ClaudeWebviewBridge', () => {
     assert.deepEqual(messages, []);
   });
 
+  test("asks the page to send a prompt and takes its answer out of the extension's messages", async () => {
+    const { bridge, webview, messages } = makeBridge(true);
+    const sent = bridge.submitPrompt(webview, 'run the tests');
+    assert.deepEqual(messages, [{ ccwControl: 'submitPrompt', id: 1, text: 'run the tests' }]);
+    assert.equal(bridge.interceptFromWebview(webview, { ccwReply: 'submitPrompt', id: 1, outcome: 'notEmpty' }), true);
+    assert.equal(await sent, 'notEmpty');
+    // A late or unknown answer is dropped all the same.
+    assert.equal(bridge.interceptFromWebview(webview, { ccwReply: 'submitPrompt', id: 7, outcome: 'sent' }), true);
+  });
+
   test('passes io_message through', () => {
     const { bridge, webview, messages } = makeBridge(false);
     assert.equal(bridge.interceptFromWebview(webview, { type: 'io_message', channelId: 'c1', message: 'hi', done: false }), false);

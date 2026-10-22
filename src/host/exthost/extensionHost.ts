@@ -9,14 +9,15 @@ import type * as vscode from 'vscode';
 import type { MessagePortMain } from 'electron';
 import { createVSCodeApi, type CompatServices } from '../../compat/vscode';
 import { createExtensionContext } from '../../compat/vscode/extensionContext';
+import { CHAT_PANEL_VIEW_TYPE } from '../../compat/vscode/webviews';
 import { Memento } from '../../compat/vscode/memento';
 import { Uri } from '../../compat/vscode/uri';
 import { RpcEndpoint, type MessageTransport } from '../../platform/ipc';
 import { sessionProcesses, waitForExit } from '../node/claudeProcesses';
 import { toDisposable } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
-import type { ConversationRequest, ExtHostInitData, RangeDto, StorageScope } from '../../platform/protocol';
-import { ClaudeWebviewBridge, conversationSessionId } from './bridge';
+import type { ConversationRequest, ConversationSendResult, ExtHostInitData, RangeDto, StorageScope } from '../../platform/protocol';
+import { ClaudeWebviewBridge, conversationSessionId, shownSessionId } from './bridge';
 import { ConversationComments, registerCommentRequests } from './comments';
 import { PanelRestore } from './panelRestore';
 import { createCompatHost, type CompatHostHandle, type MainRpc, type RendererRpc } from './compatHost';
@@ -39,6 +40,20 @@ const OPEN_CHAT_COMMAND = 'claude-vscode.editor.open';
 const OPEN_CONVERSATION_COMMAND = 'claude-vscode.primaryEditor.open';
 /** How long a closed tab's Claude process may take to end (it saves the session first). */
 const SESSION_EXIT_TIMEOUT_MS = 10_000;
+/** How long a conversation asked for may take to get its panel (and a new one its session). */
+const PANEL_TIMEOUT_MS = 15_000;
+
+/** `probe` until it gives something, or undefined after `timeout` ms. */
+async function poll<T>(probe: () => T | undefined, timeout: number): Promise<T | undefined> {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    const value = probe();
+    if (value !== undefined || Date.now() >= deadline) {
+      return value;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
 
 function portTransport(port: MessagePortMain): MessageTransport<MessagePortMain> {
   return {
@@ -221,6 +236,47 @@ export class ExtensionHost {
       return;
     }
     await this.services?.commands.executeCommand(OPEN_CONVERSATION_COMMAND, request.sessionId, request.prompt);
+  }
+
+  /**
+   * Sends a prompt as the user does: in the conversation that shows the session (opened if no
+   * tab does), or in a new conversation. A session another process holds is left alone: two
+   * Claude processes must not go on with one session.
+   */
+  async sendPrompt(request: { sessionId?: string; prompt: string }): Promise<ConversationSendResult> {
+    this.openAtStart ??= {};
+    const services = this.services;
+    const bridge = this.bridge;
+    if (!(await this.ready()) || !services || !bridge) {
+      return { outcome: 'noInput' };
+    }
+    const { sessionId, prompt } = request;
+    if (sessionId && bridge.sessionBusy(sessionId) === 'elsewhere') {
+      return { outcome: 'busyElsewhere', sessionId };
+    }
+    let panel = sessionId
+      ? services.webviews.allPanels.find((candidate) => shownSessionId(candidate.webview.state) === sessionId)
+      : undefined;
+    if (panel) {
+      panel.reveal();
+    } else {
+      const before = new Set(services.webviews.allPanels);
+      await services.commands.executeCommand(OPEN_CONVERSATION_COMMAND, sessionId);
+      panel = await poll(
+        () => services.webviews.allPanels.find((candidate) => !before.has(candidate) && candidate.viewType === CHAT_PANEL_VIEW_TYPE),
+        PANEL_TIMEOUT_MS,
+      );
+    }
+    if (!panel) {
+      this.logger.warn('no conversation to send a prompt in');
+      return { outcome: 'noInput', sessionId };
+    }
+    const shown = panel;
+    const outcome = await bridge.submitPrompt(shown.webview, prompt);
+    this.logger.info(`a prompt from the local API: ${outcome}`);
+    // A new conversation's session is known once its page has saved it.
+    const session = sessionId ?? (await poll(() => shownSessionId(shown.webview.state), outcome === 'sent' ? PANEL_TIMEOUT_MS : 0));
+    return { outcome, sessionId: session };
   }
 
   async showDocument(params: { uri: string; selection?: RangeDto }): Promise<boolean> {

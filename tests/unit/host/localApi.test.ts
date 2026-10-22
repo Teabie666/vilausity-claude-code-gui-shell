@@ -565,13 +565,22 @@ describe('builtInOperations', () => {
     openFolder: string[];
     openFile: Array<{ file: string; line: number | undefined; column: number | undefined }>;
     openConversation: Array<{ target: ConversationTarget; request: ConversationRequest }>;
+    sendPrompt: Array<{ target: ConversationTarget; request: { sessionId?: string; prompt: string } }>;
     searchSessions: SessionSearchRequest[];
     focusWindow: number[];
     usage: Array<number | undefined>;
   }
 
   function fakeHost(overrides: Partial<OperationsHost> = {}): { host: OperationsHost; calls: HostCalls } {
-    const calls: HostCalls = { openFolder: [], openFile: [], openConversation: [], searchSessions: [], focusWindow: [], usage: [] };
+    const calls: HostCalls = {
+      openFolder: [],
+      openFile: [],
+      openConversation: [],
+      sendPrompt: [],
+      searchSessions: [],
+      focusWindow: [],
+      usage: [],
+    };
     const host: OperationsHost = {
       windows: () => [],
       focusWindow: (id) => {
@@ -597,6 +606,10 @@ describe('builtInOperations', () => {
       usage: async (window) => {
         calls.usage.push(window);
         return null;
+      },
+      sendPrompt: async (target, request) => {
+        calls.sendPrompt.push({ target, request });
+        return { window: 7, result: { outcome: 'sent', sessionId: 'S' } };
       },
       ...overrides,
     };
@@ -730,6 +743,41 @@ describe('builtInOperations', () => {
     assert.deepEqual(calls.usage, [undefined]);
   });
 
+  test('conversations.send needs a prompt and answers each outcome with its own status', async () => {
+    const { host, calls } = fakeHost();
+    const send = op(host, 'conversations.send');
+    await assert.rejects(
+      async () => send.handle({}),
+      (error) => error instanceof ApiError && error.status === 400,
+    );
+    await assert.rejects(
+      async () => send.handle({ prompt: '  ' }),
+      (error) => error instanceof ApiError && error.status === 400,
+    );
+    assert.deepEqual(await send.handle({ prompt: 'go', window: 2 }), { window: 7, sessionId: 'S' });
+    assert.deepEqual(calls.sendPrompt, [{ target: { folder: undefined, window: 2 }, request: { sessionId: undefined, prompt: 'go' } }]);
+
+    const failing = (outcome: 'notEmpty' | 'notSent' | 'busyElsewhere' | 'noInput') =>
+      op(fakeHost({ sendPrompt: async () => ({ window: 1, result: { outcome } }) }).host, 'conversations.send').handle({ prompt: 'go' });
+    const expected = [
+      ['notEmpty', 409, 'input_not_empty'],
+      ['notSent', 409, 'not_sent'],
+      ['busyElsewhere', 409, 'busy_elsewhere'],
+      ['noInput', 504, 'no_input'],
+    ] as const;
+    for (const [outcome, status, code] of expected) {
+      await assert.rejects(
+        async () => failing(outcome),
+        (error) => error instanceof ApiError && error.status === status && error.code === code,
+      );
+    }
+    const nowhere = op(fakeHost({ sendPrompt: async () => undefined }).host, 'conversations.send');
+    await assert.rejects(
+      async () => nowhere.handle({ prompt: 'go', folder: 'C:\\w' }),
+      (error) => error instanceof ApiError && error.code === 'not_found',
+    );
+  });
+
   test('each operation declares its access', () => {
     const accesses = new Map(builtInOperations(fakeHost().host).map((operation) => [operation.name, operation.access]));
     assert.equal(accesses.get('windows.list'), 'read');
@@ -739,6 +787,7 @@ describe('builtInOperations', () => {
     assert.equal(accesses.get('conversations.open'), 'write');
     assert.equal(accesses.get('sessions.search'), 'read');
     assert.equal(accesses.get('usage.get'), 'read');
+    assert.equal(accesses.get('conversations.send'), 'send');
   });
 });
 

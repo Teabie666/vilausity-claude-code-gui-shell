@@ -23,6 +23,9 @@ import type {
   ConversationStateDto,
   FileLinkHints,
   MessageMarkerHints,
+  PromptSubmitHints,
+  PromptSubmitOutcome,
+  PromptSubmitReply,
   SessionActivity,
   SessionBusy,
   SessionRowHints,
@@ -65,6 +68,15 @@ const CONVERSATION_ESCAPES: ConversationEscapeHints = {
   input: '[role="textbox"][aria-label="Message input"]',
   doubleMs: 800,
 };
+
+/**
+ * A conversation's message input (anthropic.claude-code 2.1.306: a `contenteditable` that takes
+ * text inserted with `execCommand('insertText')`, and sends on an Enter keydown, a dispatched
+ * one too, then empties).
+ */
+const PROMPT_SUBMIT: PromptSubmitHints = { input: CONVERSATION_ESCAPES.input };
+/** How long a page may take to answer `submitPrompt` (it waits for its input to show up first). */
+const SUBMIT_TIMEOUT_MS = 30_000;
 
 /**
  * What a conversation page gets a token at a time (anthropic.claude-code 2.1.296): Claude
@@ -613,6 +625,12 @@ export function conversationSessionId(state: unknown): string | undefined {
   return typeof sessionId === 'string' && sessionId.length > 0 && state.sessionWithNoTranscript !== sessionId ? sessionId : undefined;
 }
 
+/** The session a conversation panel's page shows, also a new one that has no transcript yet (see above). */
+export function shownSessionId(state: unknown): string | undefined {
+  const sessionId = isRecord(state) ? state.sessionID : undefined;
+  return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined;
+}
+
 export interface BridgeOptions {
   /**
    * Whether vilaus can show diff editors. Until M2 it cannot, and the webview must
@@ -673,6 +691,9 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   /** The window's conversations as the extension last told its pages, and what was last reported of them. */
   private conversations: readonly ConversationStateDto[] = [];
   private reportedConversations = JSON.stringify([[], null]);
+  /** The pages' answers to `submitPrompt` awaited, by id. */
+  private readonly submits = new Map<number, (outcome: PromptSubmitOutcome) => void>();
+  private nextSubmit = 1;
   /**
    * Each conversation's Claude process (by page and channel): the provider it started under and
    * when, the session it works on, and whether it made a call on that session yet.
@@ -705,6 +726,13 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   interceptFromWebview(webview: WebviewImpl, message: unknown): boolean {
     if (!isRecord(message)) {
       return false;
+    }
+    if (message.ccwReply === 'submitPrompt') {
+      const reply = message as Partial<PromptSubmitReply>;
+      if (typeof reply.id === 'number' && reply.outcome) {
+        this.submits.get(reply.id)?.(reply.outcome);
+      }
+      return true;
     }
     if (message.type === 'cancel_request' && typeof message.targetRequestId === 'string') {
       return this.releaseHeldDiff(message.targetRequestId);
@@ -1126,6 +1154,25 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   }
 
   /**
+   * Sends `text` in a conversation as the user does: the page's script puts it in the input and
+   * presses Enter (see PROMPT_SUBMIT), unless the input holds other text.
+   */
+  submitPrompt(webview: WebviewImpl, text: string): Promise<PromptSubmitOutcome> {
+    const id = this.nextSubmit++;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => finish('noInput'), SUBMIT_TIMEOUT_MS);
+      const finish = (outcome: PromptSubmitOutcome): void => {
+        clearTimeout(timer);
+        this.submits.delete(id);
+        resolve(outcome);
+      };
+      this.submits.set(id, finish);
+      const control: ShellToWebviewControl = { ccwControl: 'submitPrompt', id, text };
+      void webview.postMessage(control);
+    });
+  }
+
+  /**
    * Puts `@<path>` into a conversation's input as a mention, as the extension's own "insert
    * @-mention" does (anthropic.claude-code 2.1.306: `{type: 'request', channelId: '', requestId: '',
    * request: {type: 'insert_at_mention', text}}`; the page adds it as a chip, once, and focuses
@@ -1151,6 +1198,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
           keepInPlace: THINKING_SUMMARY,
           messageMarkers: MESSAGE_MARKERS,
           conversationComments: CONVERSATION_COMMENTS,
+          promptSubmit: PROMPT_SUBMIT,
         };
       case SESSION_LIST_VIEW_TYPE:
         return {

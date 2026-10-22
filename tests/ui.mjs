@@ -1718,6 +1718,111 @@ await step(
   },
 );
 
+await step(
+  'the local API sends a prompt as Enter does, in a new conversation and in its session again, only with sending allowed, never over typed text',
+  async () => {
+    const mock = await startMockApi();
+    const before = await tabCount();
+    try {
+      await page.evaluate(async (port) => {
+        await window.vilausNative.invoke('providers.save', {
+          provider: {
+            id: 'mock-send',
+            name: 'Mock send',
+            type: 'compatible',
+            baseUrl: `http://127.0.0.1:${port}`,
+            auth: 'bearer',
+            models: { main: 'mock-model' },
+          },
+        });
+        await window.vilausNative.invoke('providers.setKey', { id: 'mock-send', key: 'k' });
+        await window.vilausNative.invoke('providers.select', { id: 'mock-send' });
+      }, mock.port);
+      await setSetting('vilaus.api.enabled', true);
+      const apiFile = path.join(dataDir, 'api.json');
+      const api = await waitFor(
+        async () => {
+          const saved = JSON.parse(readFileSync(apiFile, 'utf8'));
+          const answer = await fetch(saved.url, { headers: { authorization: `Bearer ${saved.token}` } }).catch(() => undefined);
+          return answer?.status === 200 && saved;
+        },
+        10_000,
+        'the API',
+      );
+      const call = async (name, params) => {
+        const response = await fetch(`${api.url}/${name}`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${api.token}` },
+          body: JSON.stringify(params),
+        });
+        return { status: response.status, body: await response.json() };
+      };
+      // What the mock API was asked with: the user's last words in each request of the conversation.
+      const asked = (text) =>
+        mock.requests.some(
+          (request) =>
+            request.url?.startsWith('/v1/messages') &&
+            !request.url.includes('count_tokens') &&
+            JSON.stringify(request.body?.messages ?? []).includes(text),
+        );
+
+      const refused = await call('conversations.send', { prompt: 'not yet' });
+      if (refused.status !== 403) throw new Error(`sent with sending off: ${JSON.stringify(refused)}`);
+      await setSetting('vilaus.api.allowSend', true);
+
+      const first = await call('conversations.send', { prompt: 'SEND-ONE from a program' });
+      if (first.status !== 200 || typeof first.body.sessionId !== 'string') throw new Error(`first send: ${JSON.stringify(first)}`);
+      await waitFor(() => asked('SEND-ONE from a program'), 30_000, 'the mock API to get the first prompt');
+      if ((await tabCount()) !== before + 1) throw new Error(`${await tabCount()} tabs after the first send`);
+      // Its session again, once the first turn is over: the same tab, no new one.
+      const idle = async () =>
+        (await call('windows.list', {})).body[0]?.conversations.find((conversation) => conversation.sessionId === first.body.sessionId)
+          ?.state === 'idle';
+      await waitFor(idle, 30_000, 'the first turn to end');
+      const second = await call('conversations.send', { prompt: 'SEND-TWO in the same session', sessionId: first.body.sessionId });
+      if (second.status !== 200 || second.body.sessionId !== first.body.sessionId)
+        throw new Error(`second send: ${JSON.stringify(second)}`);
+      await waitFor(() => asked('SEND-TWO in the same session'), 30_000, 'the mock API to get the second prompt');
+      if ((await tabCount()) !== before + 1) throw new Error(`${await tabCount()} tabs after the second send`);
+
+      // Text the user typed stays: nothing is sent over it.
+      await waitFor(idle, 30_000, 'the second turn to end');
+      const frame = await waitFor(conversationFrame, 10_000, 'the conversation');
+      const input = frame.locator('[role="textbox"][aria-label="Message input"]');
+      // As if typed: the page's editor takes inserted text like keys.
+      await input.evaluate((element) => {
+        element.focus();
+        document.execCommand('insertText', false, 'half a thought');
+      });
+      const typed = await call('conversations.send', { prompt: 'SEND-THREE', sessionId: first.body.sessionId });
+      if (typed.status !== 409 || typed.body.error !== 'input_not_empty') throw new Error(`over typed text: ${JSON.stringify(typed)}`);
+      if (!(await input.innerText()).includes('half a thought') || asked('SEND-THREE')) throw new Error('the typed text was replaced');
+      await input.evaluate((element) => {
+        element.focus();
+        document.execCommand('selectAll');
+        document.execCommand('delete');
+      });
+      return `${mock.requests.length} requests to the mock`;
+    } finally {
+      // The steps after this one need the subscription and the API off, whatever went wrong here.
+      await page
+        .evaluate(async () => {
+          await window.vilausNative.invoke('providers.select', { id: 'subscription' });
+          await window.vilausNative.invoke('providers.remove', { id: 'mock-send' });
+        })
+        .catch((error) => console.log(`  (cleanup: ${error.message})`));
+      await setSetting('vilaus.api.allowSend', undefined);
+      await setSetting('vilaus.api.enabled', undefined);
+      mock.server.close();
+      for (let tries = 0; (await tabCount()) > before && tries < 5; tries++) {
+        const count = await tabCount();
+        await press('Control+W');
+        await waitFor(async () => (await tabCount()) < count, 10_000, 'the tab to close').catch(() => undefined);
+      }
+    }
+  },
+);
+
 // ---- M4: API providers ------------------------------------------------------------------------
 
 /** A stand-in for an Anthropic-compatible API on 127.0.0.1: records requests, answers briefly. */

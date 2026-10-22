@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import { ApiError, badRequest, positiveIntegerParam, requiredString, stringParam, type ApiParams } from '../../platform/localApi';
 import type {
   ConversationRequest,
+  ConversationSendResult,
   ConversationState,
   ConversationStateDto,
   SessionSearchRequest,
@@ -66,6 +67,11 @@ export interface OperationsHost {
   openFile(file: string, line: number | undefined, column: number | undefined): number | undefined;
   /** The id of the window the conversation opens in; undefined when there is no such window or folder. */
   openConversation(target: ConversationTarget, request: ConversationRequest): Promise<number | undefined>;
+  /** Sends a prompt as the user does; undefined when there is no such window or folder. */
+  sendPrompt(
+    target: ConversationTarget,
+    request: { sessionId?: string; prompt: string },
+  ): Promise<{ window: number; result: ConversationSendResult } | undefined>;
   searchSessions(request: SessionSearchRequest): Promise<SessionSearchResult[]>;
   /** What a window's provider cost (null: the shell does not work that out for it); undefined: no such window. */
   usage(window: number | undefined): Promise<ApiUsage | null | undefined>;
@@ -145,9 +151,44 @@ export function builtInOperations(host: OperationsHost): ApiOperation[] {
         const request = conversationRequest(params);
         const window = await host.openConversation(target, request);
         if (window === undefined) {
-          throw target.folder !== undefined ? new ApiError(404, 'not_found', `${target.folder} is not a folder`) : noWindow(target.window);
+          throw noTarget(target);
         }
         return { window };
+      },
+    },
+    {
+      name: 'conversations.send',
+      access: 'send',
+      description:
+        "Sends a prompt to Claude as you do with Enter: in a session's conversation (opened if need be, in the window that shows it if one does), or in a new one.",
+      params: {
+        prompt: 'string: what to send',
+        sessionId: 'string, optional: the session to send it in; a new conversation without',
+        folder: 'string, optional: the folder whose window it goes to (opened if need be)',
+        window: WINDOW_PARAM,
+      },
+      handle: async (params) => {
+        const target = conversationTarget(params);
+        const { sessionId, prompt } = conversationRequest(params);
+        if (prompt === undefined || prompt.trim() === '') {
+          throw badRequest('prompt is required');
+        }
+        const sent = await host.sendPrompt(target, { sessionId, prompt });
+        if (!sent) {
+          throw noTarget(target);
+        }
+        switch (sent.result.outcome) {
+          case 'sent':
+            return { window: sent.window, sessionId: sent.result.sessionId ?? null };
+          case 'notEmpty':
+            throw new ApiError(409, 'input_not_empty', 'the conversation has other text in its input; it is left as it is');
+          case 'notSent':
+            throw new ApiError(409, 'not_sent', 'the conversation did not take the message (it may be waiting for an answer)');
+          case 'busyElsewhere':
+            throw new ApiError(409, 'busy_elsewhere', 'another process (another window, VS Code, the CLI) has this session open');
+          case 'noInput':
+            throw new ApiError(504, 'no_input', 'the conversation did not show its input in time');
+        }
       },
     },
     {
@@ -243,6 +284,10 @@ export function conversationEvents(
 
 function noWindow(id: number | undefined): ApiError {
   return new ApiError(404, 'no_window', id === undefined ? 'no window is open' : `no window ${id}`);
+}
+
+function noTarget(target: ConversationTarget): ApiError {
+  return target.folder !== undefined ? new ApiError(404, 'not_found', `${target.folder} is not a folder`) : noWindow(target.window);
 }
 
 function absolutePath(params: ApiParams, name: string): string {

@@ -15,6 +15,7 @@ import type {
   ApiErrorDto,
   AppInfo,
   ConversationRequest,
+  ConversationSendResult,
   ConversationStateDto,
   ExtensionTranslations,
   ExtHostInitData,
@@ -96,6 +97,8 @@ export interface WindowHost {
 
 /** How long the local API waits for a page to answer a call. */
 const PAGE_CALL_TIMEOUT_MS = 30_000;
+/** How long a send waits for the window's extension to start (a window just opened for it). */
+const SEND_START_TIMEOUT_MS = 60_000;
 
 export interface WindowOptions {
   /** 1, 2, ... in the order windows open during this run; names the window's log folder. */
@@ -218,6 +221,33 @@ export class WindowContext extends Disposable {
       this.request(this.extHost.rpc.call('conversation.open', request), 'opening a conversation');
     } else {
       this.pendingConversation = request;
+    }
+  }
+
+  /**
+   * Sends a prompt in a conversation once the extension is up (the local API's send). Given up
+   * after a while: a send that came long after its caller stopped waiting would surprise.
+   */
+  sendPrompt(request: { sessionId?: string; prompt: string }): Promise<ConversationSendResult> {
+    return new Promise((resolve, reject) => {
+      let expired = false;
+      const timer = setTimeout(() => {
+        expired = true;
+        reject(new ApiError(504, 'timeout', `the extension in window ${this.id} did not start in time`));
+      }, SEND_START_TIMEOUT_MS);
+      this.whenInitialized((extHost) => {
+        clearTimeout(timer);
+        if (!expired) {
+          extHost.rpc.call('conversation.send', request).then(resolve, reject);
+        }
+      });
+    });
+  }
+
+  /** A window opened for the local API's conversation shows none of its own (before the extension starts). */
+  skipInitialConversation(): void {
+    if (!this.initialized) {
+      this.pendingConversation ??= {};
     }
   }
 

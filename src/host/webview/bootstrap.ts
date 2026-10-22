@@ -8,6 +8,8 @@
 import type {
   ConversationQuoteDto,
   KeyEventDto,
+  PromptSubmitOutcome,
+  PromptSubmitReply,
   ProviderNoticeDto,
   SessionProvidersDto,
   ShellToWebviewControl,
@@ -22,6 +24,7 @@ import { DEFAULT_WEBVIEW_STYLES } from './defaultStyles';
 import { FileLinks } from './fileLinks';
 import { InPageFinder } from './find';
 import { MessageMarkers } from './messageMarkers';
+import { submitPrompt } from './promptSubmit';
 import { ProviderNotice } from './providerNotice';
 import { filterButtonOnly, SessionProviderMarks } from './sessionProviders';
 import { watchSessionRows } from './sessionRows';
@@ -296,6 +299,16 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
         case 'jumpToMessage':
           markers?.jump(control.direction);
           break;
+        case 'submitPrompt': {
+          const { id, text } = control;
+          const hints = data.hints?.promptSubmit;
+          void (hints ? submitPrompt(hints, text) : Promise.resolve<PromptSubmitOutcome>('noInput')).then((outcome) => {
+            // To the bridge, the way the page's messages to the extension go.
+            const reply: PromptSubmitReply = { ccwReply: 'submitPrompt', id, outcome };
+            post({ kind: 'message', message: reply });
+          });
+          break;
+        }
       }
     },
     true,

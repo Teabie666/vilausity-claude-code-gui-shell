@@ -77,7 +77,14 @@ import { scopeValue, usageTotal, usageView } from './usageView';
 import { claudeProjectsDir, SessionSearch } from './sessionSearch';
 import { KeybindingsStore } from './keybindingsStore';
 import { LocalApi } from './localApi';
-import { builtInOperations, conversationEvents, usageScope, type ApiWindow, type OperationsHost } from './localApiOperations';
+import {
+  builtInOperations,
+  conversationEvents,
+  usageScope,
+  type ApiWindow,
+  type ConversationTarget,
+  type OperationsHost,
+} from './localApiOperations';
 import { LogoIcons, systemIconColor } from './logoIcons';
 import { SettingsStore } from './settingsStore';
 import { isExternalUrl, nextZoomLevel } from './shellWindow';
@@ -805,6 +812,32 @@ export class ShellApp extends Disposable implements WindowHost {
     return id === undefined ? this.windows.at(-1) : this.windowById(id);
   }
 
+  /**
+   * Where the local API's conversation goes: a session open in a window goes on there (a second
+   * Claude process on it elsewhere would fight the first); else the folder's window (opened when
+   * there is none: `opened`), the window named, or the active one.
+   */
+  private async conversationWindow(
+    target: ConversationTarget,
+    sessionId: string | undefined,
+  ): Promise<{ window: WindowContext; opened: boolean } | undefined> {
+    const showing = sessionId
+      ? this.windows.find((window) => window.conversations.some((conversation) => conversation.sessionId === sessionId))
+      : undefined;
+    if (showing) {
+      return { window: showing, opened: false };
+    }
+    if (target.folder !== undefined) {
+      if (!isDirectory(target.folder)) {
+        return undefined;
+      }
+      const opened = !this.windowFor(target.folder);
+      return { window: await this.openWindow(target.folder), opened };
+    }
+    const window = this.apiTarget(target.window);
+    return window && { window, opened: false };
+  }
+
   conversationsChanged(window: WindowContext, previous: readonly ConversationStateDto[]): void {
     for (const event of conversationEvents(window, previous, window.conversations)) {
       this.localApi.emit(event.name, event.data);
@@ -853,23 +886,29 @@ export class ShellApp extends Disposable implements WindowHost {
         return window?.id;
       },
       openConversation: async (target, request) => {
-        let window: WindowContext | undefined;
-        let opened = false;
-        if (target.folder !== undefined) {
-          if (!isDirectory(target.folder)) {
-            return undefined;
-          }
-          opened = !this.windowFor(target.folder);
-          window = await this.openWindow(target.folder);
-        } else {
-          window = this.apiTarget(target.window);
+        const found = await this.conversationWindow(target, request.sessionId);
+        if (!found) {
+          return undefined;
         }
-        window?.focus();
+        const { window, opened } = found;
+        window.focus();
         // A window that just opened has a new conversation of its own.
-        if (window && (request.sessionId || request.prompt || !opened)) {
+        if (request.sessionId || request.prompt || !opened) {
           window.openConversation(request);
         }
-        return window?.id;
+        return window.id;
+      },
+      sendPrompt: async (target, request) => {
+        const found = await this.conversationWindow(target, request.sessionId);
+        if (!found) {
+          return undefined;
+        }
+        const { window, opened } = found;
+        if (opened) {
+          window.skipInitialConversation();
+        }
+        window.focus();
+        return { window: window.id, result: await window.sendPrompt(request) };
       },
       searchSessions: (request) => this.sessionSearch.search(request),
       usage: async (id) => {
