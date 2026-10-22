@@ -15,6 +15,7 @@ import { EditorRegistry } from './editors';
 import { ExtensionHostConnection } from './extensionHost';
 import { KeybindingService } from './keybindings';
 import { Layout } from './layout';
+import { LocalApiService } from './localApi';
 import { createRendererLogger } from './log';
 import { MenuService } from './menus';
 import { t } from './messages';
@@ -30,6 +31,7 @@ import {
   IExtensionHost,
   IKeybindings,
   ILayout,
+  ILocalApi,
   IMenus,
   INative,
   IPanels,
@@ -109,6 +111,7 @@ export async function startWorkbench(modules: readonly ShellModule[]): Promise<v
   services.register(IPanels, new PanelRouter(connection, logger.child('panels')));
   services.register(ISettings, settings);
   services.register(IQuickAccess, new QuickAccess(dialogs, logger.child('quickAccess')));
+  services.register(ILocalApi, new LocalApiService(native, logger.child('localApi')));
 
   // Core RPC handlers: webview plumbing and the extension's message/picker UI.
   connection.onDidConnect((rpc) => {

@@ -10,6 +10,7 @@ import type { EditorRegistry } from './editors';
 import type { ExtensionHostConnection } from './extensionHost';
 import type { KeybindingService } from './keybindings';
 import type { Layout } from './layout';
+import type { LocalApiService } from './localApi';
 import type { MenuService } from './menus';
 import type { NativeApi } from './native';
 import type { PanelRouter } from './panels';
@@ -44,3 +45,5 @@ export const IEditors = createServiceId<EditorRegistry>('editors');
 export const IPanels = createServiceId<PanelRouter>('panels');
 export const ISettings = createServiceId<SettingsService>('settings');
 export const IQuickAccess = createServiceId<QuickAccess>('quickAccess');
+/** Operations and events for programs on this computer (the local API). */
+export const ILocalApi = createServiceId<LocalApiService>('localApi');

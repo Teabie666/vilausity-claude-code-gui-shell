@@ -138,6 +138,7 @@ export class ExtensionHost {
         }
       },
       onActivity: (activity) => this.main.notify('sessions.activity', activity),
+      onConversations: (conversations, activeSessionId) => this.main.notify('sessions.states', { conversations, activeSessionId }),
       onSessionUsed: (usage) => this.main.notify('sessions.used', usage),
       provider: init.provider,
       shellPricing: init.shellPricing === true,

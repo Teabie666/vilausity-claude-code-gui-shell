@@ -14,6 +14,7 @@
 
 import type { ExtensionErrorCode, ManagedExtensions } from './extensionUpdates';
 import type { KeybindingEntry } from './keybindings';
+import type { ApiOperationInfo, ApiParams, ApiStatusDto } from './localApi';
 import type { UiLanguage, UiLanguageSetting } from './nls';
 import type { ProviderConfig, ProviderSummary } from './providers';
 
@@ -778,6 +779,19 @@ export interface SessionActivity {
   readonly waiting: number;
 }
 
+/**
+ * What a conversation is doing: Claude at work (or a background task running), waiting for
+ * the user (a permission, a question), or neither.
+ */
+export type ConversationState = 'running' | 'waiting' | 'idle';
+
+/** One of a window's conversations, as its page tells the extension. */
+export interface ConversationStateDto {
+  readonly sessionId: string;
+  readonly title: string;
+  readonly state: ConversationState;
+}
+
 /** The API providers (without keys) and the one this window uses. */
 export interface ProvidersState {
   readonly providers: readonly ProviderSummary[];
@@ -805,6 +819,8 @@ export type MainApiForExtHost = {
   'settings.set': (p: { key: string; value: unknown }) => void;
   /** The window's conversations started or stopped working or waiting (the taskbar button and the title bar's logo show it). */
   'sessions.activity': (p: SessionActivity) => void;
+  /** The window's conversations, or what one of them is doing, changed; `activeSessionId`: the one in front. */
+  'sessions.states': (p: { conversations: readonly ConversationStateDto[]; activeSessionId?: string }) => void;
   /**
    * A Claude process made its first API call on a session: the session ran under `provider`
    * from `at` (when the process started; Claude Code reads its variables then).
@@ -1110,7 +1126,24 @@ export type MainApiForRenderer = {
   'window.setWebviewMenu': (p: { webviewId: string; groups: readonly (readonly ContextMenuItemDto[])[] }) => void;
   /** Shows a menu where the mouse is; the id of the item chosen, undefined when it closed without one. */
   'window.popupMenu': (p: { items: readonly PopupMenuItemDto[] }) => string | undefined;
+
+  // ---- the local API (platform/localApi.ts) ----
+  /** Whether it serves and where; changes come as `apiStatus`. */
+  'api.status': (p: void) => ApiStatusDto;
+  /** The operations the page's modules offer (all of them, each time they change). */
+  'api.operations': (p: { operations: readonly ApiOperationInfo[] }) => void;
+  /** The answer to an `apiRequest`. */
+  'api.respond': (p: { id: number; result?: unknown; error?: ApiErrorDto }) => void;
+  /** An event for the API's event stream, from one of the page's modules. */
+  'api.emit': (p: { name: string; data: unknown }) => void;
 };
+
+/** An operation's failure, as the page reports it (see `ApiError`). */
+export interface ApiErrorDto {
+  readonly status: number;
+  readonly code: string;
+  readonly message: string;
+}
 
 /** Events main pushes to the renderer (through the preload, as window messages). */
 export type MainEventsForRenderer = {
@@ -1141,6 +1174,10 @@ export type MainEventsForRenderer = {
    * recently focused window only.
    */
   extensionUpdated: { readonly version: string };
+  /** A program calls one of the page's operations (`api.operations`); answered with `api.respond`. */
+  apiRequest: { readonly id: number; readonly name: string; readonly params: ApiParams };
+  /** The local API started, stopped or failed to start. */
+  apiStatus: ApiStatusDto;
 };
 
 export interface MainEventMessage<K extends keyof MainEventsForRenderer = keyof MainEventsForRenderer> {

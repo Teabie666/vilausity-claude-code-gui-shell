@@ -150,6 +150,17 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **引用**：路径交给主进程（`files.placeInWorkspace`，`host/main/attachments.ts`）：工作区里的原样用，工作区外的复制进工作区的附件文件夹（设置 `vilaus.conversations.attachmentsFolder`，默认 `attachments`，没有就建；指到工作区外就用默认的），同名的加 " (1)"，文件夹整个复制。然后渲染进程经插件进程让 bridge 给对话页发插件的 `insert_at_mention`（`conversation.insertMention`，每个文件一次），页面插入 `@相对路径`（`/` 分隔，有空格就加引号），跟插件自己的"插入 @提及"一样变成小块。没有打开的对话就新开一个，引用填进它的输入框（`conversation.open` 带 prompt）。
 - **测试**：CDP 的 `Input.dispatchDragEvent` 能拖真实文件，走的是跟系统拖放一样的路，但一次拖动只会发给开始时所在的页面，中途不会像真实拖放那样换到另一个页面；界面测试因此每次都从松手的那个页面开始拖。CDP 的取消也不给页面发 dragleave。
 
+## 本地接口（M6.5）
+
+给这台电脑上的别的程序用的 HTTP 接口（local API）：看窗口和对话在干什么、打开文件夹 / 文件 / 对话、执行壳的命令。怎么调用写在 [local-api.md](local-api.md)，这里只讲怎么搭的。
+
+- **服务**（`host/main/localApiServer.ts`，不认识 Electron，单元测试直接起）：`node:http` 只听 127.0.0.1，端口默认由系统分配（设置 `vilaus.api.port` 可以固定，固定的被占了就换一个、记日志）。请求要带 `Authorization: Bearer <令牌>`（`timingSafeEqual` 比较）；带 `Origin` 头的一律 403（浏览器发跨源请求都带它，所以网页用不了，令牌泄露了也一样）；`Host` 必须是 `127.0.0.1:<端口>` 或 `localhost:<端口>`（防 DNS rebinding）。操作按名字：`GET /v1/<名字>` 只给只读的操作（参数在查询串里，都是字符串，参数工具会把 `"12"`、`"true"` 认成数字、布尔），`POST /v1/<名字>` 带 JSON 对象；`GET /v1` 列出应用信息和所有操作（带 `available`）；`GET /v1/events` 是 SSE 事件流，连上先发一份 `windows`，之后每 25 秒一行注释保活。出错回 `{error: <短代码>, message}` 和对应的状态码（`ApiError`）。
+- **启停**（`host/main/localApi.ts`）：`vilaus.api.enabled`（默认关）、`vilaus.api.port` 变了就停掉重开。开着时把地址和令牌写进实例目录的 `api.json`（`ApiDiscovery`：`url`、`port`、`token`、`pid`、`version`、`elevated`）；停的时候不删，令牌在文件还在时一直沿用（固定端口加固定令牌，写死配置的工具也能用；删掉文件就换新令牌）。设置面板"本地接口"一节顶上的块显示在不在跑、地址、`api.json` 在哪（`api.status` / `apiStatus`）。
+- **三种权限**（`ApiAccess`）：`read` 只看；`write` 在壳里打开、改东西；`send` 让 Claude 干活、没人在电脑前按回车（还要 `vilaus.api.allowSend`，默认关）。**管理员实例只读**：同一个 Windows 用户下没提升的程序也读得到它的 `api.json`，不能让它们借提升过的 Vilausity 做事（比如打开管理员终端、让 Claude 以管理员身份干活）。
+- **操作从哪来**：主进程自己的在 `host/main/localApiOperations.ts`（`builtInOperations`：检查参数，事情交给 `ShellApp` 实现的 `OperationsHost`）；渲染进程的模块用 core 的服务 `ILocalApi`（`core/localApi.ts`）`register` 操作、`emit` 事件。渲染进程把自己有哪些操作报给主进程（`api.operations`，每次变了报全部），调用时主进程按参数 `window`（没给就是最近用的窗口）发 `apiRequest` 给那个窗口的页面，页面用 `api.respond` 回答（30 秒没回答算超时）。所以模块里加一个操作就是外部程序能调的一个接口，不用碰主进程和协议。壳的命令就是这样接出去的（`features/localApi`：`commands.list`、`commands.run`，只认有标题的命令；插件的命令不在壳的命令表里，碰不到）。
+- **对话的状态**：bridge 原来只数干活、等输入的个数（`sessions.activity`），现在还把 `session_states_update.sessions` 整理成 `{sessionId, title, state}`（`waiting_input` 记成 `waiting`，不认识的算 `idle`）连同前面那个对话报给主进程（`sessions.states`，变了才报）。主进程比较前后，给事件流发 `conversation.state`（新出现的没有 `previous`，没了的是 `closed`；插件进程停了或崩了，这个窗口的对话全算没了），再发一份新的 `windows`（50 毫秒内的变化合成一份）。窗口开关、换接口、换文件夹、换前台窗口也发 `windows`。刚新建、还没发过消息的对话也有会话 id，会出现在列表里，标题是空的。
+- **测试**：单元测试起真的服务测鉴权、路由、错误、事件流、启停和 `api.json`、参数检查；界面测试打开开关后用 `fetch` 和事件流把读、写、命令、关掉再开（令牌不变）走一遍。
+
 ## 会话列表里壳加的东西（M5.5）
 
 都是页面脚本照 bridge 的页面提示做的（对照插件 2.1.296）；插件改了类名就退回插件原样。数据靠 bridge 旁听插件发给页面的消息（`observeToWebview`），再用控制消息（`ShellToWebviewControl`）交给页面脚本。页面上的显示都走 `data-vilaus-*` 属性加 bridge 的样式，React 管的内容不动。
@@ -341,6 +352,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 | `globalStorage\`、`workspaceStorage\` | 插件自己的存储目录 | 插件 |
 | `logs\<启动时间>\` | 本次启动的日志，保留最近 10 次：`main.log`，每个窗口一个 `window<N>\`（exthost.log、shim-unimplemented.log、output\） | main / extension host |
 | `providers.json` | API 接口（密钥用 safeStorage 加密） | main |
+| `api.json` | 本地接口的地址和令牌（开过本地接口才有；管理员实例的在 `admin\` 下） | main |
 | `extensions\` | 自己装的 Claude Code 插件（每个版本一个目录）和 `state.json`（当前、上一个、待切换的版本） | main |
 | `chromium\` | Chromium 自己的缓存等 | Electron |
 | `admin\` | 管理员实例自己的 state、logs、chromium、插件存储（结构同上） | 管理员实例 |

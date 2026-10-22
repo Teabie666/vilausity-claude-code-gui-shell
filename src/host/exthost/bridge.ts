@@ -20,6 +20,7 @@ import type { ILogger } from '../../platform/log';
 import type {
   ConversationCommentHints,
   ConversationEscapeHints,
+  ConversationStateDto,
   FileLinkHints,
   MessageMarkerHints,
   SessionActivity,
@@ -626,6 +627,8 @@ export interface BridgeOptions {
   readonly pinPreview?: (webviewId: string) => void;
   /** What the window's conversations are doing changed (see `observeToWebview`). */
   readonly onActivity?: (activity: SessionActivity) => void;
+  /** The window's conversations, what each is doing, or the one in front changed (for the local API). */
+  readonly onConversations?: (conversations: readonly ConversationStateDto[], activeSessionId: string | undefined) => void;
   /**
    * A Claude process made its first API call on a session: the session ran under `provider`,
    * the window's provider when the process started (`at`); see `observeOutput`.
@@ -667,6 +670,9 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   private readonly ownPosts = new WeakSet<object>();
   /** The conversations at work and waiting, as last reported. */
   private activity: SessionActivity = { running: 0, waiting: 0 };
+  /** The window's conversations as the extension last told its pages, and what was last reported of them. */
+  private conversations: readonly ConversationStateDto[] = [];
+  private reportedConversations = JSON.stringify([[], null]);
   /**
    * Each conversation's Claude process (by page and channel): the provider it started under and
    * when, the session it works on, and whether it made a call on that session yet.
@@ -889,6 +895,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
         this.activity = activity;
         this.options.onActivity?.(activity);
       }
+      this.conversations = conversationStates(sessions);
     }
     // Every update says which conversation is in front (`activeSessionId`, none: no session).
     const active = typeof request.activeSessionId === 'string' && request.activeSessionId ? request.activeSessionId : undefined;
@@ -896,6 +903,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
       this.activeSessionId = active;
       this.refreshUsage();
     }
+    this.reportConversations();
     if (webview.viewType !== SESSION_LIST_VIEW_TYPE || !isRecord(message) || !isRecord(inner)) {
       return undefined;
     }
@@ -993,6 +1001,15 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
       },
       (error: unknown) => this.logger.warn('the provider notice failed', error),
     );
+  }
+
+  /** Tells of the window's conversations when they (or the one in front) changed since last told. */
+  private reportConversations(): void {
+    const reported = JSON.stringify([this.conversations, this.activeSessionId ?? null]);
+    if (reported !== this.reportedConversations) {
+      this.reportedConversations = reported;
+      this.options.onConversations?.(this.conversations, this.activeSessionId);
+    }
   }
 
   /**
@@ -1205,6 +1222,20 @@ function respond(webview: WebviewImpl, requestId: string, response: Record<strin
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+/**
+ * `session_states_update.sessions` (anthropic.claude-code 2.1.296): `{sessionId, state, title}`
+ * with `state` `running`, `waiting_input` or `idle`.
+ */
+export function conversationStates(sessions: readonly unknown[]): ConversationStateDto[] {
+  return sessions.flatMap((session): ConversationStateDto[] => {
+    if (!isRecord(session) || typeof session.sessionId !== 'string' || !session.sessionId) {
+      return [];
+    }
+    const state = session.state === 'running' ? 'running' : session.state === 'waiting_input' ? 'waiting' : 'idle';
+    return [{ sessionId: session.sessionId, title: typeof session.title === 'string' ? session.title : '', state }];
+  });
 }
 
 /** A session in the extension's lists: its id, or a record with a `sessionId`. */

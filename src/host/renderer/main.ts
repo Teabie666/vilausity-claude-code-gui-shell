@@ -23,6 +23,7 @@ import { quickOpenModule } from '../../features/quickOpen';
 import { extensionHostStatusModule } from '../../features/extensionHostStatus';
 import { extensionMenusModule } from '../../features/extensionMenus';
 import { explorerMenuModule } from '../../features/explorerMenu';
+import { localApiModule } from '../../features/localApi';
 import { extensionUpdatesModule } from '../../features/extensionUpdates';
 import { languageModule } from '../../features/language';
 import { sessionSearchModule } from '../../features/sessionSearch';
@@ -58,6 +59,7 @@ const modules: ShellModule[] = [
   providersModule,
   extensionUpdatesModule,
   explorerMenuModule,
+  localApiModule,
   setupModule,
 ];
 

@@ -10,9 +10,12 @@ import { app, clipboard, dialog, MessageChannelMain, shell, type BrowserWindow, 
 import { Disposable } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
 import type { UiLanguage } from '../../platform/nls';
+import { ApiError, type ApiParams } from '../../platform/localApi';
 import type {
+  ApiErrorDto,
   AppInfo,
   ConversationRequest,
+  ConversationStateDto,
   ExtensionTranslations,
   ExtHostInitData,
   MainEventsForRenderer,
@@ -87,7 +90,12 @@ export interface WindowHost {
   /** The version to go back to when the running one fails to start, if there is one. */
   rollbackTarget(): string | undefined;
   rollBackAndRelaunch(): Promise<void>;
+  /** The window's conversations (or the one in front) changed; `previous`: what they were. */
+  conversationsChanged(window: WindowContext, previous: readonly ConversationStateDto[]): void;
 }
+
+/** How long the local API waits for a page to answer a call. */
+const PAGE_CALL_TIMEOUT_MS = 30_000;
 
 export interface WindowOptions {
   /** 1, 2, ... in the order windows open during this run; names the window's log folder. */
@@ -117,6 +125,12 @@ export class WindowContext extends Disposable {
   /** Goes into the init data: opens instead of the new conversation an empty window shows. */
   private pendingConversation: ConversationRequest | undefined;
   private shutdownPromise: Promise<void> | undefined;
+  /** The window's conversations as the extension last told, and the one in front. */
+  private conversationList: readonly ConversationStateDto[] = [];
+  private frontSession: string | undefined;
+  /** The local API's calls to the page's operations, waiting for its answer. */
+  private readonly apiCalls = new Map<number, { resolve: (result: unknown) => void; reject: (error: unknown) => void }>();
+  private nextApiCall = 1;
 
   constructor(
     private readonly host: WindowHost,
@@ -280,6 +294,58 @@ export class WindowContext extends Disposable {
     return this.currentProvider;
   }
 
+  get conversations(): readonly ConversationStateDto[] {
+    return this.conversationList;
+  }
+
+  /** The conversation in front (none: no session). */
+  get activeSessionId(): string | undefined {
+    return this.frontSession;
+  }
+
+  /** Runs one of the operations the page's modules offer to the local API (core/localApi.ts). */
+  callPage(name: string, params: ApiParams): Promise<unknown> {
+    const id = this.nextApiCall++;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.apiCalls.delete(id);
+        reject(new ApiError(504, 'timeout', `window ${this.id} did not answer ${name}`));
+      }, PAGE_CALL_TIMEOUT_MS);
+      this.apiCalls.set(id, {
+        resolve: (result) => {
+          clearTimeout(timer);
+          resolve(result);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+      this.window.emit('apiRequest', { id, name, params });
+    });
+  }
+
+  /** The page's answer to `callPage`. */
+  pageAnswered(id: number, result: unknown, error: ApiErrorDto | undefined): void {
+    const call = this.apiCalls.get(id);
+    this.apiCalls.delete(id);
+    if (error) {
+      call?.reject(new ApiError(error.status, error.code, error.message));
+    } else {
+      call?.resolve(result);
+    }
+  }
+
+  private setConversations(conversations: readonly ConversationStateDto[], activeSessionId: string | undefined): void {
+    const previous = this.conversationList;
+    if (previous.length === 0 && conversations.length === 0 && activeSessionId === this.frontSession) {
+      return;
+    }
+    this.conversationList = conversations;
+    this.frontSession = activeSessionId;
+    this.host.conversationsChanged(this, previous);
+  }
+
   /**
    * Uses another provider (or the same one, edited): new conversations get its variables,
    * the ones open keep theirs until they restart (`reload`).
@@ -395,6 +461,10 @@ export class WindowContext extends Disposable {
   }
 
   destroy(): void {
+    for (const call of this.apiCalls.values()) {
+      call.reject(new ApiError(404, 'no_window', `window ${this.id} closed`));
+    }
+    this.apiCalls.clear();
     if (!this.browserWindow.isDestroyed()) {
       this.browserWindow.destroy();
     }
@@ -439,6 +509,7 @@ export class WindowContext extends Disposable {
     this.host.documents.releaseOwner(this.documentOwner);
     // Its conversations went with it.
     this.setActivity(IDLE);
+    this.setConversations([], undefined);
   }
 
   private async startExtHost(): Promise<void> {
@@ -473,6 +544,7 @@ export class WindowContext extends Disposable {
           detail: t('extensionHostExited', code ?? '?', this.logsDir),
         });
         this.setActivity(IDLE);
+        this.setConversations([], undefined);
       }
     });
 
@@ -513,6 +585,7 @@ export class WindowContext extends Disposable {
     });
     rpc.handle('settings.set', ({ key, value }) => host.settings.set(key, value));
     rpc.handle('sessions.activity', (activity) => this.setActivity(activity));
+    rpc.handle('sessions.states', ({ conversations, activeSessionId }) => this.setConversations(conversations, activeSessionId));
     rpc.handle('sessions.used', ({ sessionId, provider, at }) => this.host.tagSession(sessionId, provider, at));
     rpc.handle('sessions.opened', ({ sessionId }) => this.host.providerNotice(this, sessionId));
     rpc.handle('usage.view', ({ sessionId }) => this.host.usageView(this, sessionId));

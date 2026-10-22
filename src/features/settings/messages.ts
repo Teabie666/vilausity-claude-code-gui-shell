@@ -48,6 +48,9 @@ export const settingTitleName = defineNames('settingTitles', {
   'vilaus.extension.autoUpdate': 'Vilaus › Extension: Auto Update',
   'vilaus.extension.version': 'Vilaus › Extension: Version',
   'vilaus.extension.openVsxUrl': 'Vilaus › Extension: Open Vsx Url',
+  'vilaus.api.enabled': 'Vilaus › Api: Enabled',
+  'vilaus.api.allowSend': 'Vilaus › Api: Allow Send',
+  'vilaus.api.port': 'Vilaus › Api: Port',
 
   'chat.fontFamily': 'Chat: Font Family',
   'chat.fontSize': 'Chat: Font Size',

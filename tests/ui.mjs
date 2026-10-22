@@ -7,7 +7,7 @@ import { _electron as electron } from 'playwright-core';
 import electronPath from 'electron';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -1562,6 +1562,161 @@ await step('--prompt from a second start opens a conversation; a vilaus:// link 
   }
   return message;
 });
+
+// ---- M6.5: the local API ----------------------------------------------------------------------
+
+const setSetting = (key, value) => page.evaluate((params) => window.vilausNative.invoke('settings.update', params), { key, value });
+
+/** The local API's event stream: what it has sent so far, by event. */
+function openEventStream(api) {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(`${api.url}/events`, { headers: { authorization: `Bearer ${api.token}` } }, (response) => {
+      response.setEncoding('utf8');
+      let text = '';
+      response.on('data', (chunk) => (text += chunk));
+      resolve({
+        status: response.statusCode,
+        events: () =>
+          text
+            .split('\n\n')
+            .map((block) => {
+              const name = /^event: (.*)$/m.exec(block)?.[1];
+              const data = /^data: (.*)$/m.exec(block)?.[1];
+              return name === undefined ? undefined : { name, data: JSON.parse(data ?? 'null') };
+            })
+            .filter((event) => event !== undefined),
+        close: () => request.destroy(),
+      });
+    });
+    request.on('error', reject);
+    request.end();
+  });
+}
+
+await step(
+  'the local API: off by default; on, it takes the key only, lists the window, opens a file and a conversation, runs a command and streams the changes',
+  async () => {
+    const apiFile = path.join(dataDir, 'api.json');
+    if (existsSync(apiFile)) throw new Error('api.json before the API was turned on');
+    await setSetting('vilaus.api.enabled', true);
+    const api = await waitFor(() => existsSync(apiFile) && JSON.parse(readFileSync(apiFile, 'utf8')), 10_000, 'api.json');
+    const call = async (name, params, { method = 'POST', headers = {} } = {}) => {
+      const init = { method, headers: { authorization: `Bearer ${api.token}`, ...headers } };
+      const response = await fetch(`${api.url}/${name}`, method === 'POST' ? { ...init, body: JSON.stringify(params ?? {}) } : init);
+      return { status: response.status, body: await response.json() };
+    };
+    // Only with the key, and never from a web page.
+    if ((await fetch(`${api.url}/windows.list`)).status !== 401) throw new Error('answered without the key');
+    const fromPage = await call('windows.list', undefined, { method: 'GET', headers: { origin: 'https://example.com' } });
+    if (fromPage.status !== 403) throw new Error(`a web page's request: ${fromPage.status}`);
+    const listing = await (await fetch(api.url, { headers: { authorization: `Bearer ${api.token}` } })).json();
+    const names = listing.operations.map((operation) => operation.name);
+    for (const name of ['windows.list', 'conversations.open', 'files.open', 'commands.run']) {
+      if (!names.includes(name)) throw new Error(`the listing has ${names.join(', ')}`);
+    }
+    if (listing.allowSend !== false) throw new Error('sending is on by default');
+
+    const stream = await openEventStream(api);
+    try {
+      const greeting = await waitFor(() => stream.events().find((event) => event.name === 'windows'), 5000, 'the windows event');
+      // The window's own conversation, once its page has told the extension of it.
+      const windows = await waitFor(
+        async () => {
+          const list = (await call('windows.list', undefined, { method: 'GET' })).body;
+          return list[0]?.conversations.length > 0 && list;
+        },
+        20_000,
+        "the window's conversation in windows.list",
+      );
+      if (windows.length !== 1 || windows[0].folder !== workspace || !windows[0].active || greeting.data[0].id !== windows[0].id)
+        throw new Error(`windows: ${JSON.stringify(windows)}`);
+
+      // A new conversation with a prompt: a tab, the prompt in its input, an event for it.
+      const before = await tabCount();
+      const known = new Set(windows[0].conversations.map((conversation) => conversation.sessionId));
+      const opened = await call('conversations.open', { prompt: 'from the local API' });
+      if (opened.status !== 200 || opened.body.window !== windows[0].id) throw new Error(`conversations.open: ${JSON.stringify(opened)}`);
+      await waitFor(async () => (await tabCount()) === before + 1, 30_000, 'a conversation for the prompt');
+      const frame = await waitFor(conversationFrame, 10_000, 'the new conversation');
+      const input = frame.locator('[role="textbox"][aria-label="Message input"]');
+      await waitFor(
+        async () => (await input.innerText().catch(() => '')).includes('from the local API'),
+        20_000,
+        'the prompt in its input',
+      );
+      const came = await waitFor(
+        () => stream.events().find((event) => event.name === 'conversation.state' && !known.has(event.data.sessionId)),
+        20_000,
+        'an event for the new conversation',
+      );
+      await press('Control+W');
+      await waitFor(
+        () =>
+          stream
+            .events()
+            .some(
+              (event) =>
+                event.name === 'conversation.state' && event.data.sessionId === came.data.sessionId && event.data.state === 'closed',
+            ),
+        20_000,
+        'the closed conversation',
+      ).catch(async (error) => {
+        throw new Error(`${error.message}; ${await tabCount()} tabs; events ${JSON.stringify(stream.events().slice(-3))}`);
+      });
+
+      // A file, in the editor of the window whose folder holds it.
+      const note = path.join(workspace, 'api-note.txt');
+      writeFileSync(note, 'opened by a program\n', 'utf8');
+      const file = await call('files.open', { path: note, line: 1 });
+      if (file.status !== 200) throw new Error(`files.open: ${JSON.stringify(file)}`);
+      const tab = page.locator('#content-pane .content-tab', { hasText: 'api-note.txt' });
+      await tab.waitFor({ timeout: 20_000 });
+      await tab.click({ button: 'middle' });
+      if ((await call('files.open', { path: 'api-note.txt' })).status !== 400) throw new Error('a relative path was taken');
+
+      // A command, as the palette runs it.
+      const commands = (await call('commands.list', undefined, { method: 'GET' })).body;
+      if (!commands.some((command) => command.id === 'sessions.toggleSidebar')) throw new Error(`${commands.length} commands, no toggle`);
+      await call('commands.run', { command: 'sessions.toggleSidebar' });
+      await waitFor(() => page.locator('#sidebar').isHidden(), 5000, 'the sidebar to hide');
+      await call('commands.run', { command: 'sessions.toggleSidebar' });
+      await waitFor(() => page.locator('#sidebar').isVisible(), 5000, 'the sidebar to show');
+      if ((await call('commands.run', { command: 'no.such.command' })).status !== 404) throw new Error('an unknown command ran');
+    } finally {
+      stream.close();
+    }
+
+    // The settings say where it runs; off, it stops; on again, the key is the same.
+    await press('Control+,');
+    await page.locator('.settings-dialog .settings-search').fill('local api');
+    const widget = page.locator('.settings-dialog .settings-widget[data-widget="localApi.status"]');
+    await waitFor(async () => (await widget.innerText()).includes(`Running at ${api.url}`), 5000, 'the status in the settings');
+    await setSetting('vilaus.api.enabled', false);
+    await waitFor(async () => (await widget.innerText()).includes('Off'), 5000, 'the status off');
+    await page.locator('.settings-dialog .settings-search').fill('');
+    await page.keyboard.press('Escape');
+    if (
+      await fetch(api.url).then(
+        () => true,
+        () => false,
+      )
+    )
+      throw new Error('still answering when off');
+    await setSetting('vilaus.api.enabled', true);
+    const again = await waitFor(
+      async () => {
+        const saved = JSON.parse(readFileSync(apiFile, 'utf8'));
+        const answer = await fetch(saved.url, { headers: { authorization: `Bearer ${saved.token}` } }).catch(() => undefined);
+        return answer?.status === 200 && saved;
+      },
+      10_000,
+      'the API on again',
+    );
+    if (again.token !== api.token) throw new Error('a new key after a restart of the API');
+    await setSetting('vilaus.api.enabled', undefined);
+    return `${listing.operations.length} operations at ${api.url}`;
+  },
+);
 
 // ---- M4: API providers ------------------------------------------------------------------------
 

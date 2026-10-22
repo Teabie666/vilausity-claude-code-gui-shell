@@ -35,6 +35,7 @@ import {
   type ProviderNoticeDto,
   type SessionProvidersDto,
   type ThemeData,
+  type ConversationStateDto,
   type SessionCostDto,
   type UsageTotalDto,
   type UsageViewDto,
@@ -52,6 +53,7 @@ import {
   type ProviderConfig,
 } from '../../platform/providers';
 import { attributedProvider, CURRENT_PROVIDER_ONLY_SETTING, totalCost, type AttributedProvider } from '../../platform/usage';
+import { API_ALLOW_SEND_SETTING, API_DISCOVERY_FILE, API_DOCS_URL, API_ENABLED_SETTING, API_PORT_SETTING } from '../../platform/localApi';
 import { APP_ORIGIN } from '../../platform/webviewUrls';
 import { extensionTranslations } from '../../nls/extensionPacks';
 import { languagePack } from '../../nls/packs';
@@ -74,6 +76,8 @@ import { SessionTagWriter } from './sessionProviders';
 import { scopeValue, usageTotal, usageView } from './usageView';
 import { claudeProjectsDir, SessionSearch } from './sessionSearch';
 import { KeybindingsStore } from './keybindingsStore';
+import { LocalApi } from './localApi';
+import { builtInOperations, conversationEvents, usageScope, type ApiWindow, type OperationsHost } from './localApiOperations';
 import { LogoIcons, systemIconColor } from './logoIcons';
 import { SettingsStore } from './settingsStore';
 import { isExternalUrl, nextZoomLevel } from './shellWindow';
@@ -103,6 +107,8 @@ const LEGACY_WINDOW_STATE_KEY = 'vilaus.window';
 const SESSION_END_TIMEOUT_MS = 10_000;
 /** The session lists' mark of a provider with no accent of its own: the theme's muted text. */
 const NO_ACCENT = 'var(--vscode-descriptionForeground)';
+/** The local API's `windows` event waits this long for more changes to come with it. */
+const API_WINDOWS_DELAY_MS = 50;
 
 /** Provider keys at rest: Electron's safeStorage (DPAPI on Windows, for this Windows user). */
 const electronCipher: SecretCipher = {
@@ -174,6 +180,10 @@ export class ShellApp extends Disposable implements WindowHost {
   private nextWindowId = 1;
   private quitting = false;
   private cachedMachineId: string | undefined;
+  /** What programs on this computer can ask (localApi.ts); serves while the setting is on. */
+  private readonly localApi: LocalApi;
+  /** The windows changed: the API's event stream hears of them shortly (several changes at once). */
+  private apiWindowsTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(readonly env: ShellEnvironment) {
     super();
@@ -227,6 +237,28 @@ export class ShellApp extends Disposable implements WindowHost {
       (owner) => this.windows.find((window) => window.ownsDocuments(owner))?.theme ?? this.theme,
       () => this.extensionTranslations(),
       readFontFaces(path.join(env.appDir, 'renderer', 'fonts', 'fonts.css'), this.logger),
+    );
+    this.localApi = this.register(
+      new LocalApi({
+        discoveryFile: path.join(env.paths.instanceRoot, API_DISCOVERY_FILE),
+        elevated: env.paths.elevated,
+        version: app.getVersion(),
+        settings: () => this.settings.all,
+        window: (id) => {
+          const window = id === undefined ? this.windows.at(-1) : this.windowById(id);
+          return window && { id: window.id, call: (name, params) => window.callPage(name, params) };
+        },
+        greeting: () => [{ name: 'windows', data: this.apiWindows() }],
+        info: () => ({
+          app: 'Vilausity',
+          version: app.getVersion(),
+          extension: this.located ? { version: this.located.version } : null,
+          elevated: env.paths.elevated,
+          allowSend: !env.paths.elevated && this.settings.all[API_ALLOW_SEND_SETTING] === true,
+          docs: API_DOCS_URL,
+        }),
+        logger: this.logger.child('api'),
+      }),
     );
   }
 
@@ -293,6 +325,7 @@ export class ShellApp extends Disposable implements WindowHost {
             window.setProvider(SUBSCRIPTION_ID);
           }
         }
+        this.apiWindowsChanged();
       }),
     );
     // The taskbar turned dark or light: icons drawn to show on it may have to change.
@@ -323,6 +356,9 @@ export class ShellApp extends Disposable implements WindowHost {
     await this.applyCommandLine(args, true);
     this.scheduleUpdateChecks();
     this.keepSessions();
+    this.localApi.registerOperations(builtInOperations(this.apiHost()));
+    this.register(this.localApi.onDidChangeStatus((status) => this.broadcast('apiStatus', status)));
+    void this.localApi.apply();
     // Not in development: there the entries would point at electron.exe and this checkout.
     if (app.isPackaged) {
       this.refreshExplorerMenu().catch((error: unknown) => this.logger.warn("cannot rewrite File Explorer's menu entries", error));
@@ -351,6 +387,7 @@ export class ShellApp extends Disposable implements WindowHost {
     window.browserWindow.on('focus', () => this.markActive(window));
     this.history.addRecent(folder);
     this.rememberOpenWindows();
+    this.apiWindowsChanged();
     this.logger.info(`window ${window.id}: ${folder}`);
     await window.load();
     return window;
@@ -647,6 +684,7 @@ export class ShellApp extends Disposable implements WindowHost {
       await inWindow.switchFolder(folder);
       this.history.addRecent(folder);
       this.rememberOpenWindows();
+      this.apiWindowsChanged();
     }
     return true;
   }
@@ -701,6 +739,8 @@ export class ShellApp extends Disposable implements WindowHost {
       this.windows.splice(index, 1);
     }
     this.rememberOpenWindows();
+    this.localApi.windowClosed(window.id);
+    this.apiWindowsChanged();
     await window.shutdown();
     window.destroy();
   }
@@ -709,6 +749,7 @@ export class ShellApp extends Disposable implements WindowHost {
   private selectProvider(window: WindowContext, id: string): void {
     window.setProvider(id);
     this.history.rememberFolderProvider(window.folder, id);
+    this.apiWindowsChanged();
   }
 
   /**
@@ -751,7 +792,112 @@ export class ShellApp extends Disposable implements WindowHost {
       this.windows.splice(index, 1);
       this.windows.push(window);
       this.rememberOpenWindows();
+      this.apiWindowsChanged();
     }
+  }
+
+  private windowById(id: number): WindowContext | undefined {
+    return this.windows.find((window) => window.id === id);
+  }
+
+  /** The window `id` names, the active one when there is no id. */
+  private apiTarget(id: number | undefined): WindowContext | undefined {
+    return id === undefined ? this.windows.at(-1) : this.windowById(id);
+  }
+
+  conversationsChanged(window: WindowContext, previous: readonly ConversationStateDto[]): void {
+    for (const event of conversationEvents(window, previous, window.conversations)) {
+      this.localApi.emit(event.name, event.data);
+    }
+    this.apiWindowsChanged();
+  }
+
+  private apiWindowsChanged(): void {
+    this.apiWindowsTimer ??= setTimeout(() => {
+      this.apiWindowsTimer = undefined;
+      this.localApi.emit('windows', this.apiWindows());
+    }, API_WINDOWS_DELAY_MS);
+  }
+
+  private apiWindows(): ApiWindow[] {
+    const active = this.windows.at(-1);
+    return this.windows.map((window) => {
+      const provider = this.providers.get(window.provider) ?? SUBSCRIPTION_PROVIDER;
+      return {
+        id: window.id,
+        folder: window.folder,
+        active: window === active,
+        provider: { id: provider.id, name: this.providerName(provider), type: provider.type },
+        activeSessionId: window.activeSessionId,
+        conversations: window.conversations,
+      };
+    });
+  }
+
+  /** What the local API's own operations do (localApiOperations.ts). */
+  private apiHost(): OperationsHost {
+    return {
+      windows: () => this.apiWindows(),
+      focusWindow: (id) => {
+        const window = this.windowById(id);
+        window?.focus();
+        return window !== undefined;
+      },
+      openFolder: async (folder) => (isDirectory(folder) ? (await this.openWindow(folder)).id : undefined),
+      openFile: (file, line, column) => {
+        const window = isFile(file)
+          ? (this.windows.find((candidate) => isSubPath(file, candidate.folder)) ?? this.windows.at(-1))
+          : undefined;
+        window?.focus();
+        window?.showFile({ path: file, line, column });
+        return window?.id;
+      },
+      openConversation: async (target, request) => {
+        let window: WindowContext | undefined;
+        let opened = false;
+        if (target.folder !== undefined) {
+          if (!isDirectory(target.folder)) {
+            return undefined;
+          }
+          opened = !this.windowFor(target.folder);
+          window = await this.openWindow(target.folder);
+        } else {
+          window = this.apiTarget(target.window);
+        }
+        window?.focus();
+        // A window that just opened has a new conversation of its own.
+        if (window && (request.sessionId || request.prompt || !opened)) {
+          window.openConversation(request);
+        }
+        return window?.id;
+      },
+      searchSessions: (request) => this.sessionSearch.search(request),
+      usage: async (id) => {
+        const window = this.apiTarget(id);
+        if (!window) {
+          return undefined;
+        }
+        const provider = this.providers.get(window.provider);
+        if (provider?.type !== 'compatible') {
+          return null;
+        }
+        const scopes = await this.sessionSearch.usage({
+          kind: 'summary',
+          providers: this.attributedProviders(),
+          provider: provider.id,
+          sessionId: window.activeSessionId,
+          folder: window.folder,
+          pricing: provider.pricing,
+        });
+        return {
+          provider: { id: provider.id, name: this.providerName(provider) },
+          currency: provider.pricing?.currency ?? 'USD',
+          conversation: window.activeSessionId ? usageScope(scopes.session, provider.pricing) : null,
+          workspace: usageScope(scopes.folder, provider.pricing),
+          all: usageScope(scopes.all, provider.pricing),
+        };
+      },
+    };
   }
 
   /** Kept current, so even after a crash the next start reopens what was open. */
@@ -788,6 +934,9 @@ export class ShellApp extends Disposable implements WindowHost {
     }
     if (keys.includes(KEEP_SESSIONS_SETTING)) {
       this.keepSessions();
+    }
+    if (keys.includes(API_ENABLED_SETTING) || keys.includes(API_PORT_SETTING)) {
+      void this.localApi.apply();
     }
     if (keys.some((key) => THEME_SETTING_KEYS.has(key))) {
       this.reloadTheme();
@@ -1049,6 +1198,10 @@ export class ShellApp extends Disposable implements WindowHost {
         return stats?.isDirectory() ? 'folder' : stats?.isFile() ? 'file' : undefined;
       },
       'os.clipboardWrite': ({ text }) => clipboard.writeText(text),
+      'api.status': () => this.localApi.status,
+      'api.operations': ({ operations }, window) => this.localApi.setPageOperations(window.id, operations),
+      'api.respond': ({ id, result, error }, window) => window.pageAnswered(id, result, error),
+      'api.emit': ({ name, data }, window) => this.localApi.emit(name, { window: window.id, data }),
     };
     ipcMain.handle(IpcChannel.Rpc, async (event, method: unknown, params: unknown) => {
       if (!event.senderFrame?.url.startsWith(`${APP_ORIGIN}/`)) {

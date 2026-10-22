@@ -1093,6 +1093,28 @@ body.resizing {
   color: var(--vscode-descriptionForeground);
 }
 
+.local-api {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.local-api-state {
+  font-weight: 600;
+}
+
+.local-api-file {
+  color: var(--vscode-descriptionForeground);
+  word-break: break-all;
+}
+
+.local-api-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .setting-item,
 .settings-widget.settings-widget-row {
   padding: 8px 12px 10px 14px;

@@ -185,6 +185,32 @@ describe('ClaudeWebviewBridge and sessions', () => {
     assert.equal(activities.length, 3);
   });
 
+  test('reports each conversation, its state and the one in front once per change, titles too', () => {
+    const reports: unknown[] = [];
+    const bridge = new ClaudeWebviewBridge(makeOs().os, NullLogger, {
+      diffEditorAvailable: () => true,
+      comments: new CommentStore(),
+      workspaceFolders: [],
+      onConversations: (conversations, activeSessionId) => reports.push({ conversations, activeSessionId }),
+    });
+    const list = pageOf('claudeVSCodeSessionsList');
+    const panel = pageOf('claudeVSCodePanel');
+    const tell = (fields: Record<string, unknown>): void => {
+      for (const page of [list, panel]) {
+        bridge.observeToWebview(page.webview, statesUpdate(fields));
+      }
+    };
+    tell({});
+    assert.deepEqual(reports, []);
+    tell({ sessions: [{ sessionId: 'a', state: 'waiting_input', title: 'A' }, { state: 'idle' }], activeSessionId: 'a' });
+    tell({ sessions: [{ sessionId: 'a', state: 'waiting_input', title: 'A' }], activeSessionId: 'a' });
+    tell({ sessions: [{ sessionId: 'a', state: 'something new', title: 'A2' }], activeSessionId: 'a' });
+    assert.deepEqual(reports, [
+      { conversations: [{ sessionId: 'a', title: 'A', state: 'waiting' }], activeSessionId: 'a' },
+      { conversations: [{ sessionId: 'a', title: 'A2', state: 'idle' }], activeSessionId: 'a' },
+    ]);
+  });
+
   test("asks the extension's session pages to list the sessions again", () => {
     const { bridge } = makeBridge(true);
     const list = pageOf('claudeVSCodeSessionsList');
