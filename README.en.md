@@ -159,7 +159,7 @@ Only Windows 10 / 11 (x64) for now: the context menu, the taskbar states and the
 
 Vilausity itself was talked into existence in Claude Code, one message at a time. Missing something? Open its source in Vilausity and tell Claude what you want. Rather not touch code? Let your scripts and bots drive it through the local API.
 
-See [vibe-coding.md](vibe-coding.md) for how.
+See [vibe-coding.en.md](vibe-coding.en.md) for how.
 
 ## About
 
