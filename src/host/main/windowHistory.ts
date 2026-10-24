@@ -39,6 +39,8 @@ export interface RecentFoldersFile {
 
 const PLACEMENTS_KEY = 'windowPlacements';
 const RECENT_KEY = 'recentFolders';
+/** The other instance's old recent folders were added to the shared list (`shareOtherRecent`). */
+const OTHER_RECENT_KEY = 'otherRecentShared';
 const OPEN_KEY = 'openWindows';
 const RESTORE_ALL_KEY = 'restoreAllWindows';
 const ZOOM_KEY = 'zoomLevel';
@@ -109,10 +111,28 @@ export class WindowHistory {
     if (!this.shared || own.length === 0) {
       return;
     }
-    const shared = this.recentFolders();
-    const added = own.filter((folder) => !shared.some((candidate) => sameFolder(candidate, folder)));
-    this.recent.write([...shared, ...added].slice(0, MAX_RECENT));
+    this.appendRecent(own);
     this.store.set(RECENT_KEY, undefined);
+  }
+
+  /**
+   * Adds the recent folders an older version kept in the other instance's state to the shared
+   * list, after the ones already there, once: that instance may not run again for long (it
+   * moves them itself when it does). `readOther` reads its state, which is left as it is; when
+   * it throws, the next start tries again.
+   */
+  shareOtherRecent(readOther: () => unknown): void {
+    if (!this.shared || this.store.get(OTHER_RECENT_KEY) === true) {
+      return;
+    }
+    let other: unknown;
+    try {
+      other = readOther();
+    } catch {
+      return;
+    }
+    this.appendRecent(stringList(isRecord(other) ? other[RECENT_KEY] : undefined));
+    this.store.set(OTHER_RECENT_KEY, true);
   }
 
   /** The windows to open at the next start, the last one in front. */
@@ -157,6 +177,14 @@ export class WindowHistory {
 
   setZoomLevel(level: number): void {
     this.store.set(ZOOM_KEY, level === 0 ? undefined : level);
+  }
+
+  private appendRecent(folders: readonly string[]): void {
+    const shared = this.recentFolders();
+    const added = folders.filter((folder) => !shared.some((candidate) => sameFolder(candidate, folder)));
+    if (added.length > 0) {
+      this.recent.write([...shared, ...added].slice(0, MAX_RECENT));
+    }
   }
 
   private placements(): Record<string, SavedPlacement> {

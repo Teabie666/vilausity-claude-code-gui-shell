@@ -238,9 +238,13 @@ await step('the search box finds conversations by title, words and files; > list
   if (!label.startsWith('Workspace: ') || actions.join() !== 'Reveal Folder in File Explorer,Open Terminal in Workspace') {
     throw new Error(`the search box: "${label}", buttons ${actions.join(', ')}`);
   }
+  const opening = Date.now();
   await page.locator('.search-box-open').click();
   const filter = page.locator('.quick-input-filter');
   await filter.waitFor({ timeout: 5000 });
+  // The recent conversations were read soon after the window opened: they show at once (the time is reported).
+  await page.locator('.quick-input-separator', { hasText: 'Recent Conversations' }).waitFor({ timeout: 10_000 });
+  const shownIn = Date.now() - opening;
   // The picker opens over the box, which seems to grow into it.
   const [box, picker] = await page.evaluate(() =>
     ['.search-box', '.overlay-box.quick-input'].map((selector) => document.querySelector(selector).getBoundingClientRect().toJSON()),
@@ -275,6 +279,7 @@ await step('the search box finds conversations by title, words and files; > list
   );
   await filter.press('Escape');
   await waitFor(async () => (await page.locator('.quick-input-filter').count()) === 0, 3000, 'the picker to close');
+  return `recent conversations shown ${shownIn} ms after the click`;
 });
 
 /** The main window's bounds; `bounds` given, it moves there first. */
@@ -1491,6 +1496,27 @@ await step("Ctrl+R opens a recent folder in place of this window's; its conversa
   }
   await waitFor(async () => showsFolder(await secondPage.title(), third), 30_000, 'the window to show the third folder');
   await waitFor(async () => (await tabs()) === 1, 30_000, "the third folder's own conversation");
+  // The folder switched to is the most recent in the other window's lists: the search's, and Ctrl+R's.
+  await page.locator('.search-box-open').click();
+  await page.locator('.quick-input-separator', { hasText: 'Folders' }).waitFor({ timeout: 5000 });
+  const searchFolders = await page.evaluate(() => {
+    const separator = [...document.querySelectorAll('.quick-input-separator')].find((element) => element.textContent === 'Folders');
+    const names = [];
+    for (let row = separator?.nextElementSibling; row?.classList.contains('quick-input-item'); row = row.nextElementSibling) {
+      names.push(row.querySelector('.quick-input-label').textContent);
+    }
+    return names;
+  });
+  await page.locator('.quick-input-filter').press('Escape');
+  await waitFor(async () => (await page.locator('.quick-input-filter').count()) === 0, 3000, 'the search to close');
+  await press('Control+R');
+  await page.locator('.quick-input-filter').waitFor({ timeout: 5000 });
+  const pickerFolders = await page.locator('.quick-input-item .quick-input-label').allInnerTexts();
+  await page.locator('.quick-input-filter').press('Escape');
+  await waitFor(async () => (await page.locator('.quick-input-filter').count()) === 0, 3000, 'Ctrl+R to close');
+  if (searchFolders[0] !== 'third' || !pickerFolders.includes('third')) {
+    throw new Error(`the search lists ${searchFolders.join(', ')}; Ctrl+R lists ${pickerFolders.join(', ')}`);
+  }
 
   await openRecent(third, 'second');
   await waitFor(async () => showsFolder(await secondPage.title(), second), 30_000, 'the second folder again');
@@ -1835,8 +1861,11 @@ await step(
 
 // ---- M4: API providers ------------------------------------------------------------------------
 
-/** A stand-in for an Anthropic-compatible API on 127.0.0.1: records requests, answers briefly. */
-function startMockApi() {
+/**
+ * A stand-in for an Anthropic-compatible API on 127.0.0.1: records requests, answers briefly,
+ * or with the tool call `toolUse` gives for a request's body (`{name, input}`).
+ */
+function startMockApi({ toolUse } = {}) {
   const requests = [];
   const server = createServer((request, response) => {
     let text = '';
@@ -1867,21 +1896,30 @@ function startMockApi() {
           stop_sequence: null,
           usage: { input_tokens: 1, output_tokens: 1 },
         };
+        const tool = toolUse?.(body);
+        const block = tool
+          ? { type: 'tool_use', id: `toolu_mock_${requests.length}`, name: tool.name, input: tool.input }
+          : { type: 'text', text: 'MOCK-OK' };
+        const stopReason = tool ? 'tool_use' : 'end_turn';
         if (body?.stream) {
           // Each event is named after its type.
           const events = [
             { type: 'message_start', message },
-            { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
-            { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'MOCK-OK' } },
+            tool
+              ? { type: 'content_block_start', index: 0, content_block: { ...block, input: {} } }
+              : { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+            tool
+              ? { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(tool.input) } }
+              : { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'MOCK-OK' } },
             { type: 'content_block_stop', index: 0 },
-            { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 1 } },
+            { type: 'message_delta', delta: { stop_reason: stopReason, stop_sequence: null }, usage: { output_tokens: 1 } },
             { type: 'message_stop' },
           ];
           response.writeHead(200, { 'content-type': 'text/event-stream' });
           response.end(events.map((data) => `event: ${data.type}\ndata: ${JSON.stringify(data)}\n\n`).join(''));
         } else {
           response.writeHead(200, { 'content-type': 'application/json' });
-          response.end(JSON.stringify({ ...message, content: [{ type: 'text', text: 'MOCK-OK' }], stop_reason: 'end_turn' }));
+          response.end(JSON.stringify({ ...message, content: [block], stop_reason: stopReason }));
         }
         return;
       }
@@ -2237,6 +2275,120 @@ await step('a conversation that ran on another API says so when it opens, and sw
   await page.evaluate(() => window.vilausNative.invoke('providers.select', { id: 'subscription' }));
   await reloadWindow();
   return text;
+});
+
+await step("a question's options: dragging over their text selects it, to be copied, without picking the option", async () => {
+  // Claude asks (AskUserQuestion) when the prompt says so; the question waits for an answer.
+  const question = {
+    questions: [
+      {
+        question: 'Which color should the button be?',
+        header: 'Color',
+        multiSelect: false,
+        options: [
+          { label: 'Warm red', description: 'A warm color for the main button' },
+          { label: 'Cool blue', description: 'A calm color that matches the theme' },
+        ],
+      },
+    ],
+  };
+  // (The CLI's request may end in a message of its own: the prompt is looked for anywhere, until answered.)
+  const mock = await startMockApi({
+    toolUse: (body) => {
+      const conversation = JSON.stringify(body?.messages ?? []);
+      return conversation.includes('ASK-ME-A-QUESTION') &&
+        !conversation.includes('"tool_result"') &&
+        body?.tools?.some((tool) => tool.name === 'AskUserQuestion')
+        ? { name: 'AskUserQuestion', input: question }
+        : undefined;
+    },
+  });
+  const before = await tabCount();
+  try {
+    await page.evaluate(async (port) => {
+      await window.vilausNative.invoke('providers.save', {
+        provider: {
+          id: 'question-mock',
+          name: 'Question Mock',
+          type: 'compatible',
+          baseUrl: `http://127.0.0.1:${port}`,
+          auth: 'bearer',
+          models: { main: 'mock-model', haiku: 'mock-haiku' },
+        },
+      });
+      await window.vilausNative.invoke('providers.setKey', { id: 'question-mock', key: 'test-key-456' });
+      await window.vilausNative.invoke('providers.select', { id: 'question-mock' });
+    }, mock.port);
+    await reloadWindow();
+    await press('Control+N');
+    await waitFor(async () => (await tabCount()) === before + 1, 20_000, 'a new conversation');
+    const frame = await waitFor(conversationFrame, 10_000, 'the new conversation');
+    const input = frame.locator('[role="textbox"][aria-label="Message input"]');
+    await input.waitFor({ timeout: 30_000 });
+    await input.click();
+    await input.fill('ASK-ME-A-QUESTION');
+    await frame.locator('button[aria-label="Send message"]').click();
+    const option = (label) => frame.locator('.option_hONcXw', { hasText: label });
+    await option('Warm red')
+      .waitFor({ timeout: 60_000 })
+      .catch(async (error) => {
+        const asked = mock.requests.map(
+          (request) =>
+            `${request.body?.model}: ${request.body?.tools?.length ?? 0} tools${request.body?.tools?.some((tool) => tool.name === 'AskUserQuestion') ? ' (asks)' : ''}, last ${JSON.stringify(request.body?.messages?.at(-1))?.slice(0, 300)}`,
+        );
+        const shown = (await frame.evaluate(() => document.body.innerText).catch(() => '')).slice(-300);
+        throw new Error(`${error.message}; requests ${asked.join(', ')}; the page ends "${shown}"`);
+      });
+    const picked = () => frame.locator('.option_hONcXw').evaluateAll((options) => options.map((o) => o.getAttribute('aria-checked')));
+    const description = option('Warm red').locator('.optionDescription_hONcXw');
+    const looks = await description.evaluate((element) => `${getComputedStyle(element).userSelect} ${getComputedStyle(element).cursor}`);
+    if (looks !== 'text text') throw new Error(`the description's user-select and cursor: ${looks}`);
+    // Dragged over with the mouse: the text is selected, and the option is not picked.
+    const box = await description.boundingBox();
+    await page.mouse.move(box.x + 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    const selected = await frame.evaluate(() => getSelection()?.toString());
+    if (selected !== 'A warm color for the main button' || (await picked()).includes('true')) {
+      throw new Error(`after the drag: selected "${selected}", picked ${await picked()}`);
+    }
+    // Ctrl+C copies it (the page's copy is caught here: the clipboard is left alone).
+    await frame.evaluate(() =>
+      document.addEventListener(
+        'copy',
+        (event) => {
+          window.vilausCopied = getSelection()?.toString();
+          event.preventDefault();
+        },
+        { once: true },
+      ),
+    );
+    await page.keyboard.press('Control+C');
+    const copied = await waitFor(() => frame.evaluate(() => window.vilausCopied), 5000, 'the copy');
+    if (copied !== selected) throw new Error(`copied "${copied}"`);
+    // A click that selects nothing picks the option, the selection still there or not.
+    await option('Warm red').click({ position: { x: 8, y: 10 } });
+    await waitFor(async () => (await picked())[0] === 'true', 5000, 'the option picked by a click');
+    await option('Cool blue').locator('.optionLabel_hONcXw').click();
+    await waitFor(async () => (await picked()).join() === 'false,true,false', 5000, 'the other option picked');
+    return `copied "${copied}"`;
+  } finally {
+    if ((await tabCount()) > before) {
+      await press('Control+W');
+      await waitFor(async () => (await tabCount()) === before, 10_000, 'the conversation to close').catch(() => {});
+    }
+    mock.server.close();
+    await page
+      .evaluate(async () => {
+        await window.vilausNative.invoke('providers.select', { id: 'subscription' });
+        await window.vilausNative.invoke('providers.remove', { id: 'question-mock' });
+      })
+      .catch(() => {});
+    await reloadWindow().catch(() => {});
+  }
 });
 
 await step('the providers editor adds a provider from a preset, saves edits and a key, and removes it', async () => {

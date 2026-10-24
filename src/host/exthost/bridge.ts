@@ -151,6 +151,16 @@ export const FILE_LINKS: FileLinkHints = {
 const THINKING_SUMMARY = 'details[class*="thinking_"] > summary[class*="thinkingSummary_"]';
 
 /**
+ * A question card (AskUserQuestion; anthropic.claude-code 2.1.310, 2.1.302 alike): each option
+ * is a `div.option_hONcXw[role=radio|checkbox]` that a click picks (an answered question's are
+ * read only), its `.optionLabel_hONcXw` and `.optionDescription_hONcXw` in `.optionContent_hONcXw`;
+ * the question is `.questionTextLarge_hONcXw`. The page makes it all unselectable (`user-select:
+ * none` far up), so an option's text could not be copied into an answer of one's own (Other).
+ */
+const QUESTION_OPTION = '.option_hONcXw';
+const QUESTION_TEXT = '.questionTextLarge_hONcXw, .optionLabel_hONcXw, .optionDescription_hONcXw';
+
+/**
  * A conversation's turns (anthropic.claude-code 2.1.306): `div.messagesContainer_07S1Yg`
  * (the scrolling element) holds a `div.turn_07S1Yg` per message of the user's, which starts
  * with it (`.userMessage_07S1Yg`) and goes on with the replies.
@@ -408,7 +418,8 @@ export function withoutExtensionCosts(message: unknown): unknown {
  * user message, Claude's Markdown, thinking, and the message input with the mirror the page
  * draws its text in (both must agree, or the caret drifts from the text). Code in Markdown is
  * sized by the code font size instead of the page's `.9em`. Tool calls, buttons and menus stay
- * in the UI font. Class names of anthropic.claude-code 2.1.296.
+ * in the UI font. Class names of anthropic.claude-code 2.1.296. A question card's text can be
+ * selected (`QUESTION_TEXT`, 2.1.310).
  */
 const CONVERSATION_STYLES = `
 .userMessage_07S1Yg,
@@ -426,6 +437,11 @@ const CONVERSATION_STYLES = `
 }
 .root_-a7MRw pre { line-height: 1.5; }
 .root_-a7MRw pre code { font-size: inherit; }
+
+${QUESTION_TEXT} {
+  user-select: text;
+  cursor: text;
+}
 
 .vilaus-provider-notice {
   display: flex;
@@ -1196,6 +1212,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
           streamMerge: STREAM_MERGE,
           fileLinks: FILE_LINKS,
           keepInPlace: THINKING_SUMMARY,
+          selectableChoices: QUESTION_OPTION,
           messageMarkers: MESSAGE_MARKERS,
           conversationComments: CONVERSATION_COMMENTS,
           promptSubmit: PROMPT_SUBMIT,

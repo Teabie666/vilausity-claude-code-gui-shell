@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, utimesSync, writeFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync, mkdirSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -20,6 +20,8 @@ const user = (content: unknown, extra: Record<string, unknown> = {}): string =>
   line({ type: 'user', cwd: FOLDER, message: { role: 'user', content }, ...extra });
 const assistant = (content: unknown[], extra: Record<string, unknown> = {}): string =>
   line({ type: 'assistant', cwd: FOLDER, message: { role: 'assistant', content }, ...extra });
+/** A transcript's text as the CLI writes it: every line ends in a newline. */
+const lines = (...entries: string[]): string => entries.map((entry) => `${entry}\n`).join('');
 
 function session(id: string, lines: string[], updatedAt: number, sideTitle?: string): IndexedSession {
   const indexed = indexSession(id, parseTranscript(lines.join('\n')), updatedAt, sideTitle);
@@ -65,6 +67,33 @@ describe('parseTranscript', () => {
       { path: 'C:\\work\\shop\\src\\cart.ts', edited: true },
       { path: 'C:\\work\\shop\\README.md', edited: false },
     ]);
+  });
+
+  test('in the CLI’s own key order: logged requests and tool results go, messages that quote them stay', () => {
+    // How the CLI writes its messages: the parent first, the type before or after the message.
+    const cli = (entry: Record<string, unknown>): string => line({ parentUuid: null, isSidechain: false, ...entry });
+    const transcript = parseTranscript(
+      lines(
+        line({ type: 'api-request', body: { messages: [{ role: 'user', content: 'Logged request' }] } }),
+        cli({ promptId: 'p1', type: 'user', message: { role: 'user', content: 'What is "toolUseResult": for?' }, cwd: FOLDER }),
+        cli({
+          promptId: 'p1',
+          type: 'user',
+          message: { role: 'user', content: [{ tool_use_id: 't1', type: 'tool_result', content: 'file contents' }] },
+          toolUseResult: { stdout: 'file contents' },
+          cwd: FOLDER,
+        }),
+        cli({
+          message: { role: 'assistant', content: [{ type: 'text', text: '{"type":"user"} and "toolUseResult":' }] },
+          type: 'assistant',
+        }),
+      ),
+    );
+    assert.deepEqual(transcript.messages, [
+      { role: 'user', text: 'What is "toolUseResult": for?' },
+      { role: 'assistant', text: '{"type":"user"} and "toolUseResult":' },
+    ]);
+    assert.equal(transcript.cwd, FOLDER);
   });
 });
 
@@ -163,7 +192,7 @@ describe('SessionIndex', () => {
       const project = path.join(dir, 'C--work-shop');
       mkdirSync(project);
       const file = path.join(project, 's1.jsonl');
-      writeFileSync(file, [user('First question'), line({ type: 'ai-title', aiTitle: 'One' })].join('\n'));
+      writeFileSync(file, lines(user('First question'), line({ type: 'ai-title', aiTitle: 'One' })));
       writeFileSync(path.join(project, 'notes.txt'), 'not a transcript');
       const index = new SessionIndex(dir);
       const first = await index.search({ query: '', folder: 'c:\\work\\shop', limit: 10 });
@@ -173,13 +202,52 @@ describe('SessionIndex', () => {
       );
       assert.deepEqual(await index.search({ query: '', folder: 'C:\\elsewhere', limit: 10 }), []);
 
-      writeFileSync(file, [user('First question'), line({ type: 'custom-title', customTitle: 'Renamed' })].join('\n'));
+      writeFileSync(file, lines(user('First question'), line({ type: 'custom-title', customTitle: 'Renamed' })));
       const later = new Date(Date.now() + 60_000);
       utimesSync(file, later, later);
       // Within the rescan interval the index answers from what it read...
       assert.equal((await index.search({ query: '', limit: 10 }))[0]?.title, 'One');
       // ...a new index (or a later search) reads the change.
       assert.equal((await new SessionIndex(dir).search({ query: '', limit: 10 }))[0]?.title, 'Renamed');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a transcript that grows is read from where the last read stopped; a shorter one from the start', async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'vilaus-sessions-'));
+    try {
+      const project = path.join(dir, 'C--work-shop');
+      mkdirSync(project);
+      const file = path.join(project, 's1.jsonl');
+      const first = user('Alpha question');
+      writeFileSync(file, lines(first, assistant([{ type: 'text', text: 'Alpha answer' }])));
+      const index = new SessionIndex(dir, 0);
+      assert.equal((await index.search({ query: 'alpha answer', limit: 10 })).length, 1);
+
+      // What was read is not read again: the first line spoiled in place stays as it was read.
+      const text = readFileSync(file, 'utf8');
+      writeFileSync(file, 'x'.repeat(first.length) + text.slice(first.length) + lines(assistant([{ type: 'text', text: 'Beta answer' }])));
+      utimesSync(file, new Date(Date.now() + 60_000), new Date(Date.now() + 60_000));
+      const grown = await index.search({ query: 'answer', limit: 10 });
+      assert.equal(grown[0]?.title, 'Alpha question');
+      assert.equal((await index.search({ query: 'beta answer', limit: 10 })).length, 1);
+
+      // A last line still being written waits; whole, it is read without its newline.
+      const gamma = assistant([{ type: 'text', text: 'Gamma answer' }]);
+      appendFileSync(file, gamma.slice(0, 30));
+      utimesSync(file, new Date(Date.now() + 120_000), new Date(Date.now() + 120_000));
+      assert.equal((await index.search({ query: 'gamma', limit: 10 })).length, 0);
+      appendFileSync(file, gamma.slice(30));
+      utimesSync(file, new Date(Date.now() + 180_000), new Date(Date.now() + 180_000));
+      assert.equal((await index.search({ query: 'gamma', limit: 10 })).length, 1);
+
+      // Rewritten shorter: read again from the start.
+      writeFileSync(file, lines(user('Delta question')));
+      utimesSync(file, new Date(Date.now() + 240_000), new Date(Date.now() + 240_000));
+      const rewritten = await index.search({ query: '', limit: 10 });
+      assert.equal(rewritten[0]?.title, 'Delta question');
+      assert.equal((await index.search({ query: 'beta', limit: 10 })).length, 0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -50,37 +50,89 @@ function nonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 }
 
-export function parseTranscript(text: string): Transcript {
-  let cwd: string | undefined;
-  let customTitle: string | undefined;
-  let aiTitle: string | undefined;
-  const messages: TranscriptMessage[] = [];
-  const files = new Map<string, boolean>();
-  for (const line of text.split('\n')) {
-    if (!line.trim()) {
-      continue;
+const TYPE_KEY = '"type":"';
+const TYPE_FIRST = `{${TYPE_KEY}`;
+const USED_TYPES = new Set(['custom-title', 'ai-title', 'user', 'assistant']);
+const MESSAGE_FIRST = '{"parentUuid":';
+const USER_TYPE = `${TYPE_KEY}user"`;
+const TOOL_RESULT_KEY = '"toolUseResult":';
+
+/**
+ * A line of an entry the search has no use for, told without parsing it: most of a
+ * transcript's bytes, which the first read of them all would parse for nothing. A JSON string
+ * holds no bare quote, so `"key":"` in a line is always structure, never text.
+ *  - The CLI writes most kinds of entries with their type first, `{"type":"api-request",...`
+ *    (requests it logs, file history, queue operations...: a quarter of the bytes).
+ *  - A tool's result (two fifths: file contents, command output) is a user message with a
+ *    `toolUseResult`: `{"parentUuid":...,"type":"user",...,"toolUseResult":...`, its type the
+ *    first in the line. What the user types is text, so no other user message has the key.
+ * Messages written some other way are parsed.
+ */
+function unusedEntry(line: string): boolean {
+  if (line.startsWith(TYPE_FIRST)) {
+    return !USED_TYPES.has(line.slice(TYPE_FIRST.length, line.indexOf('"', TYPE_FIRST.length)));
+  }
+  if (!line.startsWith(MESSAGE_FIRST)) {
+    return false;
+  }
+  const type = line.indexOf(TYPE_KEY);
+  return line.startsWith(USER_TYPE, type) && line.includes(TOOL_RESULT_KEY, type);
+}
+
+/**
+ * What a transcript's lines tell, added to as more of them are read: a transcript only grows,
+ * and one being written (a long conversation open somewhere) is read from where the last read
+ * stopped rather than all over again.
+ */
+export class TranscriptReader {
+  private cwd: string | undefined;
+  private customTitle: string | undefined;
+  private aiTitle: string | undefined;
+  private readonly messages: TranscriptMessage[] = [];
+  private readonly files = new Map<string, boolean>();
+
+  /** Adds complete lines. */
+  add(text: string): void {
+    for (const line of text.split('\n')) {
+      if (line.trim() && !unusedEntry(line)) {
+        this.addLine(line);
+      }
     }
+  }
+
+  /** What was read so far; later reads leave it as it is. */
+  get transcript(): Transcript {
+    return {
+      cwd: this.cwd,
+      customTitle: this.customTitle,
+      aiTitle: this.aiTitle,
+      messages: [...this.messages],
+      files: [...this.files].map(([path, edited]) => ({ path, edited })),
+    };
+  }
+
+  private addLine(line: string): void {
     let entry: unknown;
     try {
       entry = JSON.parse(line);
     } catch {
-      continue;
+      return;
     }
     if (!isRecord(entry)) {
-      continue;
+      return;
     }
     if (entry.type === 'custom-title') {
-      customTitle = nonEmptyString(entry.customTitle) ?? customTitle;
-      continue;
+      this.customTitle = nonEmptyString(entry.customTitle) ?? this.customTitle;
+      return;
     }
     if (entry.type === 'ai-title') {
-      aiTitle = nonEmptyString(entry.aiTitle) ?? aiTitle;
-      continue;
+      this.aiTitle = nonEmptyString(entry.aiTitle) ?? this.aiTitle;
+      return;
     }
     if ((entry.type !== 'user' && entry.type !== 'assistant') || entry.isSidechain === true) {
-      continue;
+      return;
     }
-    cwd ??= nonEmptyString(entry.cwd);
+    this.cwd ??= nonEmptyString(entry.cwd);
     const role = entry.type;
     // Tool results, and messages the CLI adds for itself (meta, compaction summaries).
     if (
@@ -90,7 +142,7 @@ export function parseTranscript(text: string): Transcript {
         entry.isCompactSummary === true ||
         entry.isVisibleInTranscriptOnly === true)
     ) {
-      continue;
+      return;
     }
     const content = isRecord(entry.message) ? entry.message.content : undefined;
     const blocks: unknown[] = typeof content === 'string' ? [{ type: 'text', text: content }] : Array.isArray(content) ? content : [];
@@ -101,18 +153,23 @@ export function parseTranscript(text: string): Transcript {
       if (block.type === 'text') {
         const said = nonEmptyString(block.text);
         if (said && !(role === 'user' && CONTEXT_BLOCK.test(said))) {
-          messages.push({ role, text: said.trim() });
+          this.messages.push({ role, text: said.trim() });
         }
       } else if (role === 'assistant' && block.type === 'tool_use' && typeof block.name === 'string' && isRecord(block.input)) {
         const edited = EDIT_TOOLS.has(block.name);
         const path = nonEmptyString(block.input.file_path) ?? nonEmptyString(block.input.notebook_path);
         if (path && (edited || READ_TOOLS.has(block.name))) {
-          files.set(path, (files.get(path) ?? false) || edited);
+          this.files.set(path, (this.files.get(path) ?? false) || edited);
         }
       }
     }
   }
-  return { cwd, customTitle, aiTitle, messages, files: [...files].map(([path, edited]) => ({ path, edited })) };
+}
+
+export function parseTranscript(text: string): Transcript {
+  const reader = new TranscriptReader();
+  reader.add(text);
+  return reader.transcript;
 }
 
 /** A session ready for searching: its transcript plus what the search compares in lower case. */

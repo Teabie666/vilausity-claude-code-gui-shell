@@ -33,6 +33,8 @@ describe('the administrator instance', () => {
     assert.equal(admin.workspaceStateFile('k'), path.join('D:\\data', 'admin', 'state', 'workspaces', 'k.json'));
     assert.equal(normal.otherChromium, admin.chromium);
     assert.equal(admin.otherChromium, normal.chromium);
+    assert.equal(normal.otherShellStateFile, admin.shellStateFile);
+    assert.equal(admin.otherShellStateFile, normal.shellStateFile);
   });
 
   test('command-line arguments quoted the way Windows reads them back', () => {

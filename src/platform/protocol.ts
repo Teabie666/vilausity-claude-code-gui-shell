@@ -202,6 +202,11 @@ export interface WebviewPageHints {
    * changes the page around it (a thinking block's summary: every thinking block opens at once).
    */
   readonly keepInPlace?: string;
+  /**
+   * CSS selector of choices a click picks (a question's options) whose text `styles` makes
+   * selectable, to be copied: the click that ends a selection dragged out in one does not pick it.
+   */
+  readonly selectableChoices?: string;
   /** A conversation's turns, for the markers by its scrollbar (see the type). */
   readonly messageMarkers?: MessageMarkerHints;
   /** A conversation's messages, whose text can be commented on (see the type). */

@@ -22,6 +22,8 @@ export interface AppPaths {
   readonly globalStateFile: string;
   /** What main itself remembers (windows, zoom), apart from the extension's state. */
   readonly shellStateFile: string;
+  /** The other instance's (normal or administrator), only ever read: its recent folders of before they were shared. */
+  readonly otherShellStateFile: string;
   /** The recently opened folders, the normal and the administrator instance's both (recentFolders.ts). */
   readonly recentFoldersFile: string;
   /** The API providers; their keys are stored encrypted. */
@@ -68,6 +70,7 @@ export function createAppPaths(root: string, startedAt = new Date(), elevated = 
     keybindingsFile: path.join(root, 'keybindings.json'),
     globalStateFile: path.join(instanceRoot, 'state', 'global.json'),
     shellStateFile: path.join(instanceRoot, 'state', 'shell.json'),
+    otherShellStateFile: path.join(elevated ? root : path.join(root, ADMIN_FOLDER), 'state', 'shell.json'),
     recentFoldersFile: path.join(root, 'state', 'recent-folders.json'),
     providersFile: path.join(root, 'providers.json'),
     sessionProvidersFile: path.join(root, 'session-providers.jsonl'),

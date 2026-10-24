@@ -40,6 +40,9 @@ export function folderLabel(folder: string, homeFolder: string): string {
   return homeFolder && sameFolder(folder, homeFolder) ? t('globalFolder', name) : name;
 }
 
+/** Recent folders in the search, whether or not something is typed (all of them: Ctrl+R). */
+const FOLDER_ROWS = 5;
+
 interface PickEntry {
   readonly item: QuickPickItemDto;
   /** Enter, or a click. */
@@ -254,7 +257,7 @@ export const workspaceModule: ShellModule = {
                 },
               ];
             })
-            .slice(0, needle ? 5 : 3);
+            .slice(0, FOLDER_ROWS);
           if (!needle) {
             items.push(
               { label: t('openFolder'), icon: 'folder', accept: (alternate) => browse(alternate) },

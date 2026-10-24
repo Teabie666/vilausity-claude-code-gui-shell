@@ -183,6 +183,39 @@ describe('WindowHistory', () => {
     assert.deepEqual(file, ['C:\\new', 'C:\\shared', 'C:\\own'], 'nothing more to move');
   });
 
+  test("the other instance's old recent folders join the shared list once; a state that cannot be read is tried again", () => {
+    let file = ['C:\\shared'];
+    const shared = {
+      read: () => [...file],
+      write: (folders: readonly string[]) => {
+        file = [...folders];
+      },
+    };
+    const store = memoryStore();
+    const history = new WindowHistory(store, shared);
+    history.shareOtherRecent(() => {
+      throw new Error('EBUSY');
+    });
+    assert.deepEqual(file, ['C:\\shared'], 'not read yet');
+    const other = { recentFolders: ['C:\\admin-only', 'c:\\SHARED', 3], zoomLevel: 1 };
+    history.shareOtherRecent(() => other);
+    assert.deepEqual(file, ['C:\\shared', 'C:\\admin-only']);
+    assert.deepEqual(other.recentFolders, ['C:\\admin-only', 'c:\\SHARED', 3], 'left as it was');
+    history.removeRecent('C:\\admin-only');
+    let reads = 0;
+    history.shareOtherRecent(() => {
+      reads++;
+      return other;
+    });
+    assert.equal(reads, 0, 'once only: a folder removed since does not come back');
+    assert.deepEqual(file, ['C:\\shared']);
+
+    // No old list there (that instance never ran): nothing to add, and done.
+    const fresh = new WindowHistory(memoryStore(), shared);
+    fresh.shareOtherRecent(() => undefined);
+    assert.deepEqual(file, ['C:\\shared']);
+  });
+
   test('the shared recent folders file: written and read back, values of the wrong shape dropped', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'vilaus-recent-'));
     try {

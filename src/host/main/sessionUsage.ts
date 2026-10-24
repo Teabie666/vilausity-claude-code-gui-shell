@@ -25,7 +25,7 @@
  * is gone: an API's total, deleted conversations included.
  */
 
-import { open, readdir, stat } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { ProviderPricing } from '../../platform/pricing';
 import { modelKey } from '../../platform/pricing';
@@ -40,6 +40,7 @@ import type {
   UsageSnapshot,
 } from '../../platform/usage';
 import { lastProvider, modelsUsed, sessionUsageByProvider, summarizeUsage, unrecordedCalls } from '../../platform/usage';
+import { readAppended, type AppendedState } from '../node/appendedFile';
 import { normalizeForCompare } from '../node/paths';
 import { SessionTagReader, type SessionTags } from './sessionProviders';
 import { UsageLedger } from './usageLedger';
@@ -48,7 +49,6 @@ import { UsageLedger } from './usageLedger';
 const RESCAN_MS = 1000;
 const SESSION_FILE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const NEWLINE = 0x0a;
 /** Replies the CLI makes up itself (errors, interruptions), with no tokens. */
 const SYNTHETIC_MODEL = '<synthetic>';
 
@@ -229,13 +229,9 @@ export function parseUsageLines(text: string, lines: UsageLines): void {
   }
 }
 
-interface FileState {
-  readonly mtimeMs: number;
-  readonly size: number;
+interface FileState extends AppendedState {
   /** When the file was made: of two sessions with the same calls, the forked one is the later. */
   readonly createdMs: number;
-  /** Where the last complete line read ends. */
-  readonly offset: number;
   readonly lines: UsageLines;
 }
 
@@ -244,40 +240,19 @@ interface FileState {
  * when the file got shorter (rewritten). A last line still being written waits for next time.
  */
 export async function readUsageFile(file: string, known: FileState | undefined): Promise<FileState | undefined> {
-  const stats = await stat(file).catch(() => undefined);
-  if (!stats?.isFile()) {
+  const read = await readAppended(file, known);
+  if (read === undefined) {
     return undefined;
   }
-  if (known && known.mtimeMs === stats.mtimeMs && known.size === stats.size) {
+  if (read === 'unchanged') {
     return known;
   }
-  const from = known && stats.size >= known.offset ? known : undefined;
-  const offset = from?.offset ?? 0;
-  const length = stats.size - offset;
-  const buffer = Buffer.alloc(length);
-  let read = 0;
-  const handle = await open(file, 'r').catch(() => undefined);
-  if (!handle) {
-    return known;
-  }
-  try {
-    while (read < length) {
-      const { bytesRead } = await handle.read(buffer, read, length - read, offset + read);
-      if (bytesRead === 0) {
-        break;
-      }
-      read += bytesRead;
-    }
-  } finally {
-    await handle.close();
-  }
-  // Up to the last newline: a byte that is never part of another character in UTF-8.
-  const end = buffer.subarray(0, read).lastIndexOf(NEWLINE) + 1;
+  const from = read.restarted ? undefined : known;
   const lines = from?.lines ?? newUsageLines();
-  parseUsageLines(buffer.toString('utf8', 0, end), lines);
+  parseUsageLines(read.text, lines);
   // A file system that keeps no creation time gives 0: the first look at it stands in.
-  const createdMs = from?.createdMs ?? (stats.birthtimeMs > 0 ? stats.birthtimeMs : stats.mtimeMs);
-  return { mtimeMs: stats.mtimeMs, size: stats.size, createdMs, offset: offset + end, lines };
+  const createdMs = from?.createdMs ?? (read.birthtimeMs > 0 ? read.birthtimeMs : read.mtimeMs);
+  return { mtimeMs: read.mtimeMs, size: read.size, createdMs, offset: read.offset, lines };
 }
 
 interface SessionFiles {

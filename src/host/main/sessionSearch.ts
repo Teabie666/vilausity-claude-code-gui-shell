@@ -2,25 +2,26 @@
  * Searching Claude Code's sessions (`sessions.search`). The transcripts are read in a worker
  * thread (sessionSearchWorker.ts): the first read goes through every transcript (hundreds of
  * MB for a heavy user), and main must stay responsive. The index keeps what it read, keyed
- * by each file's size and modification time, and rereads only what changed.
+ * by each file's size and modification time; a transcript that grew is read from where the
+ * last read stopped (one being written can be tens of MB).
  */
 
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { IDisposable } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
 import type { SessionSearchRequest, SessionSearchResult } from '../../platform/protocol';
+import { readAppended, type AppendedState } from '../node/appendedFile';
 import { normalizeForCompare } from '../node/paths';
-import { indexSession, parseTranscript, searchSessions, type IndexedSession } from './sessionTranscripts';
+import { indexSession, searchSessions, TranscriptReader, type IndexedSession } from './sessionTranscripts';
 import type { UsageRequest, UsageResults } from './sessionUsage';
 
 /** A search sooner than this after the last look at the files uses what is indexed. */
 const RESCAN_MS = 3000;
 
-interface Entry {
-  readonly mtimeMs: number;
-  readonly size: number;
+interface Entry extends AppendedState {
+  readonly reader: TranscriptReader;
   readonly session: IndexedSession | undefined;
 }
 
@@ -30,7 +31,10 @@ export class SessionIndex {
   private scannedAt = 0;
   private scanning: Promise<void> | undefined;
 
-  constructor(private readonly projectsDir: string) {}
+  constructor(
+    private readonly projectsDir: string,
+    private readonly rescanMs = RESCAN_MS,
+  ) {}
 
   async search(request: SessionSearchRequest): Promise<SessionSearchResult[]> {
     await this.refresh();
@@ -42,7 +46,7 @@ export class SessionIndex {
   }
 
   private refresh(): Promise<void> {
-    if (!this.scanning && Date.now() - this.scannedAt < RESCAN_MS) {
+    if (!this.scanning && Date.now() - this.scannedAt < this.rescanMs) {
       return Promise.resolve();
     }
     this.scanning ??= this.scan().finally(() => {
@@ -66,22 +70,20 @@ export class SessionIndex {
           continue;
         }
         const file = path.join(dir, name);
-        const stats = await stat(file).catch(() => undefined);
-        if (!stats?.isFile()) {
+        const known = this.entries.get(file);
+        const read = await readAppended(file, known);
+        if (read === undefined) {
           continue;
         }
         seen.add(file);
-        const known = this.entries.get(file);
-        if (known && known.mtimeMs === stats.mtimeMs && known.size === stats.size) {
+        if (read === 'unchanged') {
           continue;
         }
         const sessionId = name.slice(0, -'.jsonl'.length);
-        const text = await readFile(file, 'utf8').catch(() => undefined);
-        const session =
-          text === undefined
-            ? undefined
-            : indexSession(sessionId, parseTranscript(text), stats.mtimeMs, await sideTitle(path.join(dir, sessionId)));
-        this.entries.set(file, { mtimeMs: stats.mtimeMs, size: stats.size, session });
+        const reader = known && !read.restarted ? known.reader : new TranscriptReader();
+        reader.add(read.text);
+        const session = indexSession(sessionId, reader.transcript, read.mtimeMs, await sideTitle(path.join(dir, sessionId)));
+        this.entries.set(file, { mtimeMs: read.mtimeMs, size: read.size, offset: read.offset, reader, session });
       }
     }
     for (const file of this.entries.keys()) {

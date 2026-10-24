@@ -20,6 +20,21 @@ export function readJsonFile<T>(filePath: string, fallback: T): T {
 }
 
 /**
+ * A file another process owns, only read: undefined when there is none; throws when it
+ * cannot be read or parsed now, and leaves it as it is.
+ */
+export function readOthersJsonFile(filePath: string): unknown {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+/**
  * Waits before each retry of a rename. On Windows, replacing a file fails (EPERM, EACCES,
  * EBUSY) while another process has it open: a reader, an antivirus scan, a sync client.
  * It is retried for a moment, as graceful-fs does.

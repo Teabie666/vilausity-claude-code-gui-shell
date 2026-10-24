@@ -270,7 +270,7 @@ describe('readUsageFile', () => {
     }
   });
 
-  test('a last line still being written waits for its newline', async () => {
+  test('a last line still being written waits; a whole one is read without its newline, and once', async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'vilaus-usage-'));
     try {
       const file = path.join(dir, 'a.jsonl');
@@ -278,7 +278,8 @@ describe('readUsageFile', () => {
       const first = await readUsageFile(file, undefined);
       assert.ok(first);
 
-      appendFileSync(file, callLine(ID_A, { id: 'msg-2', model: 'deepseek-flash', input: 200 }));
+      const second = callLine(ID_A, { id: 'msg-2', model: 'deepseek-flash', input: 200 });
+      appendFileSync(file, second.slice(0, 40));
       utimesSync(file, new Date(Date.now() + 60_000), new Date(Date.now() + 60_000));
       const partial = await readUsageFile(file, first);
       assert.ok(partial);
@@ -286,12 +287,19 @@ describe('readUsageFile', () => {
       assert.ok(!partial.lines.calls.has('msg-2'));
       assert.ok(partial.offset < partial.size);
 
-      appendFileSync(file, '\n');
+      appendFileSync(file, second.slice(40));
       utimesSync(file, new Date(Date.now() + 120_000), new Date(Date.now() + 120_000));
-      const done = await readUsageFile(file, partial);
+      const whole = await readUsageFile(file, partial);
+      assert.ok(whole);
+      assert.equal(whole.lines.calls.size, 2);
+      assert.ok(whole.lines.calls.has('msg-2'));
+      assert.equal(whole.offset, whole.size);
+
+      appendFileSync(file, '\n' + callLine(ID_A, { id: 'msg-3', model: 'deepseek-flash', input: 300 }) + '\n');
+      utimesSync(file, new Date(Date.now() + 180_000), new Date(Date.now() + 180_000));
+      const done = await readUsageFile(file, whole);
       assert.ok(done);
-      assert.equal(done.lines.calls.size, 2);
-      assert.ok(done.lines.calls.has('msg-2'));
+      assert.deepEqual([...done.lines.calls.keys()], ['msg-1', 'msg-2', 'msg-3']);
       assert.equal(done.offset, done.size);
     } finally {
       rmSync(dir, { recursive: true, force: true });

@@ -1,12 +1,14 @@
 /**
  * Conversations in the search: Claude Code sessions found by their title, by what was said
  * in them, or by the files Claude read or changed (main reads the transcripts). With nothing
- * typed, this folder's latest. The last row widens a search to every folder's sessions; a
- * session of another folder opens in that folder's window.
+ * typed, this folder's latest: last time's show at once while main looks again, and soon
+ * after the window opens they are asked for once, which reads the transcripts in the
+ * background (the first read of them all takes a second or two). The last row widens a
+ * search to every folder's sessions; a session of another folder opens in that folder's window.
  */
 
 import type { ShellModule } from '../../core/module';
-import type { Highlight, QuickAccessItem } from '../../core/quickAccess';
+import type { Highlight, QuickAccessItem, QuickAccessResult } from '../../core/quickAccess';
 import { IDialogs, INative, IQuickAccess, IWorkspace } from '../../core/serviceIds';
 import { getUiLanguage, htmlLang } from '../../platform/nls';
 import type { SessionSearchResult } from '../../platform/protocol';
@@ -15,6 +17,8 @@ import { t } from './messages';
 
 const RECENT_ROWS = 8;
 const MATCH_ROWS = 30;
+/** How long after the window opens the transcripts are read ahead of the first search (ms). */
+const PREFETCH_DELAY_MS = 2000;
 
 /** "3 days ago" in the display language. */
 function timeAgo(time: number, now: number): string {
@@ -75,6 +79,7 @@ export const sessionSearchModule: ShellModule = {
         detailHighlights = shifted(match.highlights, lead.length);
       }
       return {
+        id: result.sessionId,
         label: result.title,
         labelHighlights: match?.kind === 'title' ? match.highlights : undefined,
         description: [showFolder ? folderLabel(result.folder, workspace.homeFolder) : undefined, timeAgo(result.updatedAt, now)]
@@ -87,7 +92,23 @@ export const sessionSearchModule: ShellModule = {
       };
     };
 
+    const toGroup = (results: readonly SessionSearchResult[], where: string | undefined, query: string): QuickAccessResult => {
+      if (results.length === 0) {
+        return undefined;
+      }
+      const now = Date.now();
+      const label = where === undefined ? t('allFoldersConversations') : query ? t('conversations') : t('recentConversations');
+      return { label, items: results.map((result) => toItem(result, where === undefined, now)) };
+    };
+
     const scope = (): string | undefined => (allFolders || !folder ? undefined : folder);
+    /** The latest answer for nothing typed, by where it searched (every folder: ''). */
+    const latest = new Map<string, readonly SessionSearchResult[]>();
+    const searchRecent = async (where: string | undefined): Promise<readonly SessionSearchResult[]> => {
+      const results = await native.call('sessions.search', { query: '', folder: where, limit: RECENT_ROWS });
+      latest.set(where ?? '', results);
+      return results;
+    };
     subscriptions.add(
       quickAccess.registerSearchContributor({
         id: 'conversations',
@@ -96,18 +117,22 @@ export const sessionSearchModule: ShellModule = {
           allFolders = widenNext;
           widenNext = false;
         },
+        initial: (query) => {
+          const where = scope();
+          const results = query ? undefined : latest.get(where ?? '');
+          return results && toGroup(results, where, query);
+        },
         provide: async (query) => {
           const where = scope();
-          const results = await native.call('sessions.search', { query, folder: where, limit: query ? MATCH_ROWS : RECENT_ROWS });
-          if (results.length === 0) {
-            return undefined;
-          }
-          const now = Date.now();
-          const label = where === undefined ? t('allFoldersConversations') : query ? t('conversations') : t('recentConversations');
-          return { label, items: results.map((result) => toItem(result, where === undefined, now)) };
+          const results = query
+            ? await native.call('sessions.search', { query, folder: where, limit: MATCH_ROWS })
+            : await searchRecent(where);
+          return toGroup(results, where, query);
         },
       }),
     );
+    const prefetch = setTimeout(() => void searchRecent(scope()).catch(() => undefined), PREFETCH_DELAY_MS);
+    subscriptions.add({ dispose: () => clearTimeout(prefetch) });
     // The last row, so that Enter on the first one still opens what matched.
     subscriptions.add(
       quickAccess.registerSearchContributor({

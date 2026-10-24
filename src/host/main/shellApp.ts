@@ -57,6 +57,7 @@ import { API_ALLOW_SEND_SETTING, API_DISCOVERY_FILE, API_DOCS_URL, API_ENABLED_S
 import { APP_ORIGIN } from '../../platform/webviewUrls';
 import { extensionTranslations } from '../../nls/extensionPacks';
 import { languagePack } from '../../nls/packs';
+import { readOthersJsonFile } from '../node/jsonFile';
 import { isSubPath } from '../node/paths';
 import type { AppPaths } from './appPaths';
 import { placeInWorkspace } from './attachments';
@@ -207,6 +208,7 @@ export class ShellApp extends Disposable implements WindowHost {
       new SharedRecentFolders(env.paths.recentFoldersFile, this.logger.child('recentFolders')),
     );
     this.history.shareRecent();
+    this.history.shareOtherRecent(() => readOthersJsonFile(env.paths.otherShellStateFile));
     const legacy = this.globalState.get(LEGACY_WINDOW_STATE_KEY) as { zoomLevel?: unknown } | undefined;
     this.legacyPlacement = parsePlacement(legacy);
     if (legacy !== undefined) {
@@ -688,8 +690,9 @@ export class ShellApp extends Disposable implements WindowHost {
       await this.openWindow(folder);
     } else {
       this.history.rememberPlacement(inWindow.folder, inWindow.window.placement);
-      await inWindow.switchFolder(folder);
+      // Before the switch, which waits for the extension host to stop and may fail on the way.
       this.history.addRecent(folder);
+      await inWindow.switchFolder(folder);
       this.rememberOpenWindows();
       this.apiWindowsChanged();
     }

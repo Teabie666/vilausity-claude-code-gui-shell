@@ -2,7 +2,9 @@
  * Quick access, after VS Code's: one input over the window whose leading characters pick a
  * provider (`>`: commands; none: search). The search is made of groups that modules
  * contribute (conversations, files, folders...). A group that answers asynchronously keeps
- * its previous rows until the new ones arrive, so the list does not flicker while typing;
+ * its previous rows until the new ones arrive, so the list does not flicker while typing,
+ * or shows what its contributor offers meanwhile (its rows of last time, when the picker
+ * opens: the group takes its place at once and the others do not move when it answers);
  * an Enter pressed before they arrive waits for them, so typing a name and Enter opens the
  * first match rather than whatever row was there a moment before.
  */
@@ -17,6 +19,8 @@ import { t } from './messages';
 export type Highlight = readonly [number, number];
 
 export interface QuickAccessItem {
+  /** Names the row across answers: the cursor stays on it when its group answers again. */
+  readonly id?: string;
   readonly label: string;
   readonly labelHighlights?: readonly Highlight[];
   /** Dimmed, after the label. */
@@ -44,6 +48,8 @@ export type QuickAccessResult = QuickAccessGroup | undefined;
 export interface QuickAccessSlot {
   readonly key: string;
   readonly result: QuickAccessResult | Promise<QuickAccessResult>;
+  /** Shown until `result` answers, in place of the rows it had for the previous text. */
+  readonly initial?: QuickAccessResult;
 }
 
 export interface QuickAccessProvider {
@@ -61,6 +67,8 @@ export interface SearchContributor {
   /** The picker opened: drop what was cached for the previous one. */
   onDidOpen?(): void;
   provide(query: string, token: CancellationToken): QuickAccessResult | Promise<QuickAccessResult>;
+  /** What the group shows until `provide` answers (its answer of last time, say). */
+  initial?(query: string): QuickAccessResult;
 }
 
 /** How long an Enter waits for the groups still answering before it takes the first row anyway. */
@@ -90,7 +98,11 @@ export class QuickAccess {
       provide: (query, token) =>
         [...this.contributors]
           .sort((a, b) => orderOf(a, query) - orderOf(b, query))
-          .map((contributor) => ({ key: contributor.id, result: contributor.provide(query, token) })),
+          .map((contributor) => ({
+            key: contributor.id,
+            result: contributor.provide(query, token),
+            initial: contributor.initial?.(query),
+          })),
     });
   }
 
@@ -180,6 +192,11 @@ export class QuickAccess {
         rows.push(...group.items.map((item) => ({ item })));
       }
       const items = rows.flatMap((row) => (row.item ? [row.item] : []));
+      const id = focused?.id;
+      if (focused && !items.includes(focused) && id !== undefined) {
+        // Its group answered again: the cursor stays on the same row.
+        focused = items.find((item) => item.id === id) ?? focused;
+      }
       if (!navigated || !focused || !items.includes(focused)) {
         focused = items[0];
       }
@@ -227,7 +244,7 @@ export class QuickAccess {
           choose(focused, alternate);
         }
       };
-      slots = results.map(({ key, result }, index) => {
+      slots = results.map(({ key, result, initial }, index) => {
         if (!(result instanceof Promise)) {
           return { key, group: result };
         }
@@ -241,8 +258,8 @@ export class QuickAccess {
             answered(index, key, undefined);
           },
         );
-        // Until it answers, the group shows what it found for the previous text.
-        return { key, group: previous.get(key) };
+        // Until it answers, the group shows what it offers meanwhile, else what it found for the previous text.
+        return { key, group: initial ?? previous.get(key) };
       });
       render();
     };

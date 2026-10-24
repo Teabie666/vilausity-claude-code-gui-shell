@@ -31,6 +31,7 @@ import { watchSessionRows } from './sessionRows';
 import { StatusFilter } from './statusFilter';
 import { installStreamMerging } from './streamMerge';
 import { installScrollKeeper } from './scrollKeeper';
+import { installSelectableChoices } from './selectableChoices';
 import { PageTranslator } from './translate';
 import { UsageBlock } from './usageBlock';
 import { UsageResets } from './usageResets';
@@ -184,6 +185,11 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
   const keepInPlace = data.hints?.keepInPlace;
   if (keepInPlace) {
     installScrollKeeper(keepInPlace);
+  }
+  // A question's options: their text is selected by dragging over it, without picking them.
+  const selectableChoices = data.hints?.selectableChoices;
+  if (selectableChoices) {
+    installSelectableChoices(selectableChoices);
   }
   // Markers by a conversation's scrollbar; the shell may turn them off before the body is there.
   const markerHints = data.hints?.messageMarkers;
