@@ -3097,21 +3097,31 @@ await step(
         if (!(await buttons.nth(i).isVisible())) throw new Error(`action button ${i + 1} is hidden on hover`);
       }
 
-      // At the usual width the search box is a box, with the page's own label in it.
+      // At the usual width the search box is a box, with the page's own label in it, also
+      // with sessions waiting for the user (the count then takes the status label's place).
       await otherPage.mouse.move(2, 2);
       await otherPage.waitForTimeout(150);
-      const wide = await list.evaluate(() => {
-        const toggle = document.querySelector('.searchToggleButton_OOQiHg');
-        return { width: toggle.getBoundingClientRect().width, text: getComputedStyle(toggle, '::after').display };
-      });
-      if (wide.width < 60 || wide.text !== 'block')
-        throw new Error(`the search box is not a box at the usual width (${Math.round(wide.width)}px, text ${wide.text})`);
-
-      // A narrow sidebar with sessions waiting for the user: every control stays inside the
-      // row (and the sidebar), and the search box is just its icon, still opening the search.
+      const searchBox = () =>
+        list.evaluate(() => {
+          const toggle = document.querySelector('.searchToggleButton_OOQiHg');
+          return { width: toggle.getBoundingClientRect().width, text: getComputedStyle(toggle, '::after').display };
+        });
+      const wide = await searchBox();
       await list.evaluate(() => {
         document.querySelector('.statusFilterMenuButton_OOQiHg').setAttribute('data-vilaus-needs-input', 'Needs input · 2');
       });
+      await otherPage.waitForTimeout(150);
+      const wideWaiting = await searchBox();
+      for (const [state, box] of [
+        ['', wide],
+        [' with sessions waiting', wideWaiting],
+      ]) {
+        if (box.width < 60 || box.text !== 'block')
+          throw new Error(`the search box is not a box at the usual width${state} (${Math.round(box.width)}px, text ${box.text})`);
+      }
+
+      // A narrow sidebar with sessions waiting for the user: every control stays inside the
+      // row (and the sidebar), and the search box is just its icon, still opening the search.
       const sash = await otherPage.locator('#sidebar-sash').boundingBox();
       await otherPage.mouse.move(sash.x + sash.width / 2, sash.y + sash.height / 2);
       await otherPage.mouse.down();
@@ -3160,7 +3170,7 @@ await step(
         );
       await list.locator('.searchToggleButton_OOQiHg').click();
       await list.locator('.searchInput_OOQiHg').waitFor({ timeout: 5000 });
-      return `sidebar ${Math.round(sidebar.width)}px; the title ${Math.round(away.name.width)}px away from the row and ${Math.round(hovered.name.width)}px hovered; the filter row fits its ${Math.round(filters.row.width)}px`;
+      return `the title ${Math.round(away.name.width)}px away from the row and ${Math.round(hovered.name.width)}px hovered; the search box ${Math.round(wide.width)}px (${Math.round(wideWaiting.width)}px with sessions waiting) at the usual width; at ${Math.round(sidebar.width)}px the filter row fits its ${Math.round(filters.row.width)}px`;
     } finally {
       await other.close();
     }

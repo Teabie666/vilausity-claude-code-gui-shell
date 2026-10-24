@@ -488,9 +488,9 @@ ${QUESTION_TEXT} {
  *   width);
  * - the status filter as one drop-down that shows the Active count (see STATUS_FILTER);
  * - the search button as a search box taking the rest of its row (clicking it opens the
- *   page's own search field, as before); when the row runs out of width it shrinks to just
- *   its icon; "New group" as just its icon, to leave it room. No button is ever clipped: the
- *   status label (then the count) gives way first.
+ *   page's own search field, as before); when too little is left for a box it shrinks to just
+ *   its icon; "New group" as just its icon, to leave it room. No button is ever clipped: past
+ *   that the status label, then the count, ellipsize.
  */
 const SESSION_LIST_STYLES = `
 .root_djirOA { overflow-y: hidden; }
@@ -543,7 +543,7 @@ const SESSION_LIST_STYLES = `
 
 /* The row's controls never shrink past their icons; when the width runs out the search box
    drops its text first, then the status label and count ellipsize. */
-.searchRow_OOQiHg { container-type: inline-size; }
+.searchRow_OOQiHg { container: vilaus-search-row / inline-size; }
 .searchRowActions_OOQiHg { flex: 1 1 auto; flex-wrap: nowrap; }
 .activeFilterToggle_OOQiHg { display: none; }
 .statusFilterMenuButton_OOQiHg {
@@ -581,7 +581,9 @@ const SESSION_LIST_STYLES = `
 }
 .statusFilterMenuButton_OOQiHg > .statusFilterCaret_OOQiHg { order: 3; }
 
-.searchRowTail_OOQiHg { flex: 1 1 auto; min-width: 52px; margin-left: 6px; }
+/* Only what the status filter leaves (a zero basis, so the filter keeps its label until this
+   is down to its two icons); its own width decides the search box below. */
+.searchRowTail_OOQiHg { flex: 1 1 0; min-width: 52px; margin-left: 6px; container: vilaus-search-tail / inline-size; }
 .searchRowTail_OOQiHg > .newGroupButton_OOQiHg:not(.searchToggleButton_OOQiHg) { gap: 0; padding: 4px; font-size: 0; }
 .searchToggleButton_OOQiHg,
 .searchToggleButton_OOQiHg:hover,
@@ -605,34 +607,15 @@ const SESSION_LIST_STYLES = `
   white-space: nowrap;
 }
 
-/* Narrow rows (the row's width, not the window's): the search box becomes a plain icon
-   button like "New group", and with sessions waiting for the user the status label goes
-   too, leaving its count. Both still click. */
-@container (max-width: 260px) {
-  .searchRow_OOQiHg:has(.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]) .statusFilterMenuButton_OOQiHg::before { display: none; }
+/* With sessions waiting for the user, a row too narrow for both labels (the filter starts
+   shrinking below 265px in English, 241px in Chinese) drops "Active" for the count of those
+   waiting: shrunk together, the count would lose its number to the ellipsis first. */
+@container vilaus-search-row (width <= 270px) {
+  .statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]::before { display: none; }
 }
-@container (max-width: 370px) {
-  .searchRow_OOQiHg:has(.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]) .searchToggleButton_OOQiHg,
-  .searchRow_OOQiHg:has(.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]) .searchToggleButton_OOQiHg:hover,
-  .searchRow_OOQiHg:has(.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]) .searchToggleButton_OOQiHg:focus {
-    flex: 0 0 auto;
-    width: 24px;
-    min-width: 24px;
-    margin-left: auto;
-    padding: 0;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--app-secondary-foreground);
-    justify-content: center;
-  }
-  .searchRow_OOQiHg:has(.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]) .searchToggleButton_OOQiHg:hover,
-  .searchRow_OOQiHg:has(.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]) .searchToggleButton_OOQiHg:focus {
-    background: var(--app-ghost-button-hover-background);
-    color: var(--app-primary-foreground);
-  }
-  .searchRow_OOQiHg:has(.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]) .searchToggleButton_OOQiHg::after { display: none; }
-}
-@container (max-width: 230px) {
+/* Too narrow for a box that shows some of its label (under 72px beside "New group"): the
+   search box becomes a plain icon button like "New group", still opening the search. */
+@container vilaus-search-tail (width < 100px) {
   .searchToggleButton_OOQiHg,
   .searchToggleButton_OOQiHg:hover,
   .searchToggleButton_OOQiHg:focus {
