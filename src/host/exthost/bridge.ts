@@ -23,6 +23,7 @@ import type {
   ConversationStateDto,
   FileLinkHints,
   MessageMarkerHints,
+  OmittedRowsHints,
   PromptSubmitHints,
   PromptSubmitOutcome,
   PromptSubmitReply,
@@ -183,6 +184,34 @@ const CONVERSATION_COMMENTS: ConversationCommentHints = {
   thinking: '[class*="thinkingContent_"]',
   thinkingToggle: 'details[class*="thinking_"] > summary[class*="thinkingSummary_"]',
   turn: '.turn_07S1Yg',
+};
+
+/**
+ * A long conversation's page (anthropic.claude-code 2.1.310; 2.1.302 on, 2.1.282 had no such
+ * limit) shows 600 rows: one per message of Claude's (a content block) and of the user's, apart
+ * from tool results, which go with their calls. Past that it leaves out the earliest tool calls
+ * and thinking, while a conversation goes on too; what Claude said and the user's messages stay.
+ * It gets the whole history when it opens a session (`{type: 'from-extension', message: {type:
+ * 'response', requestId, response: {type: 'get_session_response', messages, ...}}}`) and each new
+ * message as it comes (an `io_message`, as STREAM_MERGE has it). It shows each of Claude's messages
+ * with its uuid (CONVERSATION_COMMENTS), so what it left out is what it shows no element for. Of
+ * the rest, it never shows ToolSearch, and runs of Read in a row as one.
+ */
+const OMITTED_ROWS: OmittedRowsHints = {
+  history: {
+    match: [
+      [['type'], 'from-extension'],
+      [['message', 'type'], 'response'],
+      [['message', 'response', 'type'], 'get_session_response'],
+    ],
+    messages: ['message', 'response', 'messages'],
+  },
+  live: { match: IO_MESSAGE, message: ['message', 'message'] },
+  limit: 600,
+  blockTypes: ['tool_use', 'thinking'],
+  unseenTools: ['Read', 'ToolSearch'],
+  uuidAttribute: CONVERSATION_COMMENTS.uuidAttribute,
+  turn: MESSAGE_MARKERS.turn,
 };
 
 /** The session list view and the plan preview panel (anthropic.claude-code 2.1.282). */
@@ -473,6 +502,16 @@ ${QUESTION_TEXT} {
 .vilaus-provider-notice-switch[hidden] { display: none; }
 .vilaus-provider-notice-ignore { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
 .vilaus-provider-notice-ignore:hover { background: var(--vscode-button-secondaryHoverBackground); }
+
+.vilaus-omitted-rows {
+  margin: 4px 0 8px;
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-font-family);
+  font-size: 12px;
+  line-height: 18px;
+}
+.vilaus-omitted-rows a { color: var(--vscode-textLink-foreground); text-decoration: none; cursor: pointer; }
+.vilaus-omitted-rows a:hover { color: var(--vscode-textLink-activeForeground); text-decoration: underline; }
 `;
 
 /**
@@ -1275,6 +1314,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
           messageMarkers: MESSAGE_MARKERS,
           conversationComments: CONVERSATION_COMMENTS,
           promptSubmit: PROMPT_SUBMIT,
+          omittedRows: OMITTED_ROWS,
         };
       case SESSION_LIST_VIEW_TYPE:
         return {

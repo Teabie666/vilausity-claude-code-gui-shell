@@ -78,6 +78,7 @@ import { applyRetention, KEEP_FOREVER_DAYS } from './claudeRetention';
 import { SessionTagWriter } from './sessionProviders';
 import { scopeValue, usageTotal, usageView } from './usageView';
 import { claudeProjectsDir, SessionSearch } from './sessionSearch';
+import type { TranscriptLabels } from './transcriptMarkdown';
 import { KeybindingsStore } from './keybindingsStore';
 import { LocalApi } from './localApi';
 import {
@@ -142,6 +143,27 @@ export function explorerMenuTarget(): ExplorerMenuTarget {
 }
 
 /** File Explorer's entries in the display language. */
+/** The words of a full transcript (fullTranscripts.ts), in the display language. */
+function transcriptLabels(): TranscriptLabels {
+  return {
+    you: t('transcriptYou'),
+    claude: t('transcriptClaude'),
+    thinking: t('transcriptThinking'),
+    input: t('transcriptInput'),
+    result: t('transcriptResult'),
+    error: t('transcriptError'),
+    noResult: t('transcriptNoResult'),
+    oneLine: t('transcriptOneLine'),
+    lines: t('transcriptLines'),
+    moreLines: t('transcriptMoreLines'),
+    image: t('transcriptImage'),
+    subagent: t('transcriptSubagent'),
+    compacted: t('transcriptCompacted'),
+    summary: t('transcriptSummary'),
+    plan: t('transcriptPlan'),
+  };
+}
+
 export function explorerMenuLabels(): ExplorerMenuLabels {
   return { open: t('explorerOpen'), openAsAdministrator: t('explorerOpenAsAdministrator') };
 }
@@ -1172,6 +1194,14 @@ export class ShellApp extends Disposable implements WindowHost {
           window.sessionStoreChanged();
         }
         return deleted.transcript ? 'deleted' : 'notFound';
+      },
+      'sessions.fullTranscript': async ({ sessionId }, window) => {
+        const id = sessionId ?? window.activeSessionId;
+        if (!id) {
+          return null;
+        }
+        const request = { sessionId: id, outDir: this.env.paths.transcriptsDir, labels: transcriptLabels() };
+        return (await this.sessionSearch.fullTranscript(request)) ?? null;
       },
       'window.shownFolders': () => this.windows.map((window) => window.folder),
       'window.close': (_params, window) => this.requestClose(window),

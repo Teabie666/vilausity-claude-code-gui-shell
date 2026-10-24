@@ -3871,7 +3871,122 @@ await step(
       await waitFor(async () => !(await state()).shown, 5000, 'the markers hidden');
       writeFileSync(ownSettings, JSON.stringify(baseSettings), 'utf8');
       await waitFor(async () => (await state()).shown, 5000, 'the markers back');
+      // 28 rows: the page shows them all, and says nothing of rows left out.
+      if ((await conversation.locator('.vilaus-omitted-rows').count()) > 0) throw new Error('a short conversation says rows are left out');
       return `summary at ${before} px before and after`;
+    } finally {
+      await other.close();
+    }
+  },
+);
+
+await step(
+  'a conversation past 600 rows says its earlier tool calls and thinking are not shown; the link opens the full transcript',
+  async () => {
+    // 200 turns, each a message of the user's, thinking, a Bash call and its result, and an
+    // answer, a message of Claude's per content block as Claude Code writes them: 800 rows.
+    const own = path.join(runDir, 'omitted-rows');
+    const ownData = path.join(own, 'data');
+    const ownWorkspace = path.join(own, 'workspace');
+    const claudeDir = path.join(own, 'claude');
+    const project = path.join(claudeDir, 'projects', ownWorkspace.replace(/[^a-zA-Z0-9]/g, '-'));
+    for (const folder of [ownData, ownWorkspace, project]) mkdirSync(folder, { recursive: true });
+    const sessionId = 'e5e5e5e5-0000-4000-8000-000000000001';
+    const entries = [];
+    let parentUuid = null;
+    const add = (entry) => {
+      const uuid = `00000000-0000-4000-8000-${String(entries.length + 1).padStart(12, '0')}`;
+      entries.push({ sessionId, cwd: ownWorkspace, timestamp: new Date().toISOString(), uuid, parentUuid, ...entry });
+      parentUuid = uuid;
+    };
+    for (let turn = 1; turn <= 200; turn++) {
+      add({ type: 'user', message: { role: 'user', content: `Question ${turn}` } });
+      const id = `toolu_${turn}`;
+      const reply = (block) => ({ type: 'assistant', message: { id: `msg_${turn}`, role: 'assistant', content: [block] } });
+      add(reply({ type: 'thinking', thinking: `Thinking about ${turn}`, signature: 'x' }));
+      add(reply({ type: 'tool_use', id, name: 'Bash', input: { command: `echo turn-${turn}-call` } }));
+      add({
+        type: 'user',
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: `turn-${turn}-output` }] },
+        toolUseResult: { stdout: `turn-${turn}-output` },
+      });
+      add(reply({ type: 'text', text: `Answer ${turn}` }));
+    }
+    entries.push({ type: 'ai-title', aiTitle: 'Very long session', sessionId });
+    writeFileSync(path.join(project, `${sessionId}.jsonl`), entries.map((entry) => `${JSON.stringify(entry)}\n`).join(''), 'utf8');
+    writeFileSync(
+      path.join(ownData, 'settings.json'),
+      JSON.stringify({
+        'claudeCode.hideOnboarding': true,
+        'claudeCode.disableLoginPrompt': true,
+        'vilaus.language': 'en',
+        'vilaus.extension.autoUpdate': false,
+      }),
+      'utf8',
+    );
+    const other = await electron.launch({
+      executablePath: executable,
+      args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display', '--session', sessionId),
+      cwd: root,
+      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      timeout: 60_000,
+    });
+    try {
+      const otherPage = await other.firstWindow();
+      const conversation = await waitFor(
+        async () => {
+          for (const frame of otherPage.frames()) {
+            if (
+              frame.url().startsWith('ccw://wv') &&
+              (await frame
+                .locator('.vilaus-omitted-rows')
+                .count()
+                .catch(() => 0)) > 0
+            )
+              return frame;
+          }
+          return undefined;
+        },
+        45_000,
+        'the line about rows left out',
+      );
+      const shown = await conversation.evaluate(() => ({
+        line: document.querySelector('.vilaus-omitted-rows').textContent,
+        // Right before the first turn, which is the first question's.
+        beforeFirstTurn: document.querySelector('.vilaus-omitted-rows').nextElementSibling?.textContent.includes('Question 1'),
+        // The calls by their uuids: entries count from 1, five a turn, the call the third of them.
+        firstCall: !!document.querySelector('[data-bookmark-uuid="00000000-0000-4000-8000-000000000003"]'),
+        lastCall: !!document.querySelector('[data-bookmark-uuid="00000000-0000-4000-8000-000000000998"]'),
+      }));
+      if (!shown.line.includes('600') || !shown.beforeFirstTurn) throw new Error(`the line: ${JSON.stringify(shown)}`);
+      // The page did leave the first turn's call out, and kept the last one's.
+      if (shown.firstCall || !shown.lastCall) throw new Error(`the calls the page shows: ${JSON.stringify(shown)}`);
+      await otherPage.screenshot({ path: path.join(runDir, 'omitted-rows.png') });
+
+      await conversation.locator('.vilaus-omitted-rows a').click();
+      const preview = otherPage.locator('.markdown-body');
+      await waitFor(
+        async () =>
+          (await preview.count()) > 0 &&
+          (
+            await preview
+              .first()
+              .innerText()
+              .catch(() => '')
+          ).includes('turn-1-call'),
+        20_000,
+        'the full transcript with the first call',
+      );
+      const transcript = await preview.first().evaluate((body) => ({
+        title: body.querySelector('h1')?.textContent,
+        thinking: [...body.querySelectorAll('summary')].filter((summary) => summary.textContent === 'Thinking').length,
+        results: [...body.querySelectorAll('summary')].filter((summary) => summary.textContent === 'Result · 1 line').length,
+      }));
+      if (transcript.title !== 'Very long session' || transcript.thinking !== 200 || transcript.results !== 200)
+        throw new Error(`the transcript: ${JSON.stringify(transcript)}`);
+      const tab = await otherPage.locator('#content-pane .content-tab.active .tab-label').innerText();
+      if (!tab.includes('Very long session.md')) throw new Error(`the tab: ${tab}`);
+      return `${JSON.stringify(transcript)}`;
     } finally {
       await other.close();
     }

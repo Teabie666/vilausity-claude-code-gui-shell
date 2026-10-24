@@ -185,6 +185,9 @@ export class WebviewFrames {
   private readonly editPricesEmitter = new Emitter<void>();
   /** The usage block's link to the provider's prices was clicked (pages with `hints.usageBlock`). */
   readonly onDidRequestEditPrices: Event<void> = this.editPricesEmitter.event;
+  private readonly fullTranscriptEmitter = new Emitter<string>();
+  /** A conversation page's link to its full transcript was clicked: the webview's id. */
+  readonly onDidRequestFullTranscript: Event<string> = this.fullTranscriptEmitter.event;
   private readonly navigateEmitter = new Emitter<'back' | 'forward'>();
   /** The mouse's back or forward button was released over a webview. */
   readonly onDidRequestNavigate: Event<'back' | 'forward'> = this.navigateEmitter.event;
@@ -412,6 +415,9 @@ export class WebviewFrames {
         break;
       case 'editPrices':
         this.editPricesEmitter.fire();
+        break;
+      case 'fullTranscript':
+        this.fullTranscriptEmitter.fire(webviewId);
         break;
       case 'toggleProviderFilter':
         this.providerFilterEmitter.fire();

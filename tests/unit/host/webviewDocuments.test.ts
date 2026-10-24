@@ -152,7 +152,9 @@ describe('WebviewDocumentStore', () => {
       store
         .render('list')!
         .includes(
-          '"labels":{"deleteSession":"Delete session","resetsAt":"Resets {0}","needsInput":"Needs input · {0}","comment":"Comment","locale":"en"}',
+          '"labels":{"deleteSession":"Delete session","resetsAt":"Resets {0}","needsInput":"Needs input · {0}","comment":"Comment",' +
+            '"omittedRows":"Earlier tool calls and thinking are not shown (the Claude Code extension shows the last {0} rows)",' +
+            '"fullTranscript":"View Full Transcript","locale":"en"}',
         ),
     );
     assert.ok(!store.render('other')!.includes('labels'));

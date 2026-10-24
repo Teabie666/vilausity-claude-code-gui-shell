@@ -213,6 +213,35 @@ export interface WebviewPageHints {
   readonly conversationComments?: ConversationCommentHints;
   /** Where a conversation's message input is, for the shell to send a message as Enter does (`submitPrompt`). */
   readonly promptSubmit?: PromptSubmitHints;
+  /** How to tell that a conversation page leaves out a long conversation's earlier rows (see the type). */
+  readonly omittedRows?: OmittedRowsHints;
+}
+
+/**
+ * A conversation page shows a long conversation's last rows only: past `limit` rows it leaves
+ * out the earliest tool calls and thinking (what Claude said and the user's messages stay). The
+ * page script tells from what the page got which of Claude's messages it shows and which it
+ * left out, and says so above the first turn, with a link to the full transcript.
+ *
+ * Messages are Claude Code's (`{type: 'assistant' | 'user', uuid, message: {content}, ...}`);
+ * a message of Claude's is one content block. Only those of the conversation itself count, not
+ * a subagent's (`parent_tool_use_id` set).
+ */
+export interface OmittedRowsHints {
+  /** What hands the page a session's history: the message, and where its messages are in it. */
+  readonly history: { readonly match: MessageMatch; readonly messages: MessagePath };
+  /** What hands the page one more message as the conversation goes on, and where it is in it. */
+  readonly live: { readonly match: MessageMatch; readonly message: MessagePath };
+  /** How many rows the page shows in all; a row is a message, apart from tool results. */
+  readonly limit: number;
+  /** Claude's messages the page leaves out: of these content block types. */
+  readonly blockTypes: readonly string[];
+  /** Tool calls the page shows merged with others, or not at all, even when it leaves out none. */
+  readonly unseenTools: readonly string[];
+  /** The attribute Claude's messages carry their uuid in, on the page. */
+  readonly uuidAttribute: string;
+  /** A conversation's turns: the line goes before the first. */
+  readonly turn: string;
 }
 
 export interface PromptSubmitHints {
@@ -454,6 +483,10 @@ export interface WebviewLabels {
   readonly needsInput: string;
   /** The button by text selected in a conversation. */
   readonly comment: string;
+  /** Above a conversation whose earlier rows the page leaves out ({0}: how many rows it shows). */
+  readonly omittedRows: string;
+  /** The link after it. */
+  readonly fullTranscript: string;
   /** The display language as a BCP 47 tag, for formatting times. */
   readonly locale: string;
 }
@@ -1121,6 +1154,12 @@ export type MainApiForRenderer = {
    * Every window's session list hears of it.
    */
   'sessions.delete': (p: { sessionId: string }) => SessionDeleteResult;
+  /**
+   * Writes a session's whole transcript as a Markdown file (the conversation page leaves out a
+   * long conversation's earlier tool calls and thinking); no `sessionId`: the conversation in
+   * front. The file's path, or null when there is no such session.
+   */
+  'sessions.fullTranscript': (p: { sessionId?: string }) => string | null;
   /** The folders the open windows show (the calling window's too). */
   'window.shownFolders': (p: void) => string[];
   /** Closes the calling window; closing the last one quits. */
@@ -1355,6 +1394,8 @@ export type WebviewToShellMessage =
   | { readonly ccw: string; readonly kind: 'navigate'; readonly direction: 'back' | 'forward' }
   /** The usage block's link to the window's provider's prices. */
   | { readonly ccw: string; readonly kind: 'editPrices' }
+  /** The link to the conversation's full transcript (pages with `hints.omittedRows`). */
+  | { readonly ccw: string; readonly kind: 'fullTranscript' }
   /** The session list's "this API only" toggle. */
   | { readonly ccw: string; readonly kind: 'toggleProviderFilter' }
   /** The provider notice's button: switch the window to `providerId` and open the session again. */

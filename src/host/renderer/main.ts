@@ -16,6 +16,7 @@ import { editorModule } from '../../features/editor';
 import { fileDropModule } from '../../features/fileDrop';
 import { fileLinksModule } from '../../features/fileLinks';
 import { fontsModule } from '../../features/fonts';
+import { fullTranscriptModule } from '../../features/fullTranscript';
 import { keybindingsModule } from '../../features/keybindings';
 import { markdownModule } from '../../features/markdown';
 import { navigationModule } from '../../features/navigation';
@@ -42,6 +43,7 @@ const modules: ShellModule[] = [
   navigationModule,
   editorModule,
   markdownModule,
+  fullTranscriptModule,
   commentsModule,
   fileLinksModule,
   fileDropModule,

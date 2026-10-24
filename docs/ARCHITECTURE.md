@@ -141,6 +141,14 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **展开思考时保持位置**（`host/webview/scrollKeeper.ts`）：插件一个对话的所有思考块共用一个展开状态，点一个就全部展开 / 收起；上面的思考块一起变长，浏览器的滚动锚定挑的是别的元素，被点的标题就跑了（实测往下跑一个思考块的高度），在底部时插件还会把视图拉到新的底部。点思考块标题（页面提示 `keepInPlace`）之后 1.5 秒内，每次变化都把滚动位置挪回去，让被点的标题停在原处：每帧（rAF）一次，另外一个 ResizeObserver 在布局之后、绘制之前补一次（排在插件自己的观察者之后），所以变化那一帧就补上，看不到跳动。用户自己滚动（滚轮、按键、点滚动条）就停手。只展开被点的那一块不做（ROADMAP ③）。
 - **消息定位点**（`host/webview/messageMarkers.ts`，照 DeepSeek 网页版）：对话的滚动条左边竖着一列短横线，一条用户消息一条，当前那条用焦点色（跟着接口的强调色）；消息多时只画当前附近的 15 条。鼠标移上去弹出列表（每条消息的第一行，右对齐，当前那条焦点色，菜单的颜色，8px 圆角），点一条就平滑滚到那一轮。"当前"是顶端在对话区顶上 48px 以内的最后一轮。轮次和用户消息的选择器来自页面提示（`messageMarkers`），滚动容器找最近的可滚动祖先；页面变了（MutationObserver，不算自己的改动）、滚动、窗口大小变了都按帧重算。设置 `vilaus.conversations.messageMarkers`（默认开，壳在页面加载和设置变化时告诉页面）；命令"转到我的上一条 / 下一条消息"（默认不绑键）。
 
+## 长对话的完整记录（M6.6）
+
+插件的对话页（2.1.302 起）一个对话超过 600 行时，从最早的开始去掉工具调用和思考，只留用户的消息和 Claude 的文字，对话进行中也这样；磁盘上的会话记录是全的，插件打开会话时也把完整的历史发给了页面，是页面自己不画。壳不改插件的上限（要改插件的代码，长对话也会变卡），而是说明一句、给出完整记录。
+
+- **提示**（`host/webview/omittedRows.ts`，页面提示 `omittedRows`，对照插件 2.1.310）：页面脚本旁听插件发给页面的消息：打开会话时的整段历史（`get_session_response`）和对话进行中的每条新消息（`io_message`），记下对话的每一行（Claude 的消息一个内容块一行，用户的消息除工具结果外一条一行；子代理的不算）。页面上 Claude 的每条消息都带着 uuid（`data-bookmark-uuid`），所以历史里有、页面上没有的就是被省略的。超过 600 行、页面最后显示的那条工具调用 / 思考之前缺了至少 3 条工具调用或思考，就在第一轮上面加一行小字"较早的工具调用和思考没有显示（Claude Code 插件只显示最近 600 行）· 查看完整记录"。只数"最后显示的那条之前"的：回退（rewind）时页面去掉的是对话的末尾，不算；页面一条都对不上时是在里面开了别的对话，也不算。插件本来就不单独显示的工具（连着的 Read 合成一行，ToolSearch 不显示）不算。页面变化时（MutationObserver）最多每 500 毫秒查一次。
+- **完整记录**（`features/fullTranscript`，命令"查看完整记录"：命令面板、对话页的右键菜单、上面那行的链接）：主进程（`sessions.fullTranscript`，没给会话 id 就是窗口最前面的对话）让会话 worker 把会话记录转成 Markdown（`host/main/transcriptMarkdown.ts`，纯函数），写进数据目录的 `transcripts\<会话 id>\<标题>.md`（标签页显示文件名；每次重新生成，换了标题就删旧的；别的会话的文件夹一周没动就删掉），再像普通 Markdown 文件一样经 exthost 打开（`documents.show`），内容面板里是预览。8 MB 的记录约 50 毫秒转完、生成 56 万字，打开约 1 秒。
+- **转换**：沿 `parentUuid` 从最新的消息往回走到第一条（回退后留在文件里的旧分支不要），压缩边界的 `parentUuid` 是空的，接着走它的 `logicalParentUuid`，所以压缩前的内容也在；链断得太多（走到的不到一半）就按文件顺序。每轮用户的消息是二级标题、Claude 的回复三级标题，带时间（第一条和换日子时带日期）；思考、工具的输入和结果、子代理都折叠（`<details>`）。工具调用一行写工具名和主要参数（命令、文件、搜索词等），Edit 的输入是 diff、Write 是内容、TodoWrite 是清单、ExitPlanMode 的计划展开显示。工具的输入和结果超过 40 行只留前 40 行（每行最多 400 字），写明还有多少行。子代理（`<会话 id>/subagents/agent-*.jsonl`，`.meta.json` 的 `toolUseId` 对上调用）放在调用它的地方、结果前面。用户消息里 CLI 和编辑器加的上下文（提醒、打开的文件）不要，斜杠命令显示成命令。说的话照 Markdown 显示，但里面的 HTML 标签（代码以外的 `<`）转成文字，免得打乱折叠。
+
 ## 拖文件进窗口（M6.5）
 
 从资源管理器把文件拖进窗口，松手的地方决定做什么（`features/fileDrop`）：
@@ -357,6 +365,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 | `logs\<启动时间>\` | 本次启动的日志，保留最近 10 次：`main.log`，每个窗口一个 `window<N>\`（exthost.log、shim-unimplemented.log、output\） | main / extension host |
 | `providers.json` | API 接口（密钥用 safeStorage 加密） | main |
 | `api.json` | 本地接口的地址和令牌（开过本地接口才有；管理员实例的在 `admin\` 下） | main |
+| `transcripts\` | 会话的完整记录（Markdown，"查看完整记录"生成，一周没动的删掉；管理员实例的在 `admin\` 下） | main（会话 worker） |
 | `extensions\` | 自己装的 Claude Code 插件（每个版本一个目录）和 `state.json`（当前、上一个、待切换的版本） | main |
 | `chromium\` | Chromium 自己的缓存等 | Electron |
 | `admin\` | 管理员实例自己的 state、logs、chromium、插件存储（结构同上） | 管理员实例 |

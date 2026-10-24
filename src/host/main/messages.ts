@@ -11,6 +11,10 @@ export const t = defineMessages('main', {
   needsInput: 'Needs input · {0}',
   /** The button by text selected in a conversation (like the one by a selection in the editor). */
   comment: 'Comment',
+  /** Above a long conversation whose earlier rows the page does not show ({0}: how many it shows). */
+  omittedRows: 'Earlier tool calls and thinking are not shown (the Claude Code extension shows the last {0} rows)',
+  /** The link after it. */
+  fullTranscript: 'View Full Transcript',
   /** The session list's usage block, in place of the extension's "Account & usage" ({0}: the API provider). */
   usageTitle: 'Usage · {0}',
   usageTooltip:
@@ -43,6 +47,27 @@ export const t = defineMessages('main', {
   providerNoticeIgnore: 'Ignore',
   /** The session list's toggle ({0}: the window's provider). */
   providerFilter: 'Only the conversations of {0}',
+  /** A session's full transcript (Markdown): who said it, and the folds of what Claude did. */
+  transcriptYou: 'You',
+  transcriptClaude: 'Claude',
+  transcriptThinking: 'Thinking',
+  /** A tool call's input. */
+  transcriptInput: 'Input',
+  /** A tool call's output ({0}: how long, "12 lines"). */
+  transcriptResult: 'Result · {0}',
+  transcriptError: 'Error · {0}',
+  /** A tool call that got no output (interrupted, or the conversation ended there). */
+  transcriptNoResult: 'No result',
+  transcriptOneLine: '1 line',
+  transcriptLines: '{0} lines',
+  /** Under output cut short. */
+  transcriptMoreLines: '{0} more lines',
+  transcriptImage: 'Image',
+  transcriptSubagent: 'Subagent',
+  transcriptCompacted: 'Conversation compacted',
+  /** The summary a compacted conversation went on from. */
+  transcriptSummary: 'Summary',
+  transcriptPlan: 'Plan',
   /** File Explorer's context menu, on a folder, a folder's background or a drive. */
   explorerOpen: 'Open with Vilausity',
   explorerOpenAsAdministrator: 'Open with Vilausity (Administrator)',

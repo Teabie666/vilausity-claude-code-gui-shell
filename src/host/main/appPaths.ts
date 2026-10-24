@@ -34,6 +34,8 @@ export interface AppPaths {
   readonly usageLedgerFile: string;
   /** The Claude Code extension as vilaus installs it (from Open VSX or a .vsix). */
   readonly extensionsDir: string;
+  /** Sessions' full transcripts as Markdown, for the content pane to show (fullTranscripts.ts). */
+  readonly transcriptsDir: string;
   /** The app icon drawn in other colors (logoIcons.ts): windows' icons and providers' shortcuts point here. */
   readonly iconsDir: string;
   /** Chromium's own profile data (cache, local storage), kept apart from ours. */
@@ -77,6 +79,7 @@ export function createAppPaths(root: string, startedAt = new Date(), elevated = 
     usageLedgerFile: path.join(root, 'usage-ledger.jsonl'),
     extensionsDir: path.join(root, 'extensions'),
     iconsDir: path.join(root, 'icons'),
+    transcriptsDir: path.join(instanceRoot, 'transcripts'),
     chromium: path.join(instanceRoot, 'chromium'),
     otherChromium: elevated ? path.join(root, 'chromium') : path.join(root, ADMIN_FOLDER, 'chromium'),
     logsRoot,

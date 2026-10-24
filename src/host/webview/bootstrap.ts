@@ -24,6 +24,7 @@ import { DEFAULT_WEBVIEW_STYLES } from './defaultStyles';
 import { FileLinks } from './fileLinks';
 import { InPageFinder } from './find';
 import { MessageMarkers } from './messageMarkers';
+import { OmittedRows } from './omittedRows';
 import { submitPrompt } from './promptSubmit';
 import { ProviderNotice } from './providerNotice';
 import { filterButtonOnly, SessionProviderMarks } from './sessionProviders';
@@ -200,6 +201,18 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
       markers = new MessageMarkers(markerHints);
       markers.setEnabled(markersEnabled);
     });
+  }
+
+  // A long conversation says when the page leaves out its earlier rows; the history may come before the body.
+  const omittedHints = data.hints?.omittedRows;
+  if (omittedHints && labels) {
+    const omitted = new OmittedRows(omittedHints, labels, () => post({ kind: 'fullTranscript' }));
+    window.addEventListener('message', (event) => {
+      if (event.source === shell) {
+        omitted.observe(event.data);
+      }
+    });
+    onDomReady(() => omitted.start());
   }
 
   // A conversation says when it last ran under another provider than the window's.

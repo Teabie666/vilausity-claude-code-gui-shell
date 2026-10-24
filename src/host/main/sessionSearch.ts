@@ -14,6 +14,7 @@ import type { ILogger } from '../../platform/log';
 import type { SessionSearchRequest, SessionSearchResult } from '../../platform/protocol';
 import { readAppended, type AppendedState } from '../node/appendedFile';
 import { normalizeForCompare } from '../node/paths';
+import type { FullTranscriptRequest } from './fullTranscripts';
 import { indexSession, searchSessions, TranscriptReader, type IndexedSession } from './sessionTranscripts';
 import type { UsageRequest, UsageResults } from './sessionUsage';
 
@@ -95,7 +96,7 @@ export class SessionIndex {
 }
 
 /** A name given to a session from outside its CLI process: `<session dir>/custom-title.json`. */
-async function sideTitle(sessionDir: string): Promise<string | undefined> {
+export async function sideTitle(sessionDir: string): Promise<string | undefined> {
   try {
     const parsed: unknown = JSON.parse(await readFile(path.join(sessionDir, 'custom-title.json'), 'utf8'));
     const title = typeof parsed === 'object' && parsed !== null ? (parsed as { customTitle?: unknown }).customTitle : undefined;
@@ -115,7 +116,7 @@ export function claudeProjectsDir(env: NodeJS.ProcessEnv, home: string): string 
 
 /**
  * Main's side of the sessions worker (sessionSearchWorker.ts), started on the first question:
- * searches, and the usage of API providers (sessionUsage.ts).
+ * searches, the usage of API providers (sessionUsage.ts), and full transcripts (fullTranscripts.ts).
  */
 export class SessionSearch implements IDisposable {
   private worker: Worker | undefined;
@@ -140,12 +141,17 @@ export class SessionSearch implements IDisposable {
     return (await this.ask('usage', request)) as UsageResults[K];
   }
 
+  /** Writes a session's full transcript as Markdown; its path, or undefined when the session is not found. */
+  async fullTranscript(request: FullTranscriptRequest): Promise<string | undefined> {
+    return ((await this.ask('transcript', request)) as string | null | undefined) ?? undefined;
+  }
+
   dispose(): void {
     void this.worker?.terminate();
     this.worker = undefined;
   }
 
-  private ask(kind: 'search' | 'usage', request: unknown): Promise<unknown> {
+  private ask(kind: 'search' | 'usage' | 'transcript', request: unknown): Promise<unknown> {
     const worker = (this.worker ??= this.start());
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {

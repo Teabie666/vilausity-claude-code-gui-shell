@@ -75,6 +75,8 @@ export class WebviewDocumentStore {
               resetsAt: t('resetsAt'),
               needsInput: t('needsInput'),
               comment: t('comment'),
+              omittedRows: t('omittedRows'),
+              fullTranscript: t('fullTranscript'),
               locale: htmlLang(getUiLanguage()),
             }
           : undefined,
