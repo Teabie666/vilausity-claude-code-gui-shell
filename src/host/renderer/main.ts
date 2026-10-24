@@ -7,6 +7,7 @@ import { createRendererLogger } from '../../core/log';
 import { t } from '../../core/messages';
 import type { ShellModule } from '../../core/module';
 import { startWorkbench } from '../../core/workbench';
+import { aboutModule } from '../../features/about';
 import { commandPaletteModule } from '../../features/commandPalette';
 import { commentsModule } from '../../features/comments';
 import { contentPaneModule } from '../../features/contentPane';
@@ -58,6 +59,7 @@ const modules: ShellModule[] = [
   workspaceModule,
   providersModule,
   extensionUpdatesModule,
+  aboutModule,
   explorerMenuModule,
   localApiModule,
   setupModule,

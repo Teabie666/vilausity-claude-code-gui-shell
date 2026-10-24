@@ -753,6 +753,8 @@ export interface RendererInitData {
   readonly theme: ThemeData;
   readonly workspaceFolders: readonly string[];
   readonly appVersion: string;
+  /** Electron's, Chromium's and Node's versions, for the About section. */
+  readonly runtimeVersions: { readonly electron: string; readonly chromium: string; readonly node: string };
   /** The display language for this run; a change takes a restart. */
   readonly language: UiLanguage;
   readonly providers: ProvidersState;
@@ -761,6 +763,17 @@ export interface RendererInitData {
   /** The user's home folder: as a workspace, it stands for the whole computer. */
   readonly homeFolder: string;
 }
+
+/** The latest release on GitHub, as the About section shows it (pre-releases count). */
+export interface LatestReleaseDto {
+  /** Without the tag's `v`. */
+  readonly version: string;
+  readonly url: string;
+  readonly publishedAt?: string;
+}
+
+/** The latest release, or that GitHub could not be asked (Retry asks again). */
+export type LatestReleaseResult = { readonly ok: true; readonly release: LatestReleaseDto } | { readonly ok: false };
 
 /** What the extension updater is doing. */
 export type ExtensionActivity =
@@ -1044,6 +1057,8 @@ export type MainApiForRenderer = {
   'app.quit': (p: void) => void;
   /** Notices to show once; the first window to ask gets them. */
   'app.startupNotices': (p: void) => StartupNotices;
+  /** The latest release on GitHub; `force` skips the hour-long cache (the About section's Retry). */
+  'app.latestRelease': (p: { force?: boolean }) => LatestReleaseResult;
   'os.openExternal': (p: { url: string }) => boolean;
   /** A system notification; also flashes the taskbar button. Only shown while unfocused. */
   'os.notify': (p: { title: string; body: string }) => void;

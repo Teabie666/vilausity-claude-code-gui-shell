@@ -312,6 +312,11 @@ export class WindowContext extends Disposable {
       theme: this.theme,
       workspaceFolders: this.folders,
       appVersion: app.getVersion(),
+      runtimeVersions: {
+        electron: process.versions.electron ?? '',
+        chromium: process.versions.chrome ?? '',
+        node: process.versions.node,
+      },
       language: this.host.language,
       providers: this.host.providersState(this.currentProvider),
       elevated: this.host.env.paths.elevated,

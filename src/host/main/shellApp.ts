@@ -40,6 +40,7 @@ import {
   type UsageTotalDto,
   type UsageViewDto,
 } from '../../platform/protocol';
+import { RELEASES_API_URL } from '../../platform/about';
 import { ACCENT_COLOR_SETTING, ACCENT_SETTING, ACCENT_SOURCES, logoColor, parseColor, withAccent } from '../../platform/accent';
 import { KEEP_SESSIONS_DEFAULT, KEEP_SESSIONS_SETTING } from '../../platform/defaults';
 import { LOGO_COLOR } from '../../platform/logoMark';
@@ -71,6 +72,7 @@ import { ExtensionUpdater, type UpdateSettings } from './extensionUpdater';
 import { findGit } from './gitLocator';
 import { t } from './messages';
 import { ProviderStore, type SecretCipher } from './providerStore';
+import { ReleaseChecker } from './releaseChecker';
 import { deleteSession, waitForSessionEnd } from './sessionFiles';
 import { applyRetention, KEEP_FOREVER_DAYS } from './claudeRetention';
 import { SessionTagWriter } from './sessionProviders';
@@ -190,6 +192,8 @@ export class ShellApp extends Disposable implements WindowHost {
   private cachedMachineId: string | undefined;
   /** What programs on this computer can ask (localApi.ts); serves while the setting is on. */
   private readonly localApi: LocalApi;
+  /** GitHub's latest release, for the About section; shared by all windows. */
+  private readonly releaseChecker: ReleaseChecker;
   /** The windows changed: the API's event stream hears of them shortly (several changes at once). */
   private apiWindowsTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -247,6 +251,12 @@ export class ShellApp extends Disposable implements WindowHost {
       () => this.extensionTranslations(),
       readFontFaces(path.join(env.appDir, 'renderer', 'fonts', 'fonts.css'), this.logger),
     );
+    this.releaseChecker = new ReleaseChecker({
+      // The environment variable points UI tests at a local stand-in instead of GitHub.
+      url: process.env.VILAUS_RELEASES_API_URL || RELEASES_API_URL,
+      fetch: (url, init) => net.fetch(url, init),
+      logger: this.logger.child('about'),
+    });
     this.localApi = this.register(
       new LocalApi({
         discoveryFile: path.join(env.paths.instanceRoot, API_DISCOVERY_FILE),
@@ -1078,6 +1088,7 @@ export class ShellApp extends Disposable implements WindowHost {
   private registerRendererHandlers(): void {
     const handlers: RendererHandlers = {
       'app.getInitData': (_params, window) => window.rendererInitData(),
+      'app.latestRelease': ({ force }) => this.releaseChecker.latest(force === true),
       'app.listThemes': () => listThemeSummaries(this.themesDir),
       'app.setTheme': async ({ id }) => {
         const theme = withFontVariables(loadTheme(this.themesDir, id, this.logger), this.settings.all);

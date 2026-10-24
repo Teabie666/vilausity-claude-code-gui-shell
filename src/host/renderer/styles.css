@@ -1100,6 +1100,59 @@ body.resizing {
   color: var(--vscode-descriptionForeground);
 }
 
+/* The About section (features/about): versions, links and the latest release. */
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.about-versions {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 16px;
+  row-gap: 2px;
+  line-height: 22px;
+  user-select: text;
+}
+
+.about-label {
+  color: var(--vscode-descriptionForeground);
+}
+
+.about-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.about-release {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.about-newer {
+  font-size: 0.9em;
+  color: var(--vscode-descriptionForeground);
+}
+
+.about-newer[hidden],
+.about-release .button[hidden] {
+  display: none;
+}
+
+.about-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.about-status {
+  color: var(--vscode-descriptionForeground);
+}
+
 .local-api {
   display: flex;
   flex-direction: column;

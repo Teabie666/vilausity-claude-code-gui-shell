@@ -70,6 +70,50 @@ const reg = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'reg.
 const registryTestKey = `HKCU\\Software\\Vilausity-test\\ui-${Date.now()}`;
 env.VILAUS_REGISTRY_ROOT = `${registryTestKey}\\Classes`;
 
+/**
+ * Listens on a free port Chromium agrees to fetch from: it refuses a list of "unsafe" ports
+ * (net::ERR_UNSAFE_PORT), and the system hands those out now and then (3659 once did).
+ */
+const CHROMIUM_UNSAFE_PORTS = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117,
+  119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636,
+  989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080,
+]);
+async function listenOnSafePort(server) {
+  for (;;) {
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    if (!CHROMIUM_UNSAFE_PORTS.has(server.address().port)) return server.address().port;
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+// The About section asks GitHub for the latest release. It gets a local stand-in instead:
+// no test reaches the real GitHub. It fails until the About step says otherwise, so that
+// step can see the failure state and try Retry.
+let releasesRespond = false;
+const releasesRequests = [];
+const releasesServer = createServer((request, response) => {
+  releasesRequests.push(request.url ?? '');
+  if (!releasesRespond) {
+    response.writeHead(503, { 'content-type': 'text/plain' }).end('not yet');
+    return;
+  }
+  response.writeHead(200, { 'content-type': 'application/json' }).end(
+    JSON.stringify([
+      { tag_name: 'v9.9.9', draft: true, published_at: '2026-10-25T00:00:00Z', html_url: 'https://example.invalid/draft' },
+      { tag_name: 'v0.9.3', draft: false, published_at: '2026-09-01T00:00:00Z', html_url: 'https://example.invalid/0.9.3' },
+      {
+        tag_name: 'v0.9.5-beta.1',
+        draft: false,
+        prerelease: true,
+        published_at: '2026-10-23T00:00:00Z',
+        html_url: 'https://example.invalid/0.9.5-beta.1',
+      },
+    ]),
+  );
+});
+env.VILAUS_RELEASES_API_URL = `http://127.0.0.1:${await listenOnSafePort(releasesServer)}/releases`;
+
 const results = [];
 /**
  * A step still going by then hangs: a page whose script never yields does not answer Playwright,
@@ -156,23 +200,6 @@ async function press(shortcut, target = 'main') {
     },
     { keyCode, modifiers, title },
   );
-}
-
-/**
- * Listens on a free port Chromium agrees to fetch from: it refuses a list of "unsafe" ports
- * (net::ERR_UNSAFE_PORT), and the system hands those out now and then (3659 once did).
- */
-const CHROMIUM_UNSAFE_PORTS = new Set([
-  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117,
-  119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636,
-  989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080,
-]);
-async function listenOnSafePort(server) {
-  for (;;) {
-    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-    if (!CHROMIUM_UNSAFE_PORTS.has(server.address().port)) return server.address().port;
-    await new Promise((resolve) => server.close(resolve));
-  }
 }
 
 /** The shell windows' pages (not tabs' own windows). */
@@ -1453,6 +1480,81 @@ await step('settings.json reaches every Monaco option; Default Settings (JSON) l
   }
   if ((await contentTabs().count()) > 0) throw new Error('tabs left open');
   return 'ruler shown; editor.rulers found in the defaults; moved to a window and back';
+});
+
+await step('About shows the versions and the latest release from GitHub (a local stand-in)', async () => {
+  // Main's links and clipboard record instead of opening and copying for real.
+  await app.evaluate(({ shell, clipboard }) => {
+    globalThis.vilausAboutDone = [];
+    globalThis.vilausAboutOpen = shell.openExternal.bind(shell);
+    globalThis.vilausAboutClipboard = clipboard.writeText.bind(clipboard);
+    shell.openExternal = async (url) => {
+      globalThis.vilausAboutDone.push(`open ${url}`);
+    };
+    clipboard.writeText = (text) => globalThis.vilausAboutDone.push(`copy ${text}`);
+  });
+  try {
+    await press('Control+,');
+    const search = page.locator('.settings-dialog .settings-search');
+    await search.fill('about');
+    const widget = page.locator('.settings-dialog .settings-widget[data-widget="about.info"]');
+    await widget.waitFor({ timeout: 10_000 });
+    const value = (name) => widget.locator(`[data-about="${name}"]`);
+    const release = value('release');
+
+    const appVersion = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+    if ((await value('app').innerText()).trim() !== appVersion) {
+      throw new Error(`Vilausity reads "${await value('app').innerText()}", not ${appVersion}`);
+    }
+    const extensionVersion = (await value('extension').innerText()).trim();
+    if (!/^\d+\.\d+\.\d+/.test(extensionVersion)) throw new Error(`the extension version reads "${extensionVersion}"`);
+    for (const name of ['electron', 'chromium', 'node']) {
+      const text = (await value(name).innerText()).trim();
+      if (!/^\d+\.\d+/.test(text)) throw new Error(`${name} reads "${text}"`);
+    }
+
+    // The stand-in said no: the section says so and offers Retry.
+    await waitFor(async () => (await release.getAttribute('data-state')) === 'failed', 10_000, 'the failed latest release');
+    if (!(await release.innerText()).includes('Could not fetch the latest release.')) {
+      throw new Error(`the failure reads "${await release.innerText()}"`);
+    }
+    if (!(await value('retry').isVisible())) throw new Error('Retry is hidden after a failure');
+
+    releasesRespond = true;
+    await value('retry').click();
+    await waitFor(async () => (await release.getAttribute('data-state')) === 'ready', 10_000, 'the latest release after Retry');
+    const ready = await release.innerText();
+    if (!ready.includes('0.9.5-beta.1')) throw new Error(`the latest release reads "${ready}"`);
+    if (!ready.includes('A newer version is available')) throw new Error(`no newer-version note in "${ready}"`);
+
+    await value('repository').click();
+    await value('releases').click();
+    await value('copy').click();
+    await waitFor(
+      async () => (await app.evaluate(() => globalThis.vilausAboutDone?.length ?? 0)) >= 3,
+      5000,
+      'the links and the copied text',
+    );
+    const done = await app.evaluate(() => globalThis.vilausAboutDone);
+    const repository = 'https://github.com/Teabie666/vilausity-claude-code-gui-shell';
+    if (!done.includes(`open ${repository}`)) throw new Error(`GitHub Repository opened ${JSON.stringify(done)}`);
+    if (!done.includes(`open ${repository}/releases`)) throw new Error(`Releases opened ${JSON.stringify(done)}`);
+    const copied = done.find((entry) => entry.startsWith('copy ')) ?? '';
+    for (const expected of [`Vilausity ${appVersion}`, 'Claude Code extension ', 'Electron ', 'Chromium ', 'Node.js ']) {
+      if (!copied.includes(expected)) throw new Error(`the copied text lacks "${expected}": ${copied}`);
+    }
+    if (releasesRequests.length === 0) throw new Error('the local GitHub stand-in was never asked');
+
+    await search.fill('');
+    await page.keyboard.press('Escape');
+    await waitFor(async () => (await page.locator('.settings-dialog').count()) === 0, 5000, 'the settings panel to close');
+    return `${extensionVersion}; ${ready.replace(/\n/g, ' ')}`;
+  } finally {
+    await app.evaluate(({ shell, clipboard }) => {
+      shell.openExternal = globalThis.vilausAboutOpen;
+      clipboard.writeText = globalThis.vilausAboutClipboard;
+    });
+  }
 });
 
 // ---- M4: windows ----------------------------------------------------------------------------
@@ -4339,6 +4441,7 @@ await step('after a restart the update runs; Go Back and Restart returns to the 
 });
 
 await app.close();
+releasesServer.close();
 const failed = results.filter((ok) => !ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed. Artifacts: ${runDir}`);
 // The extension copies the last steps installed (a few hundred MB): never kept.
