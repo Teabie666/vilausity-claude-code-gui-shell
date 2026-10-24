@@ -101,6 +101,8 @@ export const sessionSearchModule: ShellModule = {
       return { label, items: results.map((result) => toItem(result, where === undefined, now)) };
     };
 
+    /** Whether this opening of the search box has been counted as a search. */
+    let searched = false;
     const scope = (): string | undefined => (allFolders || !folder ? undefined : folder);
     /** The latest answer for nothing typed, by where it searched (every folder: ''). */
     const latest = new Map<string, readonly SessionSearchResult[]>();
@@ -116,7 +118,7 @@ export const sessionSearchModule: ShellModule = {
         onDidOpen: () => {
           allFolders = widenNext;
           widenNext = false;
-          void native.call('counters.increment', { name: 'searches' });
+          searched = false;
         },
         initial: (query) => {
           const where = scope();
@@ -125,6 +127,11 @@ export const sessionSearchModule: ShellModule = {
         },
         provide: async (query) => {
           const where = scope();
+          // A search for the statistics: the first thing typed after opening (not the command palette's).
+          if (query && !searched) {
+            searched = true;
+            void native.call('counters.increment', { name: 'searches' });
+          }
           const results = query
             ? await native.call('sessions.search', { query, folder: where, limit: MATCH_ROWS })
             : await searchRecent(where);
