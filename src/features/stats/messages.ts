@@ -50,7 +50,7 @@ export const t = defineMessages('stats', {
   days: '{0} days',
   heatCell: '{0} {1}:00 — {2} messages',
   files: '{0} files',
-  distinct: '{0} distinct',
+  distinct: '({0} distinct)',
   reveal: 'Reveal in File Explorer',
   storageTranscripts: 'Claude Code transcripts',
   storageFileHistory: 'Claude Code file history',

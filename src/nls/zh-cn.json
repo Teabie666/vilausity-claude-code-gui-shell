@@ -718,7 +718,7 @@
   "stats.countedSince": "自 {0} 起统计",
   "stats.currentStreak": "当前连续天数",
   "stats.days": "{0} 天",
-  "stats.distinct": "{0} 个不同的",
+  "stats.distinct": "（{0} 个不同的）",
   "stats.editorTitle": "统计",
   "stats.estimated": "Claude Code 按 API 价格自己折算的数；订阅不会按它扣费",
   "stats.failed": "无法加载统计：{0}",
