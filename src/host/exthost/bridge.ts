@@ -477,15 +477,20 @@ ${QUESTION_TEXT} {
 
 /**
  * The session list (the sidebar) in the shell's look (anthropic.claude-code 2.1.282 class
- * names, the same in 2.1.296; once a newer extension renames them, it just shows its own look
- * again):
+ * names, the same in 2.1.296 and 2.1.310; once a newer extension renames them, it just shows
+ * its own look again):
  * - only the sessions scroll, the account and usage above them stay in place;
  * - "Account" and the address on one line, without the "Email" label;
  * - "New session" as a button;
  * - no Local / Web switch (remote sessions are not used from here);
+ * - a row's rename, archive and delete buttons take no room until the row is hovered or
+ *   focused, so its title shows as much as it has (the extension hides them but keeps their
+ *   width);
  * - the status filter as one drop-down that shows the Active count (see STATUS_FILTER);
  * - the search button as a search box taking the rest of its row (clicking it opens the
- *   page's own search field, as before); "New group" as just its icon, to leave it room.
+ *   page's own search field, as before); when the row runs out of width it shrinks to just
+ *   its icon; "New group" as just its icon, to leave it room. No button is ever clipped: the
+ *   status label (then the count) gives way first.
  */
 const SESSION_LIST_STYLES = `
 .root_djirOA { overflow-y: hidden; }
@@ -494,6 +499,11 @@ const SESSION_LIST_STYLES = `
 .sessionsBody_djirOA { flex: 1 1 auto; min-height: 0; }
 .sessionsBody_djirOA > .root_OOQiHg { flex: 1 1 auto; min-height: 0; }
 .content_OOQiHg.sessionListOnly_OOQiHg { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* A row's time and buttons share a grid cell, so the hidden buttons would still hold their
+   width. Out of the layout until hover or focus, the cell is just the time and the title
+   takes the rest; the buttons then push it back as they appear. */
+.sessionItem_OOQiHg:not(:where(:hover, :focus-visible, :has(:focus-visible), [data-highlighted])) .sessionActions_OOQiHg { display: none; }
 
 .accountUsageBody_djirOA .section_JuUW3A:has(.accountRows_djirOA) { flex-direction: row; align-items: baseline; gap: 8px; }
 .accountRows_djirOA { flex: 1 1 auto; min-width: 0; }
@@ -531,36 +541,53 @@ const SESSION_LIST_STYLES = `
 
 .sessionsBody_djirOA .segmented_OOQiHg { display: none; }
 
+/* The row's controls never shrink past their icons; when the width runs out the search box
+   drops its text first, then the status label and count ellipsize. */
+.searchRow_OOQiHg { container-type: inline-size; }
 .searchRowActions_OOQiHg { flex: 1 1 auto; flex-wrap: nowrap; }
 .activeFilterToggle_OOQiHg { display: none; }
 .statusFilterMenuButton_OOQiHg {
+  flex: 0 1 auto;
+  min-width: 24px;
   height: 24px;
-  gap: 4px;
+  gap: 3px;
   margin-left: 0;
-  padding: 0 4px 0 6px;
+  padding: 0 4px;
   border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
   border-radius: 4px;
+  overflow: hidden;
   white-space: nowrap;
 }
-.statusFilterMenuButton_OOQiHg > .newGroupIcon_OOQiHg { order: 0; }
-.statusFilterMenuButton_OOQiHg[data-vilaus-label]::before { content: attr(data-vilaus-label); order: 1; }
+.statusFilterMenuButton_OOQiHg > .newGroupIcon_OOQiHg { order: 0; flex-shrink: 0; }
+.statusFilterMenuButton_OOQiHg[data-vilaus-label]::before {
+  content: attr(data-vilaus-label);
+  order: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1000;
+}
 .statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]::after {
   content: attr(data-vilaus-needs-input);
   order: 2;
+  min-width: 0;
   padding: 0 5px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 25%, transparent);
   line-height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
 }
 .statusFilterMenuButton_OOQiHg > .statusFilterCaret_OOQiHg { order: 3; }
 
-.searchRowTail_OOQiHg { flex: 1 1 auto; min-width: 0; margin-left: 6px; }
+.searchRowTail_OOQiHg { flex: 1 1 auto; min-width: 52px; margin-left: 6px; }
 .searchRowTail_OOQiHg > .newGroupButton_OOQiHg:not(.searchToggleButton_OOQiHg) { gap: 0; padding: 4px; font-size: 0; }
 .searchToggleButton_OOQiHg,
 .searchToggleButton_OOQiHg:hover,
 .searchToggleButton_OOQiHg:focus {
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 36px;
   justify-content: flex-start;
   gap: 6px;
   height: 24px;
@@ -576,6 +603,55 @@ const SESSION_LIST_STYLES = `
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Narrow rows (the row's width, not the window's): the search box becomes a plain icon
+   button like "New group", and with sessions waiting for the user the status label goes
+   too, leaving its count. Both still click. */
+@container (max-width: 260px) {
+  .searchRow_OOQiHg:has(.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]) .statusFilterMenuButton_OOQiHg::before { display: none; }
+}
+@container (max-width: 370px) {
+  .searchRow_OOQiHg:has(.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]) .searchToggleButton_OOQiHg,
+  .searchRow_OOQiHg:has(.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]) .searchToggleButton_OOQiHg:hover,
+  .searchRow_OOQiHg:has(.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]) .searchToggleButton_OOQiHg:focus {
+    flex: 0 0 auto;
+    width: 24px;
+    min-width: 24px;
+    margin-left: auto;
+    padding: 0;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--app-secondary-foreground);
+    justify-content: center;
+  }
+  .searchRow_OOQiHg:has(.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]) .searchToggleButton_OOQiHg:hover,
+  .searchRow_OOQiHg:has(.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]) .searchToggleButton_OOQiHg:focus {
+    background: var(--app-ghost-button-hover-background);
+    color: var(--app-primary-foreground);
+  }
+  .searchRow_OOQiHg:has(.statusFilterMenuButton_OOQiHg[data-vilaus-needs-input]) .searchToggleButton_OOQiHg::after { display: none; }
+}
+@container (max-width: 230px) {
+  .searchToggleButton_OOQiHg,
+  .searchToggleButton_OOQiHg:hover,
+  .searchToggleButton_OOQiHg:focus {
+    flex: 0 0 auto;
+    width: 24px;
+    min-width: 24px;
+    margin-left: auto;
+    padding: 0;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--app-secondary-foreground);
+    justify-content: center;
+  }
+  .searchToggleButton_OOQiHg:hover,
+  .searchToggleButton_OOQiHg:focus {
+    background: var(--app-ghost-button-hover-background);
+    color: var(--app-primary-foreground);
+  }
+  .searchToggleButton_OOQiHg::after { display: none; }
 }
 `;
 

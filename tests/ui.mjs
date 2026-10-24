@@ -2985,6 +2985,189 @@ await step(
 );
 
 await step(
+  "the session list: a row's buttons stay out of its title until the row is hovered, and a narrow filter row turns the search box into just its icon with no button cut off",
+  async () => {
+    // An instance of its own, whose Claude Code folder holds one session of its workspace, with
+    // a title long enough to see how much room it gets.
+    const own = path.join(runDir, 'list-row');
+    const ownData = path.join(own, 'data');
+    const ownWorkspace = path.join(own, 'workspace');
+    const claudeDir = path.join(own, 'claude');
+    const project = path.join(claudeDir, 'projects', ownWorkspace.replace(/[^a-zA-Z0-9]/g, '-'));
+    const id = '1b2c3d4e-5f60-4711-8a2b-3c4d5e6f7a8b';
+    const title = 'Sort the receipts in Downloads by month and file every statement';
+    mkdirSync(ownData, { recursive: true });
+    mkdirSync(ownWorkspace, { recursive: true });
+    mkdirSync(project, { recursive: true });
+    const at = (secondsAgo) => new Date(Date.now() - secondsAgo * 1000).toISOString();
+    writeFileSync(
+      path.join(project, `${id}.jsonl`),
+      [
+        {
+          type: 'user',
+          uuid: 'u1',
+          parentUuid: null,
+          sessionId: id,
+          timestamp: at(60),
+          cwd: ownWorkspace,
+          message: { role: 'user', content: 'Sort the receipts' },
+        },
+        {
+          type: 'assistant',
+          uuid: 'a1',
+          parentUuid: 'u1',
+          sessionId: id,
+          timestamp: at(50),
+          cwd: ownWorkspace,
+          message: { role: 'assistant', content: [{ type: 'text', text: 'Done.' }] },
+        },
+        { type: 'ai-title', aiTitle: title, sessionId: id },
+      ]
+        .map((line) => JSON.stringify(line))
+        .join('\n'),
+      'utf8',
+    );
+    writeFileSync(
+      path.join(ownData, 'settings.json'),
+      JSON.stringify({
+        'claudeCode.hideOnboarding': true,
+        'claudeCode.disableLoginPrompt': true,
+        'vilaus.language': 'en',
+        'vilaus.extension.autoUpdate': false,
+      }),
+      'utf8',
+    );
+    const other = await electron.launch({
+      executablePath: executable,
+      args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'),
+      cwd: root,
+      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      timeout: 60_000,
+    });
+    try {
+      const otherPage = await other.firstWindow();
+      const rowSelector = `[id="sessions-list-row-${id}"]`;
+      const list = await waitFor(
+        async () => {
+          for (const frame of otherPage.frames()) {
+            if (
+              frame.url().startsWith('ccw://wv') &&
+              (await frame
+                .locator(rowSelector)
+                .count()
+                .catch(() => 0)) === 1
+            )
+              return frame;
+          }
+        },
+        30_000,
+        'the session in the list',
+      );
+      const row = list.locator(rowSelector);
+      await row.waitFor({ timeout: 5000 });
+      const parts = () =>
+        row.evaluate((row) => {
+          const box = (selector) => {
+            const element = row.querySelector(selector);
+            const rect = element.getBoundingClientRect();
+            return { left: rect.left, right: rect.right, width: rect.width, display: getComputedStyle(element).display };
+          };
+          return { name: box('.sessionName_OOQiHg'), time: box('.sessionTime_OOQiHg'), actions: box('.sessionActions_OOQiHg') };
+        });
+
+      // Not hovered: the actions are out of the layout, so the title reaches the time.
+      await otherPage.mouse.move(2, 2);
+      await otherPage.waitForTimeout(200);
+      const away = await parts();
+      if (away.actions.display !== 'none' || away.actions.width > 0)
+        throw new Error(`away from the row its actions take ${away.actions.width}px (${away.actions.display})`);
+      if (away.time.left < away.name.right) throw new Error('the title runs under the time');
+      if (away.time.left - away.name.right > 12)
+        throw new Error(`after the title ${Math.round(away.time.left - away.name.right)}px of room before the time`);
+      // Hovered: the three buttons (rename, archive, delete) show and the title makes room.
+      await row.hover();
+      await otherPage.waitForTimeout(200);
+      const hovered = await parts();
+      if (hovered.actions.display !== 'flex' || hovered.actions.width < 60) throw new Error('the actions did not appear on hover');
+      if (hovered.name.width > away.name.width - 40)
+        throw new Error(`the title kept its width on hover (${Math.round(hovered.name.width)} of ${Math.round(away.name.width)})`);
+      const buttons = row.locator('.actionButton_OOQiHg');
+      if ((await buttons.count()) !== 3) throw new Error(`${await buttons.count()} action buttons`);
+      for (let i = 0; i < 3; i++) {
+        if (!(await buttons.nth(i).isVisible())) throw new Error(`action button ${i + 1} is hidden on hover`);
+      }
+
+      // At the usual width the search box is a box, with the page's own label in it.
+      await otherPage.mouse.move(2, 2);
+      await otherPage.waitForTimeout(150);
+      const wide = await list.evaluate(() => {
+        const toggle = document.querySelector('.searchToggleButton_OOQiHg');
+        return { width: toggle.getBoundingClientRect().width, text: getComputedStyle(toggle, '::after').display };
+      });
+      if (wide.width < 60 || wide.text !== 'block')
+        throw new Error(`the search box is not a box at the usual width (${Math.round(wide.width)}px, text ${wide.text})`);
+
+      // A narrow sidebar with sessions waiting for the user: every control stays inside the
+      // row (and the sidebar), and the search box is just its icon, still opening the search.
+      await list.evaluate(() => {
+        document.querySelector('.statusFilterMenuButton_OOQiHg').setAttribute('data-vilaus-needs-input', 'Needs input · 2');
+      });
+      const sash = await otherPage.locator('#sidebar-sash').boundingBox();
+      await otherPage.mouse.move(sash.x + sash.width / 2, sash.y + sash.height / 2);
+      await otherPage.mouse.down();
+      await otherPage.mouse.move(sash.x + sash.width / 2 - 160, sash.y + sash.height / 2, { steps: 4 });
+      await otherPage.mouse.up();
+      await otherPage.waitForTimeout(300);
+      const sidebar = await otherPage.locator('#sidebar').boundingBox();
+      if (sidebar.width > 190) throw new Error(`the sidebar did not narrow (${Math.round(sidebar.width)}px)`);
+      // The page may have drawn its filter button again (a new element) meanwhile.
+      await list.evaluate(() => {
+        document.querySelector('.statusFilterMenuButton_OOQiHg').setAttribute('data-vilaus-needs-input', 'Needs input · 2');
+      });
+      const filters = await list.evaluate(() => {
+        const searchRow = document.querySelector('.searchRow_OOQiHg');
+        const rowRect = searchRow.getBoundingClientRect();
+        const control = (label, element) => {
+          const rect = element.getBoundingClientRect();
+          return { label, left: rect.left, right: rect.right, width: rect.width, display: getComputedStyle(element).display };
+        };
+        const toggle = searchRow.querySelector('.searchToggleButton_OOQiHg');
+        return {
+          row: { left: rowRect.left, right: rowRect.right, width: rowRect.width },
+          viewport: innerWidth,
+          controls: [
+            control('the status filter', searchRow.querySelector('.statusFilterMenuButton_OOQiHg')),
+            control('the provider toggle', searchRow.querySelector('.vilaus-provider-filter')),
+            control('the search box', toggle),
+            control('New group', [...searchRow.querySelectorAll('.newGroupButton_OOQiHg')].at(-1)),
+          ],
+          searchText: getComputedStyle(toggle, '::after').display,
+          needsInput: getComputedStyle(searchRow.querySelector('.statusFilterMenuButton_OOQiHg'), '::after').content,
+        };
+      });
+      if (!filters.needsInput.includes('Needs input')) throw new Error(`no count of sessions waiting: ${filters.needsInput}`);
+      if (filters.row.right > filters.viewport) throw new Error('the filter row runs past the sidebar');
+      for (const control of filters.controls) {
+        if (control.display === 'none' || control.width < 16) throw new Error(`${control.label} is not shown`);
+        if (control.left < filters.row.left - 0.5 || control.right > filters.row.right + 0.5)
+          throw new Error(
+            `${control.label} is cut off: ${Math.round(control.left - filters.row.left)}..${Math.round(control.right - filters.row.left)} of ${Math.round(filters.row.width)}px`,
+          );
+      }
+      if (filters.controls[2].width > 26 || filters.searchText !== 'none')
+        throw new Error(
+          `the search box did not shrink to its icon (${Math.round(filters.controls[2].width)}px, text ${filters.searchText})`,
+        );
+      await list.locator('.searchToggleButton_OOQiHg').click();
+      await list.locator('.searchInput_OOQiHg').waitFor({ timeout: 5000 });
+      return `sidebar ${Math.round(sidebar.width)}px; the title ${Math.round(away.name.width)}px away from the row and ${Math.round(hovered.name.width)}px hovered; the filter row fits its ${Math.round(filters.row.width)}px`;
+    } finally {
+      await other.close();
+    }
+  },
+);
+
+await step(
   'a session clicked in the list opens as a preview, its row left in place: another click replaces it, leaving or Escape closes it, a double click keeps it; back and forward (keys, mouse) go between the tabs used; Shift+Escape rewinds',
   async () => {
     // An instance of its own, whose Claude Code folder holds three sessions of its workspace.
