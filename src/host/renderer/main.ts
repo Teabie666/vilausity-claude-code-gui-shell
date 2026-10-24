@@ -30,15 +30,18 @@ import { extensionUpdatesModule } from '../../features/extensionUpdates';
 import { languageModule } from '../../features/language';
 import { sessionManagementModule } from '../../features/sessionManagement';
 import { sessionSearchModule } from '../../features/sessionSearch';
+import { statsModule } from '../../features/stats';
 import { sessionsModule } from '../../features/sessions';
 import { settingsModule } from '../../features/settings';
 import { setupModule } from '../../features/setup';
 import { themesModule } from '../../features/themes';
 import { windowModule } from '../../features/window';
+import { windowCloseModule } from '../../features/windowClose';
 import { workspaceModule } from '../../features/workspace';
 
 const modules: ShellModule[] = [
   windowModule,
+  windowCloseModule,
   conversationsModule,
   contentPaneModule,
   navigationModule,
@@ -54,6 +57,7 @@ const modules: ShellModule[] = [
   sessionsModule,
   sessionManagementModule,
   sessionSearchModule,
+  statsModule,
   themesModule,
   fontsModule,
   languageModule,

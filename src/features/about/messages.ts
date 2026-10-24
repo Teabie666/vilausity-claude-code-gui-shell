@@ -12,6 +12,7 @@ export const t = defineMessages('about', {
   upToDate: 'Up to date',
   repository: 'GitHub Repository',
   releases: 'Releases',
+  statistics: 'Statistics',
   copy: 'Copy Version Information',
   copied: 'Copied.',
 });

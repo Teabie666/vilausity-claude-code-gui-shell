@@ -105,6 +105,9 @@ export const fileDropModule: ShellModule = {
 
     const drop = (action: DropAction, files: readonly File[]): void => {
       const paths = files.map((file) => native.pathForFile(file)).filter((path) => path !== '');
+      if (paths.length > 0) {
+        void native.call('counters.increment', { name: 'filesDropped', by: paths.length });
+      }
       const done = action === 'mention' ? mention(paths) : open(paths);
       done.catch((error: unknown) => logger.error(`dropping ${paths.join(', ')} (${action}) failed`, error));
     };

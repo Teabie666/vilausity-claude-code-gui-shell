@@ -54,7 +54,14 @@ import {
   SUBSCRIPTION_PROVIDER,
   type ProviderConfig,
 } from '../../platform/providers';
-import { attributedProvider, CURRENT_PROVIDER_ONLY_SETTING, totalCost, type AttributedProvider } from '../../platform/usage';
+import {
+  attributedProvider,
+  CURRENT_PROVIDER_ONLY_SETTING,
+  totalCost,
+  type AttributedProvider,
+  type ModelUsage,
+} from '../../platform/usage';
+import type { ProviderCost, StatsDto } from '../../platform/stats';
 import { API_ALLOW_SEND_SETTING, API_DISCOVERY_FILE, API_DOCS_URL, API_ENABLED_SETTING, API_PORT_SETTING } from '../../platform/localApi';
 import { APP_ORIGIN } from '../../platform/webviewUrls';
 import { extensionTranslations } from '../../nls/extensionPacks';
@@ -62,7 +69,7 @@ import { languagePack } from '../../nls/packs';
 import { readOthersJsonFile } from '../node/jsonFile';
 import { isSubPath } from '../node/paths';
 import type { AppPaths } from './appPaths';
-import { placeInWorkspace } from './attachments';
+import { attachmentsFolder, DEFAULT_ATTACHMENTS_FOLDER, placeInWorkspace } from './attachments';
 import { installCcwProtocol } from './ccwProtocol';
 import type { CliArgs } from './cli';
 import { locateClaudeExtension, type LocatedExtension } from './extensionLocator';
@@ -81,6 +88,8 @@ import { scopeValue, usageTotal, usageView } from './usageView';
 import { claudeProjectsDir, SessionSearch } from './sessionSearch';
 import type { TranscriptLabels } from './transcriptMarkdown';
 import { KeybindingsStore } from './keybindingsStore';
+import { ShellCounters } from './shellCounters';
+import { storageItems, type StorageTarget } from './statsStorage';
 import { LocalApi } from './localApi';
 import {
   builtInOperations,
@@ -99,11 +108,28 @@ import { DEFAULT_THEME_ID, FONT_SETTING_KEYS, listThemeSummaries, loadTheme, rea
 import { WebviewDocumentStore } from './webviewDocuments';
 import { WindowContext, type WindowHost } from './windowContext';
 import { SharedRecentFolders } from './recentFolders';
+import { UnimplementedStore } from './unimplementedStore';
+import { shouldWarnUnimplemented } from '../../platform/extensionUnimplemented';
 import { cascade, foldersToOpen, parsePlacement, sameFolder, WindowHistory, type WindowPlacement } from './windowHistory';
 
 /** The VS Code version we report to the extension. It gates features on this number. */
 export const VSCODE_COMPAT_VERSION = '1.121.0';
 
+/** Where files from outside the workspace are copied (features/fileDrop). */
+const ATTACHMENTS_FOLDER_SETTING = 'vilaus.conversations.attachmentsFolder';
+/** Chromium's cache folders in its profile: the statistics page's "cache". */
+const CACHE_DIRECTORIES = [
+  'Cache',
+  'Code Cache',
+  'GPUCache',
+  'DawnCache',
+  'DawnGraphiteCache',
+  'DawnWebGPUCache',
+  'GrShaderCache',
+  'ShaderCache',
+  'GPUPersistentCache',
+  'Shared Dictionary',
+] as const;
 const THEME_SETTING = 'vilaus.theme';
 /** Settings that change the theme data (colors or font variables). */
 const THEME_SETTING_KEYS = new Set<string>([THEME_SETTING, ACCENT_SETTING, ACCENT_COLOR_SETTING, ...FONT_SETTING_KEYS]);
@@ -189,6 +215,9 @@ export class ShellApp extends Disposable implements WindowHost {
   readonly providers: ProviderStore;
   /** The extension copies vilaus installs (Open VSX, .vsix files). */
   readonly extensionStore: ExtensionStore;
+  private readonly unimplementedStore: UnimplementedStore;
+  /** Versions warned about this run of using APIs the shim lacks: once each. */
+  private readonly unimplementedNotified = new Set<string>();
   private updater: ExtensionUpdater | undefined;
   private readonly shellState: StateStore;
   private readonly history: WindowHistory;
@@ -212,6 +241,8 @@ export class ShellApp extends Disposable implements WindowHost {
   private readonly windows: WindowContext[] = [];
   private nextWindowId = 1;
   private quitting = false;
+  /** Windows is shutting down or logging off: the windows saved their files, so nothing asks again. */
+  private endingSession = false;
   private cachedMachineId: string | undefined;
   /** What programs on this computer can ask (localApi.ts); serves while the setting is on. */
   private readonly localApi: LocalApi;
@@ -219,6 +250,8 @@ export class ShellApp extends Disposable implements WindowHost {
   private readonly releaseChecker: ReleaseChecker;
   /** The windows changed: the API's event stream hears of them shortly (several changes at once). */
   private apiWindowsTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Vilausity's own counts, shared with the other instance (shellCounters.ts). */
+  private readonly counters: ShellCounters;
 
   constructor(readonly env: ShellEnvironment) {
     super();
@@ -230,6 +263,7 @@ export class ShellApp extends Disposable implements WindowHost {
     this.logger.info(`display language: ${this.language}`);
     this.globalState = new StateStore(env.paths.globalStateFile, this.logger.child('state'));
     this.shellState = new StateStore(env.paths.shellStateFile, this.logger.child('state'));
+    this.counters = new ShellCounters(env.paths.countersFile, this.logger.child('counters'));
     this.history = new WindowHistory(
       this.shellState,
       new SharedRecentFolders(env.paths.recentFoldersFile, this.logger.child('recentFolders')),
@@ -261,6 +295,7 @@ export class ShellApp extends Disposable implements WindowHost {
       targetPlatformOf(process.platform, process.arch),
       this.logger.child('extensions'),
     );
+    this.unimplementedStore = new UnimplementedStore(env.paths.unimplementedFile, this.logger.child('unimplemented'));
     this.logoIcons = new LogoIcons(env.paths.iconsDir, this.logger.child('icons'));
     this.themesDir = path.join(env.appDir, 'themes');
     const themeId = env.args.theme ?? stringSetting(this.settings.all[THEME_SETTING]) ?? DEFAULT_THEME_ID;
@@ -300,6 +335,7 @@ export class ShellApp extends Disposable implements WindowHost {
           allowSend: !env.paths.elevated && this.settings.all[API_ALLOW_SEND_SETTING] === true,
           docs: API_DOCS_URL,
         }),
+        onCall: () => this.counters.increment('localApiCalls'),
         logger: this.logger.child('api'),
       }),
     );
@@ -319,6 +355,7 @@ export class ShellApp extends Disposable implements WindowHost {
   }
 
   async start(): Promise<void> {
+    this.counters.increment('launches');
     const { extensionDir, ignoreOtherEditors } = this.env.args;
     // A version installed last run becomes current now, before any extension host loads it.
     this.located = locateClaudeExtension(extensionDir, this.extensionStore.prepare(), !ignoreOtherEditors);
@@ -378,7 +415,7 @@ export class ShellApp extends Disposable implements WindowHost {
     // A quit from elsewhere (app.quit()) would close the windows one by one, and only the
     // last would be restored; quit the way the Exit command does instead.
     const onBeforeQuit = (event: Electron.Event): void => {
-      if (!this.quitting) {
+      if (!this.quitting && !this.endingSession) {
         event.preventDefault();
         void this.quit();
       }
@@ -429,11 +466,27 @@ export class ShellApp extends Disposable implements WindowHost {
     this.windows.push(window);
     window.browserWindow.on('focus', () => this.markActive(window));
     this.history.addRecent(folder);
+    this.counters.folderOpened(folder);
     this.rememberOpenWindows();
     this.apiWindowsChanged();
     this.logger.info(`window ${window.id}: ${folder}`);
     await window.load();
     return window;
+  }
+
+  /**
+   * Windows is shutting down or logging off: every window saves its files without asking, and
+   * the quit that follows does not ask either (a question would hold the shutdown up).
+   */
+  sessionEnding(): void {
+    if (this.endingSession) {
+      return;
+    }
+    this.endingSession = true;
+    this.logger.info('the Windows session is ending');
+    for (const window of this.windows) {
+      void window.confirmClose('sessionEnd');
+    }
   }
 
   requestClose(window: WindowContext): void {
@@ -454,13 +507,22 @@ export class ShellApp extends Disposable implements WindowHost {
       return;
     }
     this.quitting = true;
+    // Each window asks about its unsaved files in turn; a Cancel in any keeps them all open.
+    if (!this.endingSession) {
+      for (const window of [...this.windows]) {
+        if (!(await window.confirmClose('quit'))) {
+          this.quitting = false;
+          return;
+        }
+      }
+    }
     this.logger.info('shutting down');
     for (const window of this.windows) {
       this.history.rememberPlacement(window.folder, window.window.placement);
     }
     this.rememberOpenWindows();
     await Promise.all(this.windows.map((window) => window.shutdown()));
-    await Promise.all([this.globalState.flush(), this.shellState.flush()]);
+    await Promise.all([this.globalState.flush(), this.shellState.flush(), this.counters.flush()]);
     for (const window of this.windows.splice(0)) {
       window.destroy();
     }
@@ -478,6 +540,7 @@ export class ShellApp extends Disposable implements WindowHost {
   flushSync(): void {
     this.globalState.flushSync();
     this.shellState.flushSync();
+    this.counters.flushSync();
     for (const window of this.windows) {
       window.flushSync();
     }
@@ -494,7 +557,24 @@ export class ShellApp extends Disposable implements WindowHost {
   extensionActivated(version: string): void {
     if (this.located?.kind === 'managed' && this.located.version === version) {
       this.extensionStore.markGood(version).catch((error: unknown) => this.logger.error('recording a working version failed', error));
+      this.unimplementedStore.ensureRecorded(version);
     }
+  }
+
+  unimplementedUsed(member: string): void {
+    // Only the copy vilaus manages updates itself and has a version before it to compare with.
+    if (this.located?.kind !== 'managed') {
+      return;
+    }
+    const version = this.located.version;
+    const record = this.unimplementedStore.read();
+    this.unimplementedStore.record(version, member);
+    if (this.unimplementedNotified.has(version) || !shouldWarnUnimplemented(record, this.extensionStore.state, version, member)) {
+      return;
+    }
+    this.unimplementedNotified.add(version);
+    const rollback = this.updater?.rollbackTarget()?.version;
+    this.windows.at(-1)?.emit('extensionUnimplemented', { version, ...(rollback === undefined ? {} : { rollback }) });
   }
 
   /** The version to go back to, when the running one came from an update and has never activated. */
@@ -629,6 +709,78 @@ export class ShellApp extends Disposable implements WindowHost {
     });
   }
 
+  /** The directories the statistics page's disk usage measures (statsStorage.ts). */
+  private storagePaths(window: WindowContext): StorageTarget[] {
+    const paths = this.env.paths;
+    const cacheDirs = CACHE_DIRECTORIES.map((name) => path.join(paths.chromium, name));
+    const except = [paths.extensionsDir, paths.transcriptsDir, paths.logsRoot, ...cacheDirs];
+    if (!paths.elevated) {
+      // The administrator instance's own data, under the normal one's folder.
+      except.push(paths.otherInstanceRoot);
+    }
+    const subfolder = stringSetting(this.settings.all[ATTACHMENTS_FOLDER_SETTING]) ?? DEFAULT_ATTACHMENTS_FOLDER;
+    return [
+      { id: 'transcripts', path: this.projectsDir },
+      { id: 'fileHistory', path: path.join(this.claudeConfigDir, 'file-history') },
+      { id: 'extensions', path: paths.extensionsDir },
+      { id: 'fullTranscripts', path: paths.transcriptsDir },
+      { id: 'logs', path: paths.logsRoot },
+      { id: 'cache', path: paths.chromium, dirs: cacheDirs },
+      { id: 'shellData', path: paths.instanceRoot, except },
+      { id: 'attachments', path: attachmentsFolder(window.folder, subfolder) },
+    ];
+  }
+
+  /** The statistics page's figures (`stats.get`); `folder`: only that folder's sessions. */
+  async stats(window: WindowContext, folder: string | undefined): Promise<StatsDto> {
+    const providers = this.attributedProviders();
+    const [transcripts, cliCosts, lastProviders, storage] = await Promise.all([
+      this.sessionSearch.stats({ kind: 'transcripts', folder }),
+      this.sessionSearch.stats({ kind: 'cliCosts', folder }),
+      this.sessionSearch.usage({ kind: 'sessionProviders', providers }),
+      storageItems(this.storagePaths(window)),
+    ]);
+    const costs: ProviderCost[] = [];
+    for (const provider of this.providers.list()) {
+      const scopes = await this.sessionSearch.usage({
+        kind: 'summary',
+        providers,
+        provider: provider.id,
+        folder,
+        pricing: provider.type === 'compatible' ? provider.pricing : undefined,
+      });
+      const models = folder === undefined ? scopes.all : scopes.folder;
+      const used = Object.values(models);
+      if (used.length === 0) {
+        continue;
+      }
+      const sum = (pick: (usage: ModelUsage) => number): number => used.reduce((total, usage) => total + pick(usage), 0);
+      const tokens = {
+        input: sum((usage) => usage.input),
+        output: sum((usage) => usage.output),
+        cacheRead: sum((usage) => usage.cacheRead),
+        cacheWrite: sum((usage) => usage.cacheWrite),
+      };
+      const row = { provider: provider.id, name: this.providerName(provider), tokens, calls: sum((usage) => usage.calls) };
+      if (provider.type === 'compatible') {
+        const priced = totalCost(models, provider.pricing);
+        costs.push(
+          priced.unpriced.length < used.length ? { ...row, cost: priced.cost, currency: provider.pricing?.currency ?? 'USD' } : row,
+        );
+      } else {
+        // Claude's own APIs: what Claude Code worked out itself, for the sessions last run here.
+        let cost = 0;
+        for (const [sessionId, usd] of Object.entries(cliCosts)) {
+          if (lastProviders[sessionId] === provider.id) {
+            cost += usd;
+          }
+        }
+        costs.push({ ...row, cost, currency: 'USD', estimated: true });
+      }
+    }
+    return { folder, transcripts, costs, storage, counters: this.counters.read() };
+  }
+
   private attributedProviders(): AttributedProvider[] {
     return this.providers.list().map(attributedProvider);
   }
@@ -726,6 +878,7 @@ export class ShellApp extends Disposable implements WindowHost {
       this.history.rememberPlacement(inWindow.folder, inWindow.window.placement);
       // Before the switch, which waits for the extension host to stop and may fail on the way.
       this.history.addRecent(folder);
+      this.counters.folderOpened(folder);
       await inWindow.switchFolder(folder);
       this.rememberOpenWindows();
       this.apiWindowsChanged();
@@ -777,6 +930,9 @@ export class ShellApp extends Disposable implements WindowHost {
   }
 
   private async closeWindow(window: WindowContext): Promise<void> {
+    if (!(await window.confirmClose('close'))) {
+      return;
+    }
     this.history.rememberPlacement(window.folder, window.window.placement);
     const index = this.windows.indexOf(window);
     if (index >= 0) {
@@ -1219,12 +1375,19 @@ export class ShellApp extends Disposable implements WindowHost {
           return null;
         }
         const request = { sessionId: id, outDir: this.env.paths.transcriptsDir, labels: transcriptLabels() };
-        return (await this.sessionSearch.fullTranscript(request)) ?? null;
+        const written = await this.sessionSearch.fullTranscript(request);
+        if (written) {
+          this.counters.increment('fullTranscripts');
+        }
+        return written ?? null;
       },
       'sessions.retention': () => this.keepSessions(),
       'sessions.storage': () => this.sessionSearch.storage(),
+      'stats.get': ({ folder }, window) => this.stats(window, folder),
+      'counters.increment': ({ name, by }) => this.counters.increment(name, by ?? 1),
       'window.shownFolders': () => this.windows.map((window) => window.folder),
       'window.close': (_params, window) => this.requestClose(window),
+      'window.closeConfirmed': ({ id, proceed }, window) => window.closeConfirmed(id, proceed),
       'window.openFolderAsAdministrator': ({ folder }) => this.startAdministratorInstance(folder),
       'window.reload': (_params, window) => window.reload(),
       'providers.select': ({ id }, window) => {
@@ -1262,6 +1425,7 @@ export class ShellApp extends Disposable implements WindowHost {
         return file ? this.afterInstall(await this.requireUpdater().installFile(file)) : { outcome: 'cancelled' };
       },
       'extension.rollBack': () => this.requireUpdater().rollBack(),
+      'extension.unimplementedMute': ({ version }) => this.unimplementedStore.mute(version),
       'app.startupNotices': () => this.startupNotices(),
       'window.setKeybindings': ({ chords }, window) => window.window.setInterceptedChords(chords),
       'window.zoom': ({ delta }) => {

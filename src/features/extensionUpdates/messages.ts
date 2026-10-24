@@ -28,6 +28,9 @@ export const t = defineMessages('extensionUpdates', {
   failed: 'Not installed: {0}',
   rollBackFailed: 'Not gone back: {0}',
   updated: 'Claude Code {0} has been downloaded and will be used the next time Vilausity starts.',
+  unimplemented:
+    'This version of the Claude Code extension ({0}) uses features Vilausity does not support yet, so some things may not work.',
+  notAgain: "Don't Show Again",
   errorNetwork: 'Open VSX could not be reached.',
   errorNotFound: 'Open VSX does not have that version.',
   errorChecksum: 'The download does not match the checksum Open VSX publishes.',

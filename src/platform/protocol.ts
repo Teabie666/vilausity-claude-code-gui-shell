@@ -17,6 +17,7 @@ import type { KeybindingEntry } from './keybindings';
 import type { ApiOperationInfo, ApiParams, ApiStatusDto } from './localApi';
 import type { UiLanguage, UiLanguageSetting } from './nls';
 import type { ProviderConfig, ProviderSummary } from './providers';
+import type { ShellCounterName, StatsDto } from './stats';
 
 // ---------------------------------------------------------------------------
 // Shared data types
@@ -926,6 +927,8 @@ export interface ProvidersState {
 export type MainApiForExtHost = {
   'exthost.activated': (p: { extensionVersion: string }) => void;
   'exthost.activationFailed': (p: { message: string; stack?: string }) => void;
+  /** The extension used a VS Code API member the shim does not implement (each name once per process). */
+  'exthost.unimplemented': (p: { member: string }) => void;
   'webview.setDocument': (p: WebviewDocument) => void;
   'webview.releaseDocument': (p: { webviewId: string }) => void;
   'os.openExternal': (p: { url: string }) => boolean;
@@ -1116,6 +1119,9 @@ export interface ThemeSummary {
 }
 
 /** Served by main, called by the renderer. */
+/** Why a window is asked to close: whether to ask about unsaved files, or just save them. */
+export type CloseReason = 'close' | 'quit' | 'sessionEnd';
+
 export type MainApiForRenderer = {
   'app.getInitData': (p: void) => RendererInitData;
   'app.listThemes': (p: void) => ThemeSummary[];
@@ -1207,10 +1213,16 @@ export type MainApiForRenderer = {
   'sessions.retention': (p: void) => RetentionDto;
   /** How much room Claude Code's sessions take on disk. */
   'sessions.storage': (p: void) => SessionStorageDto;
+  /** The statistics page's figures; `folder`: only that folder's sessions (features/stats). */
+  'stats.get': (p: { folder?: string }) => StatsDto;
+  /** Something the page saw that Vilausity counts for the statistics (a file opened, a comment...). */
+  'counters.increment': (p: { name: ShellCounterName; by?: number }) => void;
   /** The folders the open windows show (the calling window's too). */
   'window.shownFolders': (p: void) => string[];
   /** Closes the calling window; closing the last one quits. */
   'window.close': (p: void) => void;
+  /** The page's answer to `windowBeforeClose`: whether the window may close. */
+  'window.closeConfirmed': (p: { id: number; proceed: boolean }) => void;
   /**
    * Starts the administrator instance (elevated) on a folder: Windows asks the user to
    * confirm. Resolves once the request is handed to Windows (or was refused).
@@ -1253,6 +1265,8 @@ export type MainApiForRenderer = {
   'extension.installFile': (p: void) => ExtensionInstallResult;
   /** Back to the previous version at the next start (`installed`: that version is pending). */
   'extension.rollBack': (p: void) => ExtensionInstallResult;
+  /** Not to hear again about `version` using APIs Vilausity lacks (`extensionUnimplemented`). */
+  'extension.unimplementedMute': (p: { version: string }) => void;
   /** The chords main should intercept and send back as `keybinding` events. */
   'window.setKeybindings': (p: { chords: readonly string[] }) => void;
   /** `delta` in zoom steps, or 0 to reset. Returns the new zoom level. */
@@ -1312,10 +1326,21 @@ export type MainEventsForRenderer = {
    * recently focused window only.
    */
   extensionUpdated: { readonly version: string };
+  /**
+   * The extension version running uses a VS Code API Vilausity lacks that the version before
+   * it did not (platform/extensionUnimplemented.ts); `rollback`: the version to go back to.
+   * Sent to the most recently focused window only.
+   */
+  extensionUnimplemented: { readonly version: string; readonly rollback?: string };
   /** A program calls one of the page's operations (`api.operations`); answered with `api.respond`. */
   apiRequest: { readonly id: number; readonly name: string; readonly params: ApiParams };
   /** The local API started, stopped or failed to start. */
   apiStatus: ApiStatusDto;
+  /**
+   * The window is about to close (`reason`): the page saves or asks about its unsaved files,
+   * and answers with `window.closeConfirmed`.
+   */
+  windowBeforeClose: { readonly id: number; readonly reason: CloseReason };
 };
 
 export interface MainEventMessage<K extends keyof MainEventsForRenderer = keyof MainEventsForRenderer> {

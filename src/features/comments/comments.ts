@@ -58,6 +58,8 @@ export class CommentsController implements IDisposable {
     private readonly contentPane: ContentPane,
     private readonly layout: Layout,
     private readonly logger: ILogger,
+    /** A comment was sent (Vilausity counts them for the statistics). */
+    private readonly onSent: () => void = () => {},
   ) {
     this.disposables.add(
       connection.onDidConnect((rpc) => {
@@ -124,6 +126,7 @@ export class CommentsController implements IDisposable {
             text,
           };
           this.connection.rpc?.notify('comments.add', { webviewId: target, comment });
+          this.onSent();
         }
         this.closeForm();
       },
@@ -171,6 +174,7 @@ export class CommentsController implements IDisposable {
       quote: selection.quote,
       source: conversationSource(selection.place.role),
       onSubmit: (text) => {
+        this.onSent();
         this.connection.rpc?.notify('comments.add', {
           webviewId,
           comment: { kind: 'conversation', id: generateId('comment-'), quote: selection.quote, place: selection.place, text },

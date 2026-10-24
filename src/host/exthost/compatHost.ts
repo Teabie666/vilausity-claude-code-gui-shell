@@ -235,6 +235,7 @@ export function createCompatHost(options: {
       reported.add(member);
       logger.warn(`unimplemented VS Code API used: ${member}`);
       unimplementedLog.append(`${new Date().toISOString()} ${member}\n`);
+      main.notify('exthost.unimplemented', { member });
     },
 
     createOutputSink: (name) => new FileAppender(path.join(init.paths.logs, 'output', `${safeFileName(name)}.log`)),

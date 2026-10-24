@@ -26,6 +26,8 @@ export interface AppPaths {
   readonly otherShellStateFile: string;
   /** The recently opened folders, the normal and the administrator instance's both (recentFolders.ts). */
   readonly recentFoldersFile: string;
+  /** Vilausity's own counts for the statistics page (shellCounters.ts; both instances). */
+  readonly countersFile: string;
   /** The period last written into Claude Code's `cleanupPeriodDays` (claudeRetention.ts; both instances). */
   readonly claudeRetentionFile: string;
   /** The API providers; their keys are stored encrypted. */
@@ -36,6 +38,8 @@ export interface AppPaths {
   readonly usageLedgerFile: string;
   /** The Claude Code extension as vilaus installs it (from Open VSX or a .vsix). */
   readonly extensionsDir: string;
+  /** The VS Code APIs each extension version used that the shim lacks (unimplementedStore.ts; both instances). */
+  readonly unimplementedFile: string;
   /** Sessions' full transcripts as Markdown, for the content pane to show (fullTranscripts.ts). */
   readonly transcriptsDir: string;
   /** The app icon drawn in other colors (logoIcons.ts): windows' icons and providers' shortcuts point here. */
@@ -44,6 +48,8 @@ export interface AppPaths {
   readonly chromium: string;
   /** The other instance's Chromium profile (normal or administrator): safeStorage shares its key. */
   readonly otherChromium: string;
+  /** The other instance's own folder: `rootdmin` for the normal one, `root` for the administrator's. */
+  readonly otherInstanceRoot: string;
   readonly logsRoot: string;
   /** Logs for this run only. */
   readonly sessionLogs: string;
@@ -76,15 +82,18 @@ export function createAppPaths(root: string, startedAt = new Date(), elevated = 
     shellStateFile: path.join(instanceRoot, 'state', 'shell.json'),
     otherShellStateFile: path.join(elevated ? root : path.join(root, ADMIN_FOLDER), 'state', 'shell.json'),
     recentFoldersFile: path.join(root, 'state', 'recent-folders.json'),
+    countersFile: path.join(root, 'state', 'counters.json'),
     claudeRetentionFile: path.join(root, 'state', 'claude-retention.json'),
     providersFile: path.join(root, 'providers.json'),
     sessionProvidersFile: path.join(root, 'session-providers.jsonl'),
     usageLedgerFile: path.join(root, 'usage-ledger.jsonl'),
     extensionsDir: path.join(root, 'extensions'),
+    unimplementedFile: path.join(root, 'extensions', 'unimplemented.json'),
     iconsDir: path.join(root, 'icons'),
     transcriptsDir: path.join(instanceRoot, 'transcripts'),
     chromium: path.join(instanceRoot, 'chromium'),
     otherChromium: elevated ? path.join(root, 'chromium') : path.join(root, ADMIN_FOLDER, 'chromium'),
+    otherInstanceRoot: elevated ? root : path.join(root, ADMIN_FOLDER),
     logsRoot,
     sessionLogs,
     windowLogs: (windowId) => path.join(sessionLogs, `window${windowId}`),

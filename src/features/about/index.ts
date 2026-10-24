@@ -8,7 +8,7 @@
  */
 
 import type { ShellModule } from '../../core/module';
-import { INative, ISettings } from '../../core/serviceIds';
+import { ICommands, INative, ISettings } from '../../core/serviceIds';
 import { isNewerVersion, RELEASES_URL, REPOSITORY_URL } from '../../platform/about';
 import { Emitter } from '../../platform/event';
 import { LOGO_CURSOR, LOGO_STROKES, LOGO_VIEW_BOX } from '../../platform/logoMark';
@@ -23,6 +23,7 @@ interface AboutViewOptions {
   readonly copy: () => Promise<void>;
   readonly openUrl: (url: string) => void;
   readonly retry: () => void;
+  readonly statistics: () => void;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -101,6 +102,7 @@ class AboutView {
           () => undefined,
         );
       }),
+      button(t('statistics'), 'statistics', () => this.options.statistics()),
       this.status,
     );
 
@@ -153,6 +155,7 @@ export const aboutModule: ShellModule = {
   async activate({ services, subscriptions, logger }) {
     const native = services.get(INative);
     const settings = services.get(ISettings);
+    const commands = services.get(ICommands);
     const init = await native.call('app.getInitData', undefined);
     let extensionStatus: ExtensionStatus = await native.call('extension.status', undefined);
     let release: ReleaseState = { kind: 'loading' };
@@ -203,6 +206,7 @@ export const aboutModule: ShellModule = {
             copy: () => native.call('os.clipboardWrite', { text: copyText() }),
             openUrl,
             retry: () => loadRelease(true),
+            statistics: () => void commands.execute('stats.show'),
           });
           const render = (): void => view.render(init, extensionStatus, release);
           render();

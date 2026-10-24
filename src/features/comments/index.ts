@@ -9,7 +9,17 @@
 import type { EditorSelectionContext } from '../../core/editors';
 import { MenuId } from '../../core/menus';
 import type { ShellModule } from '../../core/module';
-import { ICommands, IContextKeys, IDialogs, IExtensionHost, IKeybindings, ILayout, IMenus, IWebviewFrames } from '../../core/serviceIds';
+import {
+  ICommands,
+  IContextKeys,
+  IDialogs,
+  IExtensionHost,
+  IKeybindings,
+  ILayout,
+  IMenus,
+  INative,
+  IWebviewFrames,
+} from '../../core/serviceIds';
 import { IContentPane } from '../contentPane';
 import { IConversations } from '../conversations';
 import { CommentsController } from './comments';
@@ -36,6 +46,7 @@ export const commentsModule: ShellModule = {
         contentPane,
         services.get(ILayout),
         logger,
+        () => void services.get(INative).call('counters.increment', { name: 'comments' }),
       ),
     );
     const updateContext = (): void => contextKeys.set('comments.hasComments', controller.activeComments.length > 0);

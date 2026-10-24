@@ -18,6 +18,7 @@ import {
   IKeybindings,
   ILayout,
   IMenus,
+  INative,
   ISettings,
   IThemes,
 } from '../../core/serviceIds';
@@ -499,6 +500,7 @@ export const editorModule: ShellModule = {
   dependsOn: ['contentPane'],
   activate({ services, subscriptions, logger }) {
     const connection = services.get(IExtensionHost);
+    const native = services.get(INative);
     const contentPane = services.get(IContentPane);
     const layout = services.get(ILayout);
     const commands = services.get(ICommands);
@@ -536,7 +538,10 @@ export const editorModule: ShellModule = {
 
     subscriptions.add(
       connection.onDidConnect((rpc) => {
-        rpc.handle('editor.showText', (params) => editors.showText(params));
+        rpc.handle('editor.showText', (params) => {
+          void native.call('counters.increment', { name: 'filesOpened' });
+          return editors.showText(params);
+        });
         rpc.handle('editor.showDiff', (params) => editors.showDiff(params));
         rpc.handle('editor.setSelections', ({ editorId, selections }) => editors.pane(editorId)?.setSelections(selections));
         rpc.handle('editor.revealRange', ({ editorId, range, revealType }) => editors.pane(editorId)?.revealRange(range, revealType));

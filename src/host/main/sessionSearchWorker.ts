@@ -9,17 +9,20 @@ import type { SessionSearchRequest } from '../../platform/protocol';
 import { writeFullTranscript, type FullTranscriptRequest } from './fullTranscripts';
 import { sessionStorage } from './sessionStorage';
 import { SessionIndex } from './sessionSearch';
+import { StatsIndex, type StatsRequest } from './sessionStats';
 import { UsageIndex, type UsageRequest } from './sessionUsage';
 
 const data = workerData as { projectsDir: string; tagsFile: string; ledgerFile: string };
 const index = new SessionIndex(data.projectsDir);
 const usage = new UsageIndex(data.projectsDir, data.tagsFile, data.ledgerFile);
+const stats = new StatsIndex(data.projectsDir);
 
 type WorkerRequest =
   | { id: number; kind: 'search'; request: SessionSearchRequest }
   | { id: number; kind: 'usage'; request: UsageRequest }
   | { id: number; kind: 'transcript'; request: FullTranscriptRequest }
-  | { id: number; kind: 'storage'; request: undefined };
+  | { id: number; kind: 'storage'; request: undefined }
+  | { id: number; kind: 'stats'; request: StatsRequest };
 
 function answer(message: WorkerRequest): Promise<unknown> {
   switch (message.kind) {
@@ -31,6 +34,8 @@ function answer(message: WorkerRequest): Promise<unknown> {
       return writeFullTranscript(data.projectsDir, message.request);
     case 'storage':
       return sessionStorage(data.projectsDir);
+    case 'stats':
+      return stats.answer(message.request);
   }
 }
 

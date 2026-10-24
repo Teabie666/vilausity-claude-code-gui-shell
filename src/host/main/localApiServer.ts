@@ -42,6 +42,8 @@ export interface LocalApiServerOptions {
   readonly refusal: (access: ApiAccess) => string | undefined;
   /** What a stream is sent as it connects (the state as it is now). */
   readonly greeting: () => readonly ApiEvent[];
+  /** Called for each operation run, for Vilausity's own counts. */
+  readonly onCall?: (name: string) => void;
   readonly logger: ILogger;
 }
 
@@ -141,6 +143,7 @@ export class LocalApiServer {
       if (refusal !== undefined) {
         throw new ApiError(403, 'forbidden', refusal);
       }
+      this.options.onCall?.(name);
       const result = await operation.handle(params);
       send(response, 200, result ?? null);
     } catch (error) {

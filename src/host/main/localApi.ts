@@ -45,6 +45,8 @@ export interface LocalApiOptions {
   readonly window: (id: number | undefined) => ApiWindowTarget | undefined;
   /** What a stream is sent as it connects. */
   readonly greeting: () => readonly ApiEvent[];
+  /** Called for each operation run, for Vilausity's own counts. */
+  readonly onCall?: (name: string) => void;
   /** What `GET /v1` says about the app, besides the operations. */
   readonly info: () => Record<string, unknown>;
   readonly logger: ILogger;
@@ -208,6 +210,7 @@ export class LocalApi extends Disposable {
       listing: () => this.listing(),
       refusal: (access) => this.refusal(access),
       greeting: () => this.options.greeting(),
+      onCall: (name) => this.options.onCall?.(name),
       logger: this.options.logger,
     });
     let listening: number;

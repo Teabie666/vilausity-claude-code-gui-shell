@@ -148,7 +148,7 @@ export class AutoSave implements IDisposable {
   }
 }
 
-function savable(entry: ModelEntry): boolean {
+export function savable(entry: ModelEntry): boolean {
   return !entry.readOnly && entry.uri.startsWith('file:');
 }
 

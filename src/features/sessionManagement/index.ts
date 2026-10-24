@@ -21,19 +21,8 @@ import {
   SHOW_SESSIONS_SETTING,
 } from '../../platform/defaults';
 import type { RetentionDto, SessionStorageDto } from '../../platform/protocol';
+import { formatBytes } from '../../platform/format';
 import { t } from './messages';
-
-/** "482 MB": bytes in the largest unit that keeps the number above 1. */
-export function formatBytes(bytes: number): string {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit++;
-  }
-  return `${unit === 0 || value >= 100 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
-}
 
 export const sessionManagementModule: ShellModule = {
   id: 'sessionManagement',

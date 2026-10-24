@@ -15,6 +15,7 @@ import { ApiError, type ApiParams } from '../../platform/localApi';
 import type {
   ApiErrorDto,
   AppInfo,
+  CloseReason,
   ConversationRequest,
   ConversationSendResult,
   ConversationStateDto,
@@ -87,8 +88,12 @@ export interface WindowHost {
   globalStateChanged(source: WindowContext, key: string, value: unknown): void;
   /** The user closed the window (its close button, Alt+F4). */
   requestClose(window: WindowContext): void;
+  /** Windows is shutting down or logging off: save files, never ask. */
+  sessionEnding(): void;
   /** The extension activated in some window: that version works. */
   extensionActivated(version: string): void;
+  /** The window's extension used a VS Code API member the shim lacks. */
+  unimplementedUsed(member: string): void;
   /** The version to go back to when the running one fails to start, if there is one. */
   rollbackTarget(): string | undefined;
   rollBackAndRelaunch(): Promise<void>;
@@ -135,6 +140,9 @@ export class WindowContext extends Disposable {
   /** The local API's calls to the page's operations, waiting for its answer. */
   private readonly apiCalls = new Map<number, { resolve: (result: unknown) => void; reject: (error: unknown) => void }>();
   private nextApiCall = 1;
+  /** Close and quit questions waiting for the page's `window.closeConfirmed`. */
+  private readonly closeChecks = new Map<number, (proceed: boolean) => void>();
+  private nextCloseCheck = 1;
 
   constructor(
     private readonly host: WindowHost,
@@ -178,6 +186,9 @@ export class WindowContext extends Disposable {
       event.preventDefault();
       host.requestClose(this);
     });
+    // Windows shutting down or logging off: files are saved without asking (not to hold it up).
+    this.browserWindow.on('query-session-end', () => host.sessionEnding());
+    this.browserWindow.on('session-end', () => host.sessionEnding());
   }
 
   get browserWindow(): BrowserWindow {
@@ -341,6 +352,30 @@ export class WindowContext extends Disposable {
   }
 
   /** Runs one of the operations the page's modules offer to the local API (core/localApi.ts). */
+  /**
+   * Asks the page whether the window may close: its unsaved files are saved (auto save, the
+   * Windows session ending) or the user answers Save All / Don't Save / Cancel. A page that
+   * cannot answer (loading, gone, crashed) has nothing to keep.
+   */
+  confirmClose(reason: CloseReason): Promise<boolean> {
+    const contents = this.browserWindow.isDestroyed() ? undefined : this.browserWindow.webContents;
+    if (!contents || contents.isDestroyed() || contents.isLoading() || contents.isCrashed()) {
+      return Promise.resolve(true);
+    }
+    const id = this.nextCloseCheck++;
+    return new Promise((resolve) => {
+      this.closeChecks.set(id, resolve);
+      this.window.emit('windowBeforeClose', { id, reason });
+    });
+  }
+
+  /** The page's answer to `confirmClose`. */
+  closeConfirmed(id: number, proceed: boolean): void {
+    const resolve = this.closeChecks.get(id);
+    this.closeChecks.delete(id);
+    resolve?.(proceed);
+  }
+
   callPage(name: string, params: ApiParams): Promise<unknown> {
     const id = this.nextApiCall++;
     return new Promise((resolve, reject) => {
@@ -502,6 +537,10 @@ export class WindowContext extends Disposable {
       call.reject(new ApiError(404, 'no_window', `window ${this.id} closed`));
     }
     this.apiCalls.clear();
+    for (const resolve of this.closeChecks.values()) {
+      resolve(true);
+    }
+    this.closeChecks.clear();
     if (!this.browserWindow.isDestroyed()) {
       this.browserWindow.destroy();
     }
@@ -606,6 +645,7 @@ export class WindowContext extends Disposable {
       this.logger.error(`Claude Code failed to activate: ${message}\n${stack ?? ''}`);
       void this.activationFailed(message);
     });
+    rpc.handle('exthost.unimplemented', ({ member }) => host.unimplementedUsed(member));
     rpc.handle('webview.setDocument', (document) => host.documents.set(document, this.documentOwner));
     rpc.handle('webview.releaseDocument', ({ webviewId }) => host.documents.release(webviewId));
     rpc.handle('os.openExternal', ({ url }) => host.openExternal(url));

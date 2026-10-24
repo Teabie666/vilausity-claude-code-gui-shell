@@ -116,6 +116,7 @@ export const sessionSearchModule: ShellModule = {
         onDidOpen: () => {
           allFolders = widenNext;
           widenNext = false;
+          void native.call('counters.increment', { name: 'searches' });
         },
         initial: (query) => {
           const where = scope();

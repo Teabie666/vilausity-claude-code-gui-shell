@@ -225,6 +225,29 @@ export const extensionUpdatesModule: ShellModule = {
           });
       }),
     );
+
+    // The extension running uses an API Vilausity lacks that the version before did not: offer
+    // to go back to that one (as the settings' button does), or not to hear of this version again.
+    subscriptions.add(
+      native.on('extensionUnimplemented', ({ version, rollback }) => {
+        const items = rollback === undefined ? [t('notAgain')] : [t('rollBackAndRestart', rollback), t('notAgain')];
+        void dialogs
+          .showMessage({ severity: 'warning', message: t('unimplemented', version), modal: false, items })
+          .then(async (picked) => {
+            if (picked === undefined) {
+              return;
+            }
+            if (rollback !== undefined && picked === 0) {
+              const result = await native.call('extension.rollBack', undefined);
+              if (result.outcome === 'installed') {
+                relaunch();
+              }
+            } else {
+              await native.call('extension.unimplementedMute', { version });
+            }
+          });
+      }),
+    );
   },
 };
 

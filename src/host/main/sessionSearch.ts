@@ -12,6 +12,7 @@ import { Worker } from 'node:worker_threads';
 import type { IDisposable } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
 import type { SessionSearchRequest, SessionSearchResult, SessionStorageDto } from '../../platform/protocol';
+import type { StatsRequest, StatsResults } from './sessionStats';
 import { readAppended, type AppendedState } from '../node/appendedFile';
 import { normalizeForCompare } from '../node/paths';
 import type { FullTranscriptRequest } from './fullTranscripts';
@@ -151,12 +152,17 @@ export class SessionSearch implements IDisposable {
     return (await this.ask('storage', undefined)) as SessionStorageDto;
   }
 
+  /** What the transcripts tell for the statistics page (sessionStats.ts). */
+  async stats<K extends StatsRequest['kind']>(request: Extract<StatsRequest, { kind: K }>): Promise<StatsResults[K]> {
+    return (await this.ask('stats', request)) as StatsResults[K];
+  }
+
   dispose(): void {
     void this.worker?.terminate();
     this.worker = undefined;
   }
 
-  private ask(kind: 'search' | 'usage' | 'transcript' | 'storage', request: unknown): Promise<unknown> {
+  private ask(kind: 'search' | 'usage' | 'transcript' | 'storage' | 'stats', request: unknown): Promise<unknown> {
     const worker = (this.worker ??= this.start());
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {
