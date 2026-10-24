@@ -16,6 +16,7 @@
 import { randomUUID } from 'node:crypto';
 import { CHAT_PANEL_VIEW_TYPE, type WebviewImpl, type WebviewMessageInterceptor } from '../../compat/vscode/webviews';
 import type { OsBackend } from '../../compat/vscode/host';
+import { SHOW_ALL_ROWS_SETTING } from '../../platform/defaults';
 import type { ILogger } from '../../platform/log';
 import type {
   ConversationCommentHints,
@@ -24,6 +25,7 @@ import type {
   FileLinkHints,
   MessageMarkerHints,
   OmittedRowsHints,
+  ScriptRewrite,
   PromptSubmitHints,
   PromptSubmitOutcome,
   PromptSubmitReply,
@@ -212,6 +214,20 @@ const OMITTED_ROWS: OmittedRowsHints = {
   unseenTools: ['Read', 'ToolSearch'],
   uuidAttribute: CONVERSATION_COMMENTS.uuidAttribute,
   turn: MESSAGE_MARKERS.turn,
+};
+
+/**
+ * The conversation page's limit of 600 rows (OMITTED_ROWS), in its script (anthropic.claude-code
+ * 2.1.310, 2.1.309 alike): `var <limit>=600,<a>=300,<b>=100,<c>=10;function <f>(<n>){return
+ * Math.max(<a>,<limit>-<n>)}`, the limit used by that function and by the one that leaves rows
+ * out, which does nothing up to it. With `vilaus.conversations.showAllRows` on, the limit is a
+ * billion: the page shows every row, and renders all of a long conversation each time (slower).
+ */
+export const SHOW_ALL_ROWS: ScriptRewrite = {
+  file: 'webview/index.js',
+  find: String.raw`([\w$]+)=600,([\w$]+)=300,([\w$]+)=100,([\w$]+)=10;function ([\w$]+)\(([\w$]+)\)\{return Math\.max\(\2,\1-\6\)\}`,
+  replace: '$1=1e9,$2=300,$3=100,$4=10;function $5($6){return Math.max($2,$1-$6)}',
+  setting: SHOW_ALL_ROWS_SETTING,
 };
 
 /** The session list view and the plan preview panel (anthropic.claude-code 2.1.282). */
@@ -504,12 +520,22 @@ ${QUESTION_TEXT} {
 .vilaus-provider-notice-ignore:hover { background: var(--vscode-button-secondaryHoverBackground); }
 
 .vilaus-omitted-rows {
-  margin: 4px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
   color: var(--vscode-descriptionForeground);
   font-family: var(--vscode-font-family);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: var(--vilaus-chat-font-size, 14px);
+  line-height: 1.5;
 }
+.vilaus-omitted-rows::before,
+.vilaus-omitted-rows::after {
+  content: '';
+  flex: 1 1 24px;
+  border-top: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+}
+.vilaus-omitted-rows-text { flex: 0 1 auto; text-align: center; }
 .vilaus-omitted-rows a { color: var(--vscode-textLink-foreground); text-decoration: none; cursor: pointer; }
 .vilaus-omitted-rows a:hover { color: var(--vscode-textLink-activeForeground); text-decoration: underline; }
 `;
@@ -1387,6 +1413,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
           conversationComments: CONVERSATION_COMMENTS,
           promptSubmit: PROMPT_SUBMIT,
           omittedRows: OMITTED_ROWS,
+          scriptRewrites: [SHOW_ALL_ROWS],
         };
       case SESSION_LIST_VIEW_TYPE:
         return {

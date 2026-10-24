@@ -1,14 +1,18 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { SHOW_ALL_ROWS } from '../../../src/host/exthost/bridge';
 import {
+  REWRITE_PARAMETER,
   WebviewDocumentStore,
   allowShellFonts,
+  applyRewrites,
   findNonce,
   injectBootstrap,
+  markRewrittenScripts,
   serializeForScript,
 } from '../../../src/host/main/webviewDocuments';
-import type { ThemeData, WebviewBootstrapData, WebviewDocument } from '../../../src/platform/protocol';
+import type { ScriptRewrite, ThemeData, WebviewBootstrapData, WebviewDocument } from '../../../src/platform/protocol';
 
 const theme: ThemeData = {
   id: 'dark-modern',
@@ -153,7 +157,7 @@ describe('WebviewDocumentStore', () => {
         .render('list')!
         .includes(
           '"labels":{"deleteSession":"Delete session","resetsAt":"Resets {0}","needsInput":"Needs input · {0}","comment":"Comment",' +
-            '"omittedRows":"Earlier tool calls and thinking are not shown (the Claude Code extension shows the last {0} rows)",' +
+            '"omittedRows":"Earlier tool calls and thinking above are not shown (the Claude Code extension shows the last {0} rows)",' +
             '"fullTranscript":"View Full Transcript","locale":"en"}',
         ),
     );
@@ -186,5 +190,124 @@ describe('WebviewDocumentStore', () => {
     assert.equal(store.render('c'), undefined);
     assert.ok(store.render('b'));
     assert.deepEqual(store.resourceRoots(), ['/b']);
+  });
+});
+
+describe('markRewrittenScripts', () => {
+  const webviewId = 'wv1';
+  const parameter = `${REWRITE_PARAMETER}=${encodeURIComponent(webviewId)}`;
+  const rewrites: ScriptRewrite[] = [{ file: 'webview/index.js', find: '600', replace: '1e9', setting: 'test.on' }];
+  const script = (src: string) => `<script nonce="n" src="${src}" type="module"></script>`;
+
+  test("asks for the script with the webview's id, keeping a query and a fragment where they were", () => {
+    const base = 'ccw://res/C%3A/ext/webview/index.js';
+    assert.equal(markRewrittenScripts(script(base), webviewId, rewrites), script(`${base}?${parameter}`));
+    assert.equal(markRewrittenScripts(script(`${base}?v=2`), webviewId, rewrites), script(`${base}?v=2&${parameter}`));
+    assert.equal(markRewrittenScripts(script(`${base}#main`), webviewId, rewrites), script(`${base}?${parameter}#main`));
+    assert.equal(markRewrittenScripts(script(`${base}?v=2#main`), webviewId, rewrites), script(`${base}?v=2&${parameter}#main`));
+  });
+
+  test('leaves scripts of other files and other directories, inline scripts and a data-src alone', () => {
+    for (const html of [
+      script('ccw://res/C%3A/ext/webview/other.js'),
+      script('ccw://res/C%3A/ext/other/index.js'),
+      '<script>alert(1)</script>',
+      '<script data-src="ccw://res/C%3A/ext/webview/index.js"></script>',
+    ]) {
+      assert.equal(markRewrittenScripts(html, webviewId, rewrites), html);
+    }
+  });
+
+  test('recognises the script behind a percent-encoded path', () => {
+    const base = 'ccw://res/C%3A/Program%20Files/ext/webview/index.js';
+    assert.equal(markRewrittenScripts(script(base), webviewId, rewrites), script(`${base}?${parameter}`));
+  });
+});
+
+describe('applyRewrites', () => {
+  test('replaces the first match only, with $1 taking the part it matched', () => {
+    const rule: ScriptRewrite = { file: 'a.js', find: String.raw`([\d]+)px`, replace: '$1rem', setting: 'test.on' };
+    assert.deepEqual(applyRewrites('10px 20px', [rule]), { text: '10rem 20px', missed: [] });
+  });
+
+  test('lists a rule that finds nothing in missed and leaves the text as it was', () => {
+    const rule: ScriptRewrite = { file: 'a.js', find: 'nope', replace: 'x', setting: 'test.on' };
+    assert.deepEqual(applyRewrites('NOPE', [rule]), { text: 'NOPE', missed: [rule] });
+  });
+
+  test('applies the rules one after another', () => {
+    const rules: ScriptRewrite[] = [
+      { file: 'a.js', find: 'alpha', replace: 'beta', setting: 'test.on' },
+      { file: 'a.js', find: 'beta', replace: 'gamma', setting: 'test.on' },
+    ];
+    assert.deepEqual(applyRewrites('alpha alpha', rules), { text: 'gamma alpha', missed: [] });
+  });
+});
+
+describe('SHOW_ALL_ROWS', () => {
+  const run = (text: string) => applyRewrites(text, [SHOW_ALL_ROWS]);
+
+  test('raises the 600-row limit in the 2.1.310 script and leaves the rest of it as it was', () => {
+    const source = 'var $a=600,Et0=300,od=100,bt0=10;function td($){return Math.max(Et0,$a-$)}var Jr1="ultracode";';
+    assert.deepEqual(run(source), {
+      text: 'var $a=1e9,Et0=300,od=100,bt0=10;function td($){return Math.max(Et0,$a-$)}var Jr1="ultracode";',
+      missed: [],
+    });
+  });
+
+  test('raises it in the 2.1.309 script too', () => {
+    const source = 'var ed=600,_t0=300,sd=100,Tt0=10;function od($){return Math.max(_t0,ed-$)}';
+    assert.deepEqual(run(source), {
+      text: 'var ed=1e9,_t0=300,sd=100,Tt0=10;function od($){return Math.max(_t0,ed-$)}',
+      missed: [],
+    });
+  });
+
+  test('does not touch a script whose limit is not 600', () => {
+    const source = 'var $a=500,Et0=300,od=100,bt0=10;function td($){return Math.max(Et0,$a-$)}';
+    assert.deepEqual(run(source), { text: source, missed: [SHOW_ALL_ROWS] });
+  });
+});
+
+describe('WebviewDocumentStore script rewrites', () => {
+  const rewrite: ScriptRewrite = { file: 'webview/index.js', find: '600', replace: '1e9', setting: 'x.on' };
+  const html = `<html><head></head><body><script nonce="n" src="ccw://res/C%3A/ext/webview/index.js" type="module"></script></body></html>`;
+
+  function makeStore(settingOn: (key: string) => boolean): WebviewDocumentStore {
+    return new WebviewDocumentStore(
+      'BOOT',
+      () => theme,
+      () => undefined,
+      '',
+      settingOn,
+    );
+  }
+
+  function page(): WebviewDocument {
+    return { webviewId: 'wv1', html, resourceRoots: [], hints: { scriptRewrites: [rewrite] } };
+  }
+
+  test('renders the script as it is and reports no rewrite while the setting is off', () => {
+    const store = makeStore(() => false);
+    store.set(page());
+    assert.deepEqual(store.rewritesFor('wv1'), []);
+    const out = store.render('wv1')!;
+    assert.ok(out.includes('src="ccw://res/C%3A/ext/webview/index.js"'));
+    assert.equal(out.includes(`${REWRITE_PARAMETER}=`), false);
+  });
+
+  test('asks for the rewritten script and lists the rewrite for that file while the setting is on', () => {
+    const store = makeStore((key) => key === 'x.on');
+    store.set(page());
+    assert.ok(store.render('wv1')!.includes(`src="ccw://res/C%3A/ext/webview/index.js?${REWRITE_PARAMETER}=wv1"`));
+    assert.deepEqual(store.rewritesFor('wv1'), [rewrite]);
+    assert.deepEqual(store.rewritesFor('wv1', 'C:\\ext\\webview\\index.js'), [rewrite]);
+    assert.deepEqual(store.rewritesFor('wv1', 'C:\\ext\\webview\\other.js'), []);
+  });
+
+  test('reports no rewrite for a webview it does not know', () => {
+    const store = makeStore(() => true);
+    assert.deepEqual(store.rewritesFor('missing'), []);
+    assert.deepEqual(store.rewritesFor('missing', 'C:\\ext\\webview\\index.js'), []);
   });
 });

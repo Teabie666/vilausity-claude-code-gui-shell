@@ -6,7 +6,7 @@
  * fonts (their @font-face rules), so pages can use them like system fonts.
  */
 
-import type { ExtensionTranslations, ThemeData, WebviewBootstrapData, WebviewDocument } from '../../platform/protocol';
+import type { ExtensionTranslations, ScriptRewrite, ThemeData, WebviewBootstrapData, WebviewDocument } from '../../platform/protocol';
 import { getUiLanguage, htmlLang } from '../../platform/nls';
 import { WEBVIEW_CSP_SOURCE } from '../../platform/webviewUrls';
 import { t } from './messages';
@@ -23,7 +23,15 @@ export class WebviewDocumentStore {
     private readonly getTranslations: () => ExtensionTranslations | undefined = () => undefined,
     /** The shell's @font-face rules (dist/renderer/fonts/fonts.css, absolute ccw://app URLs). */
     private readonly fontFaces = '',
+    /** Whether a boolean setting is on (the page hints' script rewrites go by one each). */
+    private readonly settingOn: (key: string) => boolean = () => false,
   ) {}
+
+  /** The script rewrites of a webview's page that are on, for the script at `file` (all of them without). */
+  rewritesFor(webviewId: string, file?: string): ScriptRewrite[] {
+    const rewrites = this.documents.get(webviewId)?.document.hints?.scriptRewrites ?? [];
+    return rewrites.filter((rewrite) => this.settingOn(rewrite.setting) && (file === undefined || endsWithFile(file, rewrite.file)));
+  }
 
   /** `owner`: whose webview it is (a window), so its documents can go when it does. */
   set(document: WebviewDocument, owner?: string): void {
@@ -81,8 +89,56 @@ export class WebviewDocumentStore {
             }
           : undefined,
     };
-    return injectBootstrap(allowShellFonts(document.html), this.bootstrapSource, data);
+    const rewrites = this.rewritesFor(webviewId);
+    const html = rewrites.length > 0 ? markRewrittenScripts(document.html, webviewId, rewrites) : document.html;
+    return injectBootstrap(allowShellFonts(html), this.bootstrapSource, data);
   }
+}
+
+/** The query parameter a rewritten script is asked for with: the webview's id. */
+export const REWRITE_PARAMETER = 'vilaus-wv';
+
+function endsWithFile(file: string, end: string): boolean {
+  return `/${file.replace(/\\/g, '/')}`.toLowerCase().endsWith(`/${end.replace(/^\/+/, '')}`.toLowerCase());
+}
+
+/**
+ * `html` with the scripts that get a rewrite asked for with the webview's id (the
+ * `REWRITE_PARAMETER`): main knows by it whose page asks, and the browser keeps the changed
+ * script apart from the one other pages get.
+ */
+export function markRewrittenScripts(html: string, webviewId: string, rewrites: readonly ScriptRewrite[]): string {
+  return html.replace(/(<script\b[^>]*?\ssrc=")([^"]+)(")/gi, (tag, start: string, src: string, end: string) => {
+    const filePath = src.replace(/[?#].*$/, '');
+    let decoded = filePath;
+    try {
+      decoded = decodeURIComponent(filePath);
+    } catch {
+      // As it is.
+    }
+    if (!rewrites.some((rewrite) => endsWithFile(decoded, rewrite.file))) {
+      return tag;
+    }
+    const hash = src.indexOf('#');
+    const [base, fragment] = hash < 0 ? [src, ''] : [src.slice(0, hash), src.slice(hash)];
+    const parameter = `${REWRITE_PARAMETER}=${encodeURIComponent(webviewId)}`;
+    return `${start}${base}${base.includes('?') ? '&' : '?'}${parameter}${fragment}${end}`;
+  });
+}
+
+/** `text` with each rewrite made (its first match), and the rewrites that found nothing. */
+export function applyRewrites(text: string, rewrites: readonly ScriptRewrite[]): { text: string; missed: ScriptRewrite[] } {
+  const missed: ScriptRewrite[] = [];
+  let result = text;
+  for (const rewrite of rewrites) {
+    const find = new RegExp(rewrite.find);
+    if (find.test(result)) {
+      result = result.replace(find, rewrite.replace);
+    } else {
+      missed.push(rewrite);
+    }
+  }
+  return { text: result, missed };
 }
 
 /** Font sources every webview needs: inline fonts, and the shell's own (ccw://app/fonts). */

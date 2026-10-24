@@ -11,8 +11,8 @@ export const t = defineMessages('main', {
   needsInput: 'Needs input · {0}',
   /** The button by text selected in a conversation (like the one by a selection in the editor). */
   comment: 'Comment',
-  /** Above a long conversation whose earlier rows the page does not show ({0}: how many it shows). */
-  omittedRows: 'Earlier tool calls and thinking are not shown (the Claude Code extension shows the last {0} rows)',
+  /** In a long conversation, after the latest row the page leaves out ({0}: how many it shows). */
+  omittedRows: 'Earlier tool calls and thinking above are not shown (the Claude Code extension shows the last {0} rows)',
   /** The link after it. */
   fullTranscript: 'View Full Transcript',
   /** The session list's usage block, in place of the extension's "Account & usage" ({0}: the API provider). */

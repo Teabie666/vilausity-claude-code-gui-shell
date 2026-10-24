@@ -10,6 +10,8 @@ export const t = defineMessages('sessionManagement', {
   showWithinSetting:
     'The session list shows only the conversations active within this time. Older ones are hidden, not deleted: the search (Ctrl+P) still finds them.',
   all: 'All',
+  showAllRowsSetting:
+    "Show every row of a long conversation. The Claude Code extension shows only the last 600, leaving out earlier tool calls and thinking. On, a long conversation can be slow to open and to scroll, and Claude's replies can lag behind. Applies to conversations opened afterwards. Works by changing the extension's page as it loads: a newer extension may not take it, and then the page shows the last 600 as before.",
   /** {0}: how many; {1}: how much room, "482 MB". */
   storage: 'Conversation transcripts on this computer: {0} · {1}',
   storageLoading: 'Conversation transcripts on this computer: counting…',

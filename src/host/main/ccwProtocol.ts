@@ -15,7 +15,8 @@ import { protocol, type Session } from 'electron';
 import type { ILogger } from '../../platform/log';
 import { CCW_SCHEME, WEBVIEW_ID_PATTERN } from '../../platform/webviewUrls';
 import { isSubPath } from '../node/paths';
-import type { WebviewDocumentStore } from './webviewDocuments';
+import type { ScriptRewrite } from '../../platform/protocol';
+import { applyRewrites, REWRITE_PARAMETER, type WebviewDocumentStore } from './webviewDocuments';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -112,6 +113,11 @@ async function route(url: URL, options: CcwProtocolOptions): Promise<Response> {
       options.logger.warn(`blocked resource outside webview roots: ${url.href}`);
       return notFound();
     }
+    const webviewId = url.searchParams.get(REWRITE_PARAMETER);
+    const rewrites = webviewId ? options.documents.rewritesFor(webviewId, file) : [];
+    if (rewrites.length > 0) {
+      return serveRewritten(file, rewrites, options.logger);
+    }
     return serveFile(file, { 'Access-Control-Allow-Origin': '*' });
   }
   if (host === 'img') {
@@ -155,6 +161,23 @@ export function resourcePathFromUrl(url: URL): string | undefined {
 function safeJoin(root: string, requestPath: string): string | undefined {
   const target = path.normalize(path.join(root, requestPath === '/' ? 'index.html' : requestPath));
   return isSubPath(target, root) ? target : undefined;
+}
+
+/** A script with a page's rewrites made (see ScriptRewrite); one that finds nothing is logged. */
+async function serveRewritten(file: string, rewrites: readonly ScriptRewrite[], logger: ILogger): Promise<Response> {
+  let text: string;
+  try {
+    text = await fs.promises.readFile(file, 'utf8');
+  } catch {
+    return notFound();
+  }
+  const rewritten = applyRewrites(text, rewrites);
+  for (const rewrite of rewritten.missed) {
+    logger.warn(`script rewrite for ${rewrite.setting} found nothing in ${file}: this version of it is served as it is there`);
+  }
+  return new Response(rewritten.text, {
+    headers: { 'Content-Type': MIME_TYPES['.js']!, 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' },
+  });
 }
 
 async function serveFile(file: string, extraHeaders: Record<string, string>): Promise<Response> {

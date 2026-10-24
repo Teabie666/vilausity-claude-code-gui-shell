@@ -48,7 +48,7 @@ npm run dev          # 构建并启动独立的开发实例（数据在 .test-da
 - **测拖文件进窗口**：用 CDP 的 `Input.dispatchDragEvent`（带真实文件路径，先发一次 `mouseMoved`），见界面测试 "files dropped onto the window"。它的一次拖动只发给开始时所在的页面，不会像真实拖放那样中途换到另一个 iframe；它的 `dragCancel` 也不给页面发 dragleave；拖动中别再发鼠标移动（壳把它当成拖动结束）。
 - **测对话页里的选区**：Playwright 的鼠标拖选在插件页面里时灵时不灵，测试里用脚本设好选区再派发 `mouseup`（见界面测试 "the conversation's own text"）。插件 2.1.306 刚打开会话时消息会先隐藏一会儿（`visibility: hidden`），这时选区的文字是空的，要等消息显示出来；点过思考块标题后 1.5 秒内壳会把标题按在原位，脚本设的滚动会被拉回去。
 - **页面内查找**不能用 `webContents.findInPage`：查找输入框跟被搜索的内容在同一个页面里时，它会抢焦点，还会悄悄丢掉请求。现在的实现在 webview 里用 CSS Custom Highlight API 自己找（`src/host/webview/find.ts`）。
-- **插件 CSS 里的图标字体是 `data:` 内嵌的**，但插件自己的 CSP `font-src` 不放行 `data:`，图标会显示成方框。注入时会给 `font-src` 补上 `data:`（`allowInlineFonts`）。
+- **插件 CSS 里的图标字体是 `data:` 内嵌的**，但插件自己的 CSP `font-src` 不放行 `data:`，图标会显示成方框。注入时会给 `font-src` 补上 `data:`（`allowShellFonts`）。
 - **本机的 VSCodium 是便携版**，便携模式会无视 `--user-data-dir`。主题抓取（`npm run capture-themes`）因此只在临时工作区的工作区级设置里切主题，不碰用户设置。
 - **源码里别直接写 U+2028/U+2029 这类不可见字符**。tsc 能过，但 esbuild 会把它们当换行，正则会坏掉；要用就用 `String.fromCharCode` 生成。
 - **有的依赖默认入口是 UMD**（比如 jsonc-parser），esbuild 打包不了。构建配置里已经设了 `mainFields: ['module', 'main']`。

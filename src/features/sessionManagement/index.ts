@@ -3,7 +3,8 @@
  * conversations (main writes Claude Code's own `cleanupPeriodDays`, host/main/claudeRetention.ts),
  * the extension's auto-archiving (its setting, listed here by features/settings), and how far
  * back the session list goes (the bridge names the older sessions to the list's page, which
- * hides their rows: host/webview/oldSessions.ts). A block above them tells how much room the
+ * hides their rows: host/webview/oldSessions.ts), and whether a conversation shows all its rows
+ * (the extension's page shows the last 600). A block above them tells how much room the
  * conversations take, opens their folder, deletes the archived ones of this folder, and says
  * when Claude Code's settings hold a period of their own.
  */
@@ -12,7 +13,13 @@ import { URI } from 'vscode-uri';
 import { SettingsSection } from '../../core/messages';
 import type { ShellModule } from '../../core/module';
 import { IDialogs, IExtensionHost, INative, ISettings } from '../../core/serviceIds';
-import { DELETE_SESSIONS_CHOICES, DELETE_SESSIONS_SETTING, SHOW_SESSIONS_CHOICES, SHOW_SESSIONS_SETTING } from '../../platform/defaults';
+import {
+  DELETE_SESSIONS_CHOICES,
+  DELETE_SESSIONS_SETTING,
+  SHOW_ALL_ROWS_SETTING,
+  SHOW_SESSIONS_CHOICES,
+  SHOW_SESSIONS_SETTING,
+} from '../../platform/defaults';
 import type { RetentionDto, SessionStorageDto } from '../../platform/protocol';
 import { t } from './messages';
 
@@ -64,6 +71,14 @@ export const sessionManagementModule: ShellModule = {
             enumItemLabels: dayLabels(SHOW_SESSIONS_CHOICES, t('all')),
             description: t('showWithinSetting'),
           },
+        },
+        // Main changes the conversation page's script as it hands it over (host/exthost/bridge.ts, SHOW_ALL_ROWS).
+        {
+          key: SHOW_ALL_ROWS_SETTING,
+          section: SettingsSection.sessions,
+          order: 4,
+          showDescription: true,
+          schema: { type: 'boolean', default: false, description: t('showAllRowsSetting') },
         },
       ]),
     );

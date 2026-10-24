@@ -215,6 +215,25 @@ export interface WebviewPageHints {
   readonly promptSubmit?: PromptSubmitHints;
   /** How to tell that a conversation page leaves out a long conversation's earlier rows (see the type). */
   readonly omittedRows?: OmittedRowsHints;
+  /** Changes to the page's scripts, made while a setting is on (see the type). */
+  readonly scriptRewrites?: readonly ScriptRewrite[];
+}
+
+/**
+ * A change to one of a page's scripts, made as main hands the page the script while a setting
+ * is on; the extension's file stays as it is. The page's HTML then asks for the script with
+ * its webview's id (webviewDocuments.ts), which keeps it apart from the unchanged one other
+ * pages get (the browser keeps compiled scripts by their URL).
+ */
+export interface ScriptRewrite {
+  /** The script: the end of its path, with `/` separators. */
+  readonly file: string;
+  /** A regular expression's source; its first match is replaced. */
+  readonly find: string;
+  /** What the match becomes (`$1`... as String.prototype.replace has them). */
+  readonly replace: string;
+  /** The setting that turns it on (true). */
+  readonly setting: string;
 }
 
 /**

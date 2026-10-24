@@ -273,6 +273,7 @@ export class ShellApp extends Disposable implements WindowHost {
       (owner) => this.windows.find((window) => window.ownsDocuments(owner))?.theme ?? this.theme,
       () => this.extensionTranslations(),
       readFontFaces(path.join(env.appDir, 'renderer', 'fonts', 'fonts.css'), this.logger),
+      (key) => this.settings.all[key] === true,
     );
     this.releaseChecker = new ReleaseChecker({
       // The environment variable points UI tests at a local stand-in instead of GitHub.

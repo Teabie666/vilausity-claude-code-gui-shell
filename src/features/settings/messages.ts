@@ -40,6 +40,7 @@ export const settingTitleName = defineNames('settingTitles', {
   'vilaus.conversations.alwaysShowTabs': 'Vilaus › Conversations: Always Show Tabs',
   'vilaus.conversations.messageMarkers': 'Vilaus › Conversations: Message Markers',
   'vilaus.conversations.attachmentsFolder': 'Vilaus › Conversations: Attachments Folder',
+  'vilaus.conversations.showAllRows': 'Vilaus › Conversations: Show All Rows',
   'vilaus.provider.default': 'Vilaus › Provider: Default',
   'vilaus.sessions.currentProviderOnly': 'Vilaus › Sessions: Current Provider Only',
   'vilaus.sessions.deleteAfterDays': 'Vilaus › Sessions: Delete After Days',

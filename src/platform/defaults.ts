@@ -45,3 +45,5 @@ export const LEGACY_KEEP_SESSIONS_SETTING = 'vilaus.sessions.keepForever';
 /** The session list shows only the conversations active in the last so many days; 0, the default: all. */
 export const SHOW_SESSIONS_SETTING = 'vilaus.sessions.showWithinDays';
 export const SHOW_SESSIONS_CHOICES = [0, 7, 30, 90, 180, 365] as const;
+/** A conversation page shows every row, not the extension's last 600 (off by default: long ones get slow). */
+export const SHOW_ALL_ROWS_SETTING = 'vilaus.conversations.showAllRows';

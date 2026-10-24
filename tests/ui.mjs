@@ -3890,7 +3890,7 @@ await step(
 );
 
 await step(
-  'a conversation past 600 rows says its earlier tool calls and thinking are not shown; the link opens the full transcript',
+  'a conversation past 600 rows says where its earlier tool calls and thinking are left out; the link opens the full transcript; Show All Rows shows them all',
   async () => {
     // 200 turns, each a message of the user's, thinking, a Bash call and its result, and an
     // answer, a message of Claude's per content block as Claude Code writes them: 800 rows.
@@ -3959,17 +3959,34 @@ await step(
         45_000,
         'the line about rows left out',
       );
-      const shown = await conversation.evaluate(() => ({
-        line: document.querySelector('.vilaus-omitted-rows').textContent,
-        // Right before the first turn, which is the first question's.
-        beforeFirstTurn: document.querySelector('.vilaus-omitted-rows').nextElementSibling?.textContent.includes('Question 1'),
-        // The calls by their uuids: entries count from 1, five a turn, the call the third of them.
-        firstCall: !!document.querySelector('[data-bookmark-uuid="00000000-0000-4000-8000-000000000003"]'),
-        lastCall: !!document.querySelector('[data-bookmark-uuid="00000000-0000-4000-8000-000000000998"]'),
-      }));
-      if (!shown.line.includes('600') || !shown.beforeFirstTurn) throw new Error(`the line: ${JSON.stringify(shown)}`);
+      const shown = await conversation.evaluate(() => {
+        const line = document.querySelector('.vilaus-omitted-rows');
+        // Claude's messages by their uuids: entries count from 1, five a turn (the question, the
+        // thinking, the call, its result, the answer).
+        const has = (turn, entry) =>
+          !!document.querySelector(`[data-bookmark-uuid="00000000-0000-4000-8000-${String((turn - 1) * 5 + entry).padStart(12, '0')}"]`);
+        const complete = (turn) => has(turn, 2) && has(turn, 3);
+        // The user's words end the message (after a hidden heading and the time).
+        const numberOf = (turn) => Number(/Question (\d+)\s*$/.exec(turn.querySelector('[class*="userMessage_"]')?.textContent ?? '')?.[1]);
+        const turns = [...document.querySelectorAll('[class*="turn_"]')].filter((turn) => /Question \d+/.test(turn.textContent));
+        const before = turns.filter((turn) => turn.contains(line) || line.compareDocumentPosition(turn) & Node.DOCUMENT_POSITION_PRECEDING);
+        const after = turns.filter((turn) => !turn.contains(line) && line.compareDocumentPosition(turn) & Node.DOCUMENT_POSITION_FOLLOWING);
+        return {
+          line: line.textContent,
+          fontSize: getComputedStyle(line).fontSize,
+          // Where the leaving out ends: the turn it stands in (or the one before it) misses some,
+          // every turn after it has all.
+          lastTurnBefore: numberOf(before.at(-1)),
+          gapBefore: !complete(numberOf(before.at(-1))),
+          allAfter: after.length > 0 && after.every((turn) => complete(numberOf(turn))),
+          firstCall: has(1, 3),
+          lastCall: has(200, 3),
+        };
+      });
+      if (!shown.line.includes('600') || !shown.gapBefore || !shown.allAfter) throw new Error(`the line: ${JSON.stringify(shown)}`);
       // The page did leave the first turn's call out, and kept the last one's.
       if (shown.firstCall || !shown.lastCall) throw new Error(`the calls the page shows: ${JSON.stringify(shown)}`);
+      await conversation.locator('.vilaus-omitted-rows').scrollIntoViewIfNeeded();
       await otherPage.screenshot({ path: path.join(runDir, 'omitted-rows.png') });
 
       await conversation.locator('.vilaus-omitted-rows a').click();
@@ -3995,9 +4012,59 @@ await step(
         throw new Error(`the transcript: ${JSON.stringify(transcript)}`);
       const tab = await otherPage.locator('#content-pane .content-tab.active .tab-label').innerText();
       if (!tab.includes('Very long session.md')) throw new Error(`the tab: ${tab}`);
-      return `${JSON.stringify(transcript)}`;
     } finally {
       await other.close();
+    }
+
+    // With Show All Rows on, the page leaves out nothing (main changed its script as it loaded).
+    writeFileSync(
+      path.join(ownData, 'settings.json'),
+      JSON.stringify({
+        'claudeCode.hideOnboarding': true,
+        'claudeCode.disableLoginPrompt': true,
+        'vilaus.language': 'en',
+        'vilaus.extension.autoUpdate': false,
+        'vilaus.conversations.showAllRows': true,
+      }),
+      'utf8',
+    );
+    const again = await electron.launch({
+      executablePath: executable,
+      args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display', '--session', sessionId),
+      cwd: root,
+      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      timeout: 60_000,
+    });
+    try {
+      const againPage = await again.firstWindow();
+      const firstCall = '[data-bookmark-uuid="00000000-0000-4000-8000-000000000003"]';
+      const conversation = await waitFor(
+        async () => {
+          for (const frame of againPage.frames()) {
+            if (
+              frame.url().startsWith('ccw://wv') &&
+              (await frame
+                .locator(firstCall)
+                .count()
+                .catch(() => 0)) > 0
+            )
+              return frame;
+          }
+          return undefined;
+        },
+        45_000,
+        "the first turn's call, with every row shown",
+      );
+      await againPage.waitForTimeout(1500);
+      const all = await conversation.evaluate(() => ({
+        calls: document.querySelectorAll('[data-bookmark-uuid]').length,
+        line: document.querySelectorAll('.vilaus-omitted-rows').length,
+      }));
+      // 600 thinking blocks, calls and answers: three of Claude's messages a turn.
+      if (all.calls !== 600 || all.line !== 0) throw new Error(`with every row: ${JSON.stringify(all)}`);
+      return `with Show All Rows: ${all.calls} of Claude's messages, no line`;
+    } finally {
+      await again.close();
     }
   },
 );
