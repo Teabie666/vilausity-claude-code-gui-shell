@@ -753,8 +753,8 @@ export interface RendererInitData {
   readonly theme: ThemeData;
   readonly workspaceFolders: readonly string[];
   readonly appVersion: string;
-  /** Electron's, Chromium's and Node's versions, for the About section. */
-  readonly runtimeVersions: { readonly electron: string; readonly chromium: string; readonly node: string };
+  /** What the app runs on, for the About section's Copy Version Information (`os`: type, arch, release). */
+  readonly runtimeVersions: { readonly electron: string; readonly chromium: string; readonly node: string; readonly os: string };
   /** The display language for this run; a change takes a restart. */
   readonly language: UiLanguage;
   readonly providers: ProvidersState;

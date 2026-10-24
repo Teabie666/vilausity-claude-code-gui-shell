@@ -1,21 +1,23 @@
 /**
- * About: a section of the settings editor (M6.6) with the versions of the app, the Claude
- * Code extension and what runs it, plus the latest release on GitHub. It is not a setting:
- * one block, with links and Copy Version Information. The latest release is asked for when
- * the section is first shown; main keeps a successful answer for an hour, and a failed one
- * can be retried by hand (GitHub is often unreachable). The statistics tab adds its entry
- * here later.
+ * About: a section of the settings editor (M6.6) with the app's and the Claude Code
+ * extension's versions, and whether GitHub has a newer release. It is not a setting: one
+ * block, the logo beside the versions, with links and Copy Version Information (which adds
+ * what the app runs on). The latest release is asked for when the section is first shown;
+ * main keeps a successful answer for an hour, and a failed one can be retried by hand
+ * (GitHub is often unreachable). The statistics tab adds its entry here later.
  */
 
 import type { ShellModule } from '../../core/module';
 import { INative, ISettings } from '../../core/serviceIds';
 import { isNewerVersion, RELEASES_URL, REPOSITORY_URL } from '../../platform/about';
 import { Emitter } from '../../platform/event';
+import { LOGO_CURSOR, LOGO_STROKES, LOGO_VIEW_BOX } from '../../platform/logoMark';
 import type { ExtensionStatus, RendererInitData } from '../../platform/protocol';
 import { t } from './messages';
 import { versionInfoText } from './versionInfo';
 
-type ReleaseState = { readonly kind: 'loading' } | { readonly kind: 'failed' } | { readonly kind: 'ready'; readonly version: string };
+type ReleaseState =
+  { readonly kind: 'loading' } | { readonly kind: 'failed' } | { readonly kind: 'ready'; readonly version: string; readonly url: string };
 
 interface AboutViewOptions {
   readonly copy: () => Promise<void>;
@@ -23,85 +25,106 @@ interface AboutViewOptions {
   readonly retry: () => void;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** The app's mark, as the title bar draws it (still: no activity here). */
+function logo(doc: Document): SVGSVGElement {
+  const svg = doc.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'about-logo');
+  svg.setAttribute('viewBox', LOGO_VIEW_BOX.join(' '));
+  svg.setAttribute('aria-hidden', 'true');
+  for (const points of [...LOGO_STROKES, LOGO_CURSOR]) {
+    const shape = doc.createElementNS(SVG_NS, 'polygon');
+    shape.setAttribute('points', points.join(' '));
+    svg.append(shape);
+  }
+  return svg;
+}
+
 class AboutView {
-  private readonly values: Record<'app' | 'extension' | 'electron' | 'chromium' | 'node', HTMLElement>;
+  private readonly appVersion: HTMLElement;
+  private readonly extension: HTMLElement;
   private readonly release: HTMLElement;
   private readonly releaseText: HTMLElement;
-  private readonly newer: HTMLElement;
+  private readonly newer: HTMLButtonElement;
   private readonly retry: HTMLButtonElement;
   private readonly status: HTMLElement;
   private copiedTimer: number | undefined;
+  /** The newer release's page, which its link opens. */
+  private newerUrl = RELEASES_URL;
 
   constructor(
     container: HTMLElement,
     private readonly options: AboutViewOptions,
   ) {
     const doc = container.ownerDocument;
+    const element = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, about?: string): HTMLElementTagNameMap[K] => {
+      const created = doc.createElement(tag);
+      created.className = className;
+      if (about) {
+        created.dataset.about = about;
+      }
+      return created;
+    };
     container.classList.add('about');
-    const versions = doc.createElement('div');
-    versions.className = 'about-versions';
-    const row = (key: string, label: string): HTMLElement => {
-      const labelElement = doc.createElement('span');
-      labelElement.className = 'about-label';
-      labelElement.textContent = label;
-      const value = doc.createElement('span');
-      value.className = 'about-value';
-      value.dataset.about = key;
-      versions.append(labelElement, value);
-      return value;
-    };
-    this.values = {
-      app: row('app', t('vilausity')),
-      extension: row('extension', t('extension')),
-      electron: row('electron', t('electron')),
-      chromium: row('chromium', t('chromium')),
-      node: row('node', t('node')),
-    };
 
-    this.release = row('release', t('latestRelease'));
-    this.release.classList.add('about-release');
-    this.releaseText = doc.createElement('span');
-    this.release.append(this.releaseText);
-    this.newer = doc.createElement('span');
-    this.newer.className = 'about-newer';
-    this.newer.textContent = t('newer');
-    this.newer.hidden = true;
-    this.retry = this.button(t('retry'), () => this.options.retry());
-    this.retry.dataset.about = 'retry';
-    this.retry.hidden = true;
-    this.release.append(this.newer, this.retry);
+    const name = element('div', 'about-name');
+    const product = element('span', 'about-product');
+    product.textContent = 'Vilausity';
+    this.appVersion = element('span', 'about-version', 'app');
+    name.append(product, this.appVersion);
+    this.extension = element('div', 'about-line', 'extension');
+    this.release = element('div', 'about-line', 'release');
+    this.releaseText = element('span', '');
+    this.newer = element('button', 'link-button', 'newer');
+    this.newer.addEventListener('click', () => this.options.openUrl(this.newerUrl));
+    this.retry = element('button', 'link-button about-retry', 'retry');
+    this.retry.textContent = t('retry');
+    this.retry.addEventListener('click', () => this.options.retry());
+    this.release.append(this.releaseText, this.newer, this.retry);
 
-    const actions = doc.createElement('div');
-    actions.className = 'about-actions';
-    const repository = this.button(t('repository'), () => this.options.openUrl(REPOSITORY_URL));
-    repository.dataset.about = 'repository';
-    const releases = this.button(t('releases'), () => this.options.openUrl(RELEASES_URL));
-    releases.dataset.about = 'releases';
-    const copy = this.button(t('copy'), () => {
-      void this.options.copy().then(
-        () => this.showCopied(),
-        () => undefined,
-      );
-    });
-    copy.dataset.about = 'copy';
-    this.status = doc.createElement('span');
-    this.status.className = 'about-status';
+    const actions = element('div', 'about-actions');
+    const button = (text: string, about: string, onClick: () => void): HTMLButtonElement => {
+      const created = element('button', 'button secondary', about);
+      created.textContent = text;
+      created.addEventListener('click', onClick);
+      return created;
+    };
+    this.status = element('span', 'about-status');
     this.status.setAttribute('role', 'status');
-    actions.append(repository, releases, copy, this.status);
-    container.append(versions, actions);
+    actions.append(
+      button(t('repository'), 'repository', () => this.options.openUrl(REPOSITORY_URL)),
+      button(t('releases'), 'releases', () => this.options.openUrl(RELEASES_URL)),
+      button(t('copy'), 'copy', () => {
+        void this.options.copy().then(
+          () => this.showCopied(),
+          () => undefined,
+        );
+      }),
+      this.status,
+    );
+
+    const text = element('div', 'about-text');
+    text.append(name, this.extension, this.release, actions);
+    container.append(logo(doc), text);
   }
 
   render(init: RendererInitData, extension: ExtensionStatus, release: ReleaseState): void {
-    this.values.app.textContent = init.appVersion;
-    this.values.extension.textContent = extension.running?.version ?? t('notInstalled');
-    this.values.electron.textContent = init.runtimeVersions.electron;
-    this.values.chromium.textContent = init.runtimeVersions.chromium;
-    this.values.node.textContent = init.runtimeVersions.node;
+    this.appVersion.textContent = init.appVersion;
+    const extensionVersion = extension.running?.version;
+    this.extension.textContent = extensionVersion === undefined ? t('noExtension') : t('extension', extensionVersion);
 
+    // A newer release is a link to its page; no update button, the user downloads it there.
+    const newer = release.kind === 'ready' && isNewerVersion(release.version, init.appVersion);
     this.release.dataset.state = release.kind;
     this.releaseText.textContent =
-      release.kind === 'loading' ? t('checking') : release.kind === 'failed' ? t('fetchFailed') : release.version;
-    this.newer.hidden = release.kind !== 'ready' || !isNewerVersion(release.version, init.appVersion);
+      release.kind === 'loading' ? t('checking') : release.kind === 'failed' ? t('fetchFailed') : newer ? '' : t('upToDate');
+    this.releaseText.hidden = newer;
+    this.newer.hidden = !newer;
+    if (release.kind === 'ready') {
+      this.newer.textContent = t('newer', release.version);
+      this.newerUrl = release.url;
+    }
     this.retry.hidden = release.kind !== 'failed';
   }
 
@@ -110,14 +133,6 @@ class AboutView {
       clearTimeout(this.copiedTimer);
       this.copiedTimer = undefined;
     }
-  }
-
-  private button(text: string, onClick: () => void): HTMLButtonElement {
-    const button = this.release.ownerDocument.createElement('button');
-    button.className = 'button secondary';
-    button.textContent = text;
-    button.addEventListener('click', onClick);
-    return button;
   }
 
   private showCopied(): void {
@@ -152,7 +167,7 @@ export const aboutModule: ShellModule = {
       }
       native.call('app.latestRelease', { force }).then(
         (result) => {
-          release = result.ok ? { kind: 'ready', version: result.release.version } : { kind: 'failed' };
+          release = result.ok ? { kind: 'ready', version: result.release.version, url: result.release.url } : { kind: 'failed' };
           changed.fire();
         },
         (error: unknown) => {
@@ -174,23 +189,7 @@ export const aboutModule: ShellModule = {
       native.call('os.openExternal', { url }).catch((error: unknown) => logger.warn('opening a link failed', error));
     };
     const copyText = (): string =>
-      versionInfoText(
-        {
-          app: init.appVersion,
-          extension: extensionStatus.running?.version,
-          electron: init.runtimeVersions.electron,
-          chromium: init.runtimeVersions.chromium,
-          node: init.runtimeVersions.node,
-        },
-        {
-          app: t('vilausity'),
-          extension: t('extension'),
-          electron: t('electron'),
-          chromium: t('chromium'),
-          node: t('node'),
-          notInstalled: t('notInstalled'),
-        },
-      );
+      versionInfoText({ app: init.appVersion, extension: extensionStatus.running?.version, ...init.runtimeVersions });
 
     subscriptions.add(
       settings.registerWidget({

@@ -5,6 +5,7 @@
  * which a window reaches through `WindowHost`.
  */
 
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { app, clipboard, dialog, MessageChannelMain, shell, type BrowserWindow, type WebContents } from 'electron';
 import { Disposable } from '../../platform/lifecycle';
@@ -316,6 +317,7 @@ export class WindowContext extends Disposable {
         electron: process.versions.electron ?? '',
         chromium: process.versions.chrome ?? '',
         node: process.versions.node,
+        os: `${os.type()} ${process.arch} ${os.release()}`,
       },
       language: this.host.language,
       providers: this.host.providersState(this.currentProvider),

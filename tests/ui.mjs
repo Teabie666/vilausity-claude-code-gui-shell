@@ -1507,15 +1507,15 @@ await step('About shows the versions and the latest release from GitHub (a local
       throw new Error(`Vilausity reads "${await value('app').innerText()}", not ${appVersion}`);
     }
     const extensionVersion = (await value('extension').innerText()).trim();
-    if (!/^\d+\.\d+\.\d+/.test(extensionVersion)) throw new Error(`the extension version reads "${extensionVersion}"`);
-    for (const name of ['electron', 'chromium', 'node']) {
-      const text = (await value(name).innerText()).trim();
-      if (!/^\d+\.\d+/.test(text)) throw new Error(`${name} reads "${text}"`);
-    }
+    if (!/^Claude Code extension \d+\.\d+\.\d+/.test(extensionVersion))
+      throw new Error(`the extension version reads "${extensionVersion}"`);
+    // What the app runs on is only in the copied text.
+    const shown = await widget.innerText();
+    if (/Electron|Chromium|Node/.test(shown)) throw new Error(`the section shows the runtime: ${shown}`);
 
     // The stand-in said no: the section says so and offers Retry.
     await waitFor(async () => (await release.getAttribute('data-state')) === 'failed', 10_000, 'the failed latest release');
-    if (!(await release.innerText()).includes('Could not fetch the latest release.')) {
+    if (!(await release.innerText()).includes('Could not check for a newer version')) {
       throw new Error(`the failure reads "${await release.innerText()}"`);
     }
     if (!(await value('retry').isVisible())) throw new Error('Retry is hidden after a failure');
@@ -1525,13 +1525,14 @@ await step('About shows the versions and the latest release from GitHub (a local
     await waitFor(async () => (await release.getAttribute('data-state')) === 'ready', 10_000, 'the latest release after Retry');
     const ready = await release.innerText();
     if (!ready.includes('0.9.5-beta.1')) throw new Error(`the latest release reads "${ready}"`);
-    if (!ready.includes('A newer version is available')) throw new Error(`no newer-version note in "${ready}"`);
+    if (!ready.includes('A newer version is available: 0.9.5-beta.1')) throw new Error(`no newer-version note in "${ready}"`);
 
+    await value('newer').click();
     await value('repository').click();
     await value('releases').click();
     await value('copy').click();
     await waitFor(
-      async () => (await app.evaluate(() => globalThis.vilausAboutDone?.length ?? 0)) >= 3,
+      async () => (await app.evaluate(() => globalThis.vilausAboutDone?.length ?? 0)) >= 4,
       5000,
       'the links and the copied text',
     );
@@ -1539,8 +1540,9 @@ await step('About shows the versions and the latest release from GitHub (a local
     const repository = 'https://github.com/Teabie666/vilausity-claude-code-gui-shell';
     if (!done.includes(`open ${repository}`)) throw new Error(`GitHub Repository opened ${JSON.stringify(done)}`);
     if (!done.includes(`open ${repository}/releases`)) throw new Error(`Releases opened ${JSON.stringify(done)}`);
+    if (!done.includes('open https://example.invalid/0.9.5-beta.1')) throw new Error(`the newer release opened ${JSON.stringify(done)}`);
     const copied = done.find((entry) => entry.startsWith('copy ')) ?? '';
-    for (const expected of [`Vilausity ${appVersion}`, 'Claude Code extension ', 'Electron ', 'Chromium ', 'Node.js ']) {
+    for (const expected of [`Vilausity: ${appVersion}`, 'Claude Code extension: ', 'Electron: ', 'Chromium: ', 'Node.js: ', 'OS: ']) {
       if (!copied.includes(expected)) throw new Error(`the copied text lacks "${expected}": ${copied}`);
     }
     if (releasesRequests.length === 0) throw new Error('the local GitHub stand-in was never asked');

@@ -1100,48 +1100,52 @@ body.resizing {
   color: var(--vscode-descriptionForeground);
 }
 
-/* The About section (features/about): versions, links and the latest release. */
+/* The About section (features/about): the logo beside the versions, the latest release
+   and the links. */
 .about {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 10px 12px;
 }
 
-.about-versions {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  /* Retry is taller than a line: the label stays level with "Could not fetch". */
-  align-items: baseline;
-  column-gap: 16px;
-  row-gap: 2px;
-  line-height: 22px;
+.about-logo {
+  flex: none;
+  height: 36px;
+  width: auto;
+  margin-top: 6px;
+  fill: var(--vilaus-logo, #ff7b1c);
+}
+
+.about-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 20px;
   user-select: text;
 }
 
-.about-label {
-  color: var(--vscode-descriptionForeground);
-}
-
-.about-value {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.about-release {
+.about-name {
   display: flex;
-  flex-wrap: wrap;
   align-items: baseline;
-  gap: 2px 8px;
+  gap: 6px;
 }
 
-.about-newer {
-  font-size: 0.9em;
+.about-product {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.about-line {
   color: var(--vscode-descriptionForeground);
 }
 
-.about-newer[hidden],
-.about-release .button[hidden] {
-  display: none;
+.about-line .link-button {
+  font: inherit;
+}
+
+.about-line .about-retry {
+  margin-left: 8px;
 }
 
 .about-actions {
@@ -1149,6 +1153,7 @@ body.resizing {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  margin-top: 10px;
 }
 
 .about-status {
