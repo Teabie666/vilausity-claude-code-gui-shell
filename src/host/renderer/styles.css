@@ -1110,6 +1110,8 @@ body.resizing {
 .about-versions {
   display: grid;
   grid-template-columns: max-content 1fr;
+  /* Retry is taller than a line: the label stays level with "Could not fetch". */
+  align-items: baseline;
   column-gap: 16px;
   row-gap: 2px;
   line-height: 22px;
