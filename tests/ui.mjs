@@ -8,7 +8,7 @@ import electronPath from 'electron';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer, request as httpRequest } from 'node:http';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -1095,24 +1095,33 @@ await step('the title bar button toggles the empty content pane', async () => {
 const readSettings = () => JSON.parse(readFileSync(settingsFile, 'utf8'));
 const settingRow = (key) => page.locator(`.settings-dialog .setting-item[data-key="${key}"]`);
 
-await step("Keep Forever sets Claude Code's cleanupPeriodDays when it is not set; turned off, it takes it out", async () => {
-  // This instance's Claude Code folder is its sessions folder's parent (VILAUS_SESSIONS_DIR).
-  const claudeSettings = path.join(path.dirname(sessionsDir), 'settings.json');
-  const period = () => (existsSync(claudeSettings) ? JSON.parse(readFileSync(claudeSettings, 'utf8')).cleanupPeriodDays : undefined);
-  await waitFor(() => period() === 36500, 10_000, 'the period set at the start');
-  writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.sessions.keepForever': false }, null, 2), 'utf8');
-  await waitFor(() => period() === undefined, 10_000, 'the period taken out');
-  const { 'vilaus.sessions.keepForever': _keep, ...rest } = readSettings();
-  writeFileSync(settingsFile, JSON.stringify(rest, null, 2), 'utf8');
-  await waitFor(() => period() === 36500, 10_000, 'the period set again');
-  // A period of the user's own stays.
-  writeFileSync(claudeSettings, JSON.stringify({ cleanupPeriodDays: 90 }), 'utf8');
-  writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.sessions.keepForever': false }, null, 2), 'utf8');
-  await page.waitForTimeout(1000);
-  if (period() !== 90) throw new Error(`the user's own period: ${period()}`);
-  writeFileSync(settingsFile, JSON.stringify(rest, null, 2), 'utf8');
-  return 'set at the start, taken out when off, set again when on; a value of the user left alone';
-});
+await step(
+  "Delete Conversations After sets Claude Code's cleanupPeriodDays (never: 36500 days); a value of the user's own stays",
+  async () => {
+    // This instance's Claude Code folder is its sessions folder's parent (VILAUS_SESSIONS_DIR).
+    const claudeSettings = path.join(path.dirname(sessionsDir), 'settings.json');
+    const period = () => (existsSync(claudeSettings) ? JSON.parse(readFileSync(claudeSettings, 'utf8')).cleanupPeriodDays : undefined);
+    await waitFor(() => period() === 36500, 10_000, 'the period set at the start');
+    writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.sessions.deleteAfterDays': 90 }, null, 2), 'utf8');
+    await waitFor(() => period() === 90, 10_000, 'the period of 90 days');
+    const { 'vilaus.sessions.deleteAfterDays': _days, ...rest } = readSettings();
+    writeFileSync(settingsFile, JSON.stringify(rest, null, 2), 'utf8');
+    await waitFor(() => period() === 36500, 10_000, 'the period set back to never');
+    // A period of the user's own stays, and the settings say so.
+    writeFileSync(claudeSettings, JSON.stringify({ cleanupPeriodDays: 45 }), 'utf8');
+    writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), 'vilaus.sessions.deleteAfterDays': 30 }, null, 2), 'utf8');
+    await page.waitForTimeout(1000);
+    if (period() !== 45) throw new Error(`the user's own period: ${period()}`);
+    await press('Control+,');
+    await page.locator('.settings-dialog .settings-search').fill('cleanupPeriodDays');
+    const own = page.locator('.settings-dialog .settings-widget[data-widget="sessionManagement.info"] [data-part="own"]');
+    await waitFor(async () => (await own.isVisible()) && (await own.innerText()).includes('45 days'), 10_000, 'the word of the own period');
+    await press('Escape');
+    writeFileSync(settingsFile, JSON.stringify(rest, null, 2), 'utf8');
+    writeFileSync(claudeSettings, JSON.stringify({ cleanupPeriodDays: 36500 }), 'utf8');
+    return 'never at the start, 90 days, never again; a period of the user left alone and shown';
+  },
+);
 
 await step('Ctrl+, opens the settings panel; Editor: Font Size applies to the editor and resets', async () => {
   await press('Control+,');
@@ -3987,6 +3996,127 @@ await step(
       const tab = await otherPage.locator('#content-pane .content-tab.active .tab-label').innerText();
       if (!tab.includes('Very long session.md')) throw new Error(`the tab: ${tab}`);
       return `${JSON.stringify(transcript)}`;
+    } finally {
+      await other.close();
+    }
+  },
+);
+
+await step(
+  'session management: the list hides the conversations older than it shows; Delete Archived Conversations deletes the archived ones of the folder',
+  async () => {
+    const own = path.join(runDir, 'session-management');
+    const ownData = path.join(own, 'data');
+    const ownWorkspace = path.join(own, 'workspace');
+    const claudeDir = path.join(own, 'claude');
+    const project = path.join(claudeDir, 'projects', ownWorkspace.replace(/[^a-zA-Z0-9]/g, '-'));
+    for (const folder of [ownData, ownWorkspace, project]) mkdirSync(folder, { recursive: true });
+    // Last active today, 40 and 100 days ago (the transcripts' times, as the list has them).
+    const sessions = {
+      Fresh: { id: 'f1f1f1f1-0000-4000-8000-000000000001', daysAgo: 0 },
+      Month: { id: 'f2f2f2f2-0000-4000-8000-000000000002', daysAgo: 40 },
+      Ancient: { id: 'f3f3f3f3-0000-4000-8000-000000000003', daysAgo: 100 },
+    };
+    const transcriptOf = (name) => path.join(project, `${sessions[name].id}.jsonl`);
+    for (const [name, { id, daysAgo }] of Object.entries(sessions)) {
+      const when = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
+      const common = { sessionId: id, cwd: ownWorkspace, timestamp: when.toISOString() };
+      const lines = [
+        { ...common, type: 'user', uuid: `${name}-u`, parentUuid: null, message: { role: 'user', content: `${name} question` } },
+        {
+          ...common,
+          type: 'assistant',
+          uuid: `${name}-a`,
+          parentUuid: `${name}-u`,
+          message: { role: 'assistant', content: [{ type: 'text', text: `${name} answer` }] },
+        },
+        { type: 'ai-title', aiTitle: `${name} session`, sessionId: id },
+      ];
+      writeFileSync(transcriptOf(name), lines.map((line) => `${JSON.stringify(line)}\n`).join(''), 'utf8');
+      utimesSync(transcriptOf(name), when, when);
+    }
+    const ownSettings = path.join(ownData, 'settings.json');
+    const baseSettings = {
+      'claudeCode.hideOnboarding': true,
+      'claudeCode.disableLoginPrompt': true,
+      'claudeCode.archiveInactiveSessions': 0,
+      'vilaus.language': 'en',
+      'vilaus.extension.autoUpdate': false,
+    };
+    writeFileSync(ownSettings, JSON.stringify(baseSettings), 'utf8');
+    const other = await electron.launch({
+      executablePath: executable,
+      args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'),
+      cwd: root,
+      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      timeout: 60_000,
+    });
+    try {
+      const otherPage = await other.firstWindow();
+      const row = (name) => `[id="sessions-list-row-${sessions[name].id}"]`;
+      const list = await waitFor(
+        async () => {
+          for (const frame of otherPage.frames()) {
+            if (
+              frame.url().startsWith('ccw://wv') &&
+              (await frame
+                .locator(row('Ancient'))
+                .count()
+                .catch(() => 0)) === 1
+            )
+              return frame;
+          }
+          return undefined;
+        },
+        30_000,
+        'the sessions in the list',
+      );
+      const hidden = async () => {
+        const names = [];
+        for (const name of Object.keys(sessions)) {
+          if (await list.locator(row(name)).evaluate((element) => element.hasAttribute('data-vilaus-old-session'))) names.push(name);
+        }
+        return names.join(',');
+      };
+      const showWithin = async (days, expected) => {
+        writeFileSync(
+          ownSettings,
+          JSON.stringify({ ...baseSettings, ...(days ? { 'vilaus.sessions.showWithinDays': days } : {}) }),
+          'utf8',
+        );
+        await waitFor(async () => (await hidden()) === expected, 10_000, `hidden within ${days} days: "${expected}"`);
+      };
+      if ((await hidden()) !== '') throw new Error(`hidden at the start: ${await hidden()}`);
+      await showWithin(30, 'Month,Ancient');
+      if (await list.locator(row('Ancient')).isVisible()) throw new Error('a hidden row shows');
+      await showWithin(90, 'Ancient');
+      await showWithin(0, '');
+
+      // Two archived from their rows, then all the archived ones deleted from the settings.
+      for (const name of ['Month', 'Ancient']) {
+        await list.locator(row(name)).hover();
+        await list.locator(`${row(name)} [title="Archive session"]`).click();
+        await otherPage.waitForTimeout(500);
+      }
+      await other.evaluate(({ BrowserWindow }) => {
+        const contents = BrowserWindow.getAllWindows()[0].webContents;
+        contents.sendInputEvent({ type: 'keyDown', keyCode: ',', modifiers: ['control'] });
+        contents.sendInputEvent({ type: 'keyUp', keyCode: ',', modifiers: ['control'] });
+      });
+      await otherPage.locator('.settings-dialog .settings-search').fill('Session Management');
+      const widget = otherPage.locator('.settings-dialog .settings-widget[data-widget="sessionManagement.info"]');
+      const storage = widget.locator('[data-part="storage"]');
+      await waitFor(async () => (await storage.innerText()).includes(': 3 ·'), 10_000, 'three transcripts counted');
+      await widget.locator('.button', { hasText: 'Delete Archived Conversations' }).click();
+      const modal = otherPage.locator('.overlay-box.modal');
+      await modal.waitFor({ timeout: 5000 });
+      if (!(await modal.innerText()).includes('Delete the 2 archived conversations'))
+        throw new Error(`the question: ${await modal.innerText()}`);
+      await modal.locator('.button', { hasText: 'Delete' }).click();
+      await waitFor(() => !existsSync(transcriptOf('Month')) && !existsSync(transcriptOf('Ancient')), 15_000, 'the archived ones gone');
+      if (!existsSync(transcriptOf('Fresh'))) throw new Error('a conversation not archived was deleted');
+      await waitFor(async () => (await storage.innerText()).includes(': 1 ·'), 10_000, 'one transcript counted');
+      return await storage.innerText();
     } finally {
       await other.close();
     }

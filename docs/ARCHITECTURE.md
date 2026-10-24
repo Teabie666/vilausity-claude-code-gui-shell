@@ -190,7 +190,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **开着的先关**：确认后插件进程关掉显示这个会话的标签页（`sessions.close`，按页面状态里的会话 id 找面板，跟用户点关闭一样 dispose），插件随之结束它的 claude 进程，但进程要过一会儿才退出。Claude Code 运行时在 `sessions/<pid>.json` 里登记（`{pid, sessionId, ...}`），退出时先删登记、再往会话记录里写最后几行（`atis-latch`、`cost-state`，2.1.296 实测），只看登记的话会在这两步之间删掉文件，它又被写回来。所以 `sessions.close` 关之前先按登记记下这个会话的进程号，关完等这些进程真的退出（`host/node/claudeProcesses.ts` 的 `waitForExit`，最多 10 秒）才返回；Claude Code 的目录由主进程放进插件进程的初始化数据（`paths.claudeConfig`）。主进程删之前再等一次没有活着的进程登记这个会话（`sessionFiles.ts` 的 `waitForSessionEnd`，最多 10 秒，管的是别的进程）；等不到就不删，提示在别处使用。
 - **删什么**：主进程 `sessions.delete`（`host/main/sessionFiles.ts`）。会话 id 必须是 UUID 才会拼进路径。删 Claude Code 存的这几处：`projects/<文件夹>/<id>.jsonl` 和同名目录、`file-history/<id>`、`session-env/<id>`；输入历史 `history.jsonl` 不动（CLI 一直在往里追加）。不进回收站，确认框写明删了就找不回。目录跟搜索一样按主进程的 `CLAUDE_CONFIG_DIR` 找；某个 API 接口在自己的环境变量里改了 `CLAUDE_CONFIG_DIR` 的话，那个目录里的会话找不到（提示"找不到"）。
 - **删完**：主进程通知每个窗口的插件进程，bridge 给插件页面发插件自己的 `session_store_changed` 请求（插件在 Claude Code 目录换了时也发这个），页面重新读会话列表。
-- **Claude Code 自己的清理**：Claude Code 每次启动（不管是 Vilausity、命令行还是 VS Code 起的）都会删掉闲置超过 `cleanupPeriodDays` 的会话记录，没设时是 30 天（2.1.296 实测：0 不收，最小 1，要长期保留就设个大数）。设置 `vilaus.sessions.keepForever`（默认开）：主进程启动时、设置变了时看 Claude Code 的用户设置 `<Claude Code 目录>\settings.json`，没设这一项就写成 36500 天（`host/main/claudeRetention.ts`，用 jsonc-parser 改，别的内容和注释不动；文件不是 JSON 对象时不碰，Claude Code 自己也会报错、不清理）；关掉时，值是 36500 才去掉。用户自己设的别的值不动。改的是全局的 Claude Code 设置，命令行和 VS Code 也跟着不删。插件另有一个"闲置 14 天自动归档"（`claudeCode.archiveInactiveSessions`），只是从列表里收起来、不删，没改它。
+- **Claude Code 自己的清理**：Claude Code 每次启动（不管是 Vilausity、命令行还是 VS Code 起的）都会删掉闲置超过 `cleanupPeriodDays` 的会话记录，没设时是 30 天（2.1.296 实测：0 不收，最小 1，要长期保留就设个大数）。Vilausity 怎么设它见下一节"会话管理"。
 
 ## API 接口（M4）
 
@@ -340,6 +340,16 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
   - 写法上的坑：electron-builder 把这个文件插在它的脚本最前面，那时还没有 MUI2、语言和 `common.nsh` 的宏（`APP_EXECUTABLE_FILENAME`），所以文案用语言号（1033、2052），用到它们的函数写在之后才展开的宏里（`customPageAfterChangeDir`、`customHeader`）；安装程序和卸载程序分两遍编译（`BUILD_UNINSTALLER`），只在一边用的变量和函数要放进对应的 `!ifdef`，否则 makensis 的警告会被当成错误。
 - **测试安装包**：`node tests/installer.mjs`（当前用户，装进 `.test-data` 下带空格和括号的文件夹）、`node tests/installer.mjs --all-users`（要在提升过的 shell 里，装进 Program Files）：静默安装 → 检查文件（没有 `default_app.asar`、`elevate.exe`）、卸载信息、快捷方式、`vilaus://`、右键菜单 → 启动装好的程序（提升过的 shell 里是管理员实例；所有用户模式再用 `runas /trustlevel:0x20000` 以普通令牌启动一次）→ 静默卸载 → 检查只剩数据目录。两轮：原来有右键菜单（装好后指向新装的 exe，卸载时删掉）、原来没有（不加；之后冒出别处的菜单项，卸载时不动）。它会真的写快捷方式和注册表，所以已经装了 Vilausity 时拒绝运行，跑完把右键菜单和 `vilaus` 键恢复原样。安装和卸载的图形界面（各页、复选框、完成页）用屏幕工具点过一遍，没有自动测试；提权那一步（UAC）也没有。
 
+## 会话管理（M6.6）
+
+设置里的一节（`features/sessionManagement`）：多久删掉闲置的对话、插件的自动归档、会话列表显示多久以内的对话，上面一个小块：对话记录占多少地方、打开所在文件夹、删除已归档的对话。
+
+- **自动删除**（`vilaus.sessions.deleteAfterDays`：永不（默认）/ 30 / 60 / 90 / 180 / 365 天）：主进程启动时、设置变了时、打开这一节时，把它写进 Claude Code 的用户设置 `<Claude Code 目录>\settings.json` 的 `cleanupPeriodDays`，永不写成 36500 天（`host/main/claudeRetention.ts`，用 jsonc-parser 改，别的内容和注释不动；文件不是 JSON 对象时不碰，Claude Code 自己也会报错、不清理）。改的是全局的 Claude Code 设置，命令行和 VS Code 也照这个删。别处设的值不动：Vilausity 记着自己上次写的值（`state\claude-retention.json`，两种实例共用；没有记录时 36500 算自己的，那是以前的"永久保留"开关写的），文件里是别的值就保留，这一节的小块写明"Claude Code 自己设了 N 天，下面的设置不会改它"，带打开那个文件的链接。以前的 `vilaus.sessions.keepForever` 启动时迁移：关着的变成 30 天（当时就是去掉值、用 Claude Code 默认的 30 天），然后删掉旧键。
+- **自动归档**：插件自己的设置 `claudeCode.archiveInactiveSessions`，键不变，只是在设置里挪到这一节显示（`features/settings/extensionSettings.ts` 的 `MOVED`）。
+- **显示范围**（`vilaus.sessions.showWithinDays`：全部（默认）/ 7 / 30 / 90 / 180 / 365 天）：bridge 旁听插件给会话列表的会话（`list_sessions_response`，每个有 `lastModified`、`archived`），把超过这个天数没活动、又没在本窗口打开的会话 id 发给列表页（控制消息 `oldSessions`）；页面脚本（`host/webview/oldSessions.ts`）给这些行打 `data-vilaus-old-session`，bridge 的样式藏起来，跟"只看当前接口"一样。只是藏，搜索（Ctrl+P）照样搜得到；从搜索打开的旧对话开着时会出现在列表里。天数由渲染进程在插件进程连上时、设置变了时告诉 exthost（`sessions.showWithin`）。
+- **存储占用**：会话 worker 数 `projects` 下的会话记录、算整个目录的大小（含子代理、工具输出，`host/main/sessionStorage.ts`），打开这一节时算一次。
+- **删除已归档的对话**：只删这个窗口文件夹里的（会话列表里那些），名单是 bridge 记下的列表里 `archived` 的会话。插件归档时只通知"别的"列表页（`session_archive_changed`），发起归档的那页自己改、不再要列表，所以 bridge 也看页面发出去的 `archive_session` / `unarchive_session(s)` 请求（对照 2.1.310）。确认后逐个照删除会话的流程：别处在用的跳过，本窗口开着的先关，再由主进程删；最后说删了几个、留了几个。
+
 ## 加功能该改哪里
 
 - 插件调用了我们没实现的 VS Code API：在 `src/compat/vscode/` 对应的命名空间文件里实现。没实现的 API 会先返回一个会记日志的空桩，不会崩。插件执行的 VS Code 内置命令（`workbench.action.*` 这类）在 `src/host/exthost/workbenchCommands.ts`。
@@ -360,6 +370,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 | `keybindings.json` | 用户的快捷键（JSONC，VS Code 的格式） | main |
 | `state\global.json`、`state\workspaces\<hash>.json` | 插件的 globalState / workspaceState | main |
 | `state\shell.json` | 窗口位置、要恢复的窗口、缩放级别 | main |
+| `state\claude-retention.json` | Vilausity 上次写进 Claude Code `cleanupPeriodDays` 的天数（两种实例共用） | main（两种实例） |
 | `state\recent-folders.json` | 最近打开的文件夹（普通实例和管理员实例共用） | main（两种实例） |
 | `globalStorage\`、`workspaceStorage\` | 插件自己的存储目录 | 插件 |
 | `logs\<启动时间>\` | 本次启动的日志，保留最近 10 次：`main.log`，每个窗口一个 `window<N>\`（exthost.log、shim-unimplemented.log、output\） | main / extension host |

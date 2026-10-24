@@ -33,6 +33,7 @@ import {
   type ProvidersState,
   type StartupNotices,
   type ProviderNoticeDto,
+  type RetentionDto,
   type SessionProvidersDto,
   type ThemeData,
   type ConversationStateDto,
@@ -42,7 +43,7 @@ import {
 } from '../../platform/protocol';
 import { RELEASES_API_URL } from '../../platform/about';
 import { ACCENT_COLOR_SETTING, ACCENT_SETTING, ACCENT_SOURCES, logoColor, parseColor, withAccent } from '../../platform/accent';
-import { KEEP_SESSIONS_DEFAULT, KEEP_SESSIONS_SETTING } from '../../platform/defaults';
+import { DELETE_SESSIONS_SETTING, LEGACY_KEEP_SESSIONS_SETTING } from '../../platform/defaults';
 import { LOGO_COLOR } from '../../platform/logoMark';
 import { URI_SCHEME } from '../../platform/product';
 import {
@@ -74,7 +75,7 @@ import { t } from './messages';
 import { ProviderStore, type SecretCipher } from './providerStore';
 import { ReleaseChecker } from './releaseChecker';
 import { deleteSession, waitForSessionEnd } from './sessionFiles';
-import { applyRetention, KEEP_FOREVER_DAYS } from './claudeRetention';
+import { applyRetention } from './claudeRetention';
 import { SessionTagWriter } from './sessionProviders';
 import { scopeValue, usageTotal, usageView } from './usageView';
 import { claudeProjectsDir, SessionSearch } from './sessionSearch';
@@ -396,7 +397,7 @@ export class ShellApp extends Disposable implements WindowHost {
     }
     await this.applyCommandLine(args, true);
     this.scheduleUpdateChecks();
-    this.keepSessions();
+    void this.migrateKeepForever().then(() => this.keepSessions());
     this.localApi.registerOperations(builtInOperations(this.apiHost()));
     this.register(this.localApi.onDidChangeStatus((status) => this.broadcast('apiStatus', status)));
     void this.localApi.apply();
@@ -1006,8 +1007,8 @@ export class ShellApp extends Disposable implements WindowHost {
     if (keys.some((key) => UPDATE_SETTING_KEYS.includes(key))) {
       this.checkForUpdatesAutomatically();
     }
-    if (keys.includes(KEEP_SESSIONS_SETTING)) {
-      this.keepSessions();
+    if (keys.includes(DELETE_SESSIONS_SETTING)) {
+      void this.keepSessions();
     }
     if (keys.includes(API_ENABLED_SETTING) || keys.includes(API_PORT_SETTING)) {
       void this.localApi.apply();
@@ -1034,20 +1035,36 @@ export class ShellApp extends Disposable implements WindowHost {
     };
   }
 
-  /** Claude Code's `cleanupPeriodDays` as `vilaus.sessions.keepForever` wants it (claudeRetention.ts). */
-  private keepSessions(): void {
-    const value = this.settings.all[KEEP_SESSIONS_SETTING];
-    const keep = typeof value === 'boolean' ? value : KEEP_SESSIONS_DEFAULT;
-    applyRetention(this.claudeConfigDir, keep).then(
-      (changed) => {
-        if (changed) {
-          this.logger.info(
-            `Claude Code's cleanupPeriodDays ${changed === 'set' ? `set to ${KEEP_FOREVER_DAYS} days` : 'removed'} (${KEEP_SESSIONS_SETTING})`,
-          );
-        }
-      },
-      (error: unknown) => this.logger.warn("cannot set Claude Code's cleanupPeriodDays", error),
-    );
+  /**
+   * `vilaus.sessions.keepForever` came before `deleteAfterDays`: on (the default) was never,
+   * off left Claude Code's own 30 days.
+   */
+  private async migrateKeepForever(): Promise<void> {
+    const legacy = this.settings.all[LEGACY_KEEP_SESSIONS_SETTING];
+    if (legacy === undefined) {
+      return;
+    }
+    if (legacy === false && this.settings.all[DELETE_SESSIONS_SETTING] === undefined) {
+      await this.settings.set(DELETE_SESSIONS_SETTING, 30);
+    }
+    await this.settings.set(LEGACY_KEEP_SESSIONS_SETTING, undefined);
+  }
+
+  /** Claude Code's `cleanupPeriodDays` as `vilaus.sessions.deleteAfterDays` wants it (claudeRetention.ts). */
+  private async keepSessions(): Promise<RetentionDto> {
+    const value = this.settings.all[DELETE_SESSIONS_SETTING];
+    const days = typeof value === 'number' && value > 0 ? value : 0;
+    const file = path.join(this.claudeConfigDir, 'settings.json');
+    try {
+      const state = await applyRetention(this.claudeConfigDir, days, this.env.paths.claudeRetentionFile);
+      if (state.wrote !== undefined) {
+        this.logger.info(`Claude Code's cleanupPeriodDays set to ${state.wrote} days (${DELETE_SESSIONS_SETTING})`);
+      }
+      return { days: state.days ?? null, ownValue: state.ownValue, file };
+    } catch (error) {
+      this.logger.warn("cannot set Claude Code's cleanupPeriodDays", error);
+      return { days: null, ownValue: false, file };
+    }
   }
 
   /** Shortly after the start, then twice a day (and when the update settings change). */
@@ -1203,6 +1220,8 @@ export class ShellApp extends Disposable implements WindowHost {
         const request = { sessionId: id, outDir: this.env.paths.transcriptsDir, labels: transcriptLabels() };
         return (await this.sessionSearch.fullTranscript(request)) ?? null;
       },
+      'sessions.retention': () => this.keepSessions(),
+      'sessions.storage': () => this.sessionSearch.storage(),
       'window.shownFolders': () => this.windows.map((window) => window.folder),
       'window.close': (_params, window) => this.requestClose(window),
       'window.openFolderAsAdministrator': ({ folder }) => this.startAdministratorInstance(folder),

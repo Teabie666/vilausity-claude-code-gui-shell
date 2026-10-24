@@ -560,6 +560,7 @@ const SESSION_LIST_STYLES = `
 .vilaus-provider-mark { flex: none; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; }
 .sessionItem_OOQiHg > .vilaus-provider-mark { align-self: center; }
 [data-vilaus-other-provider] { display: none !important; }
+[data-vilaus-old-session] { display: none !important; }
 .vilaus-provider-filter { flex: none; justify-content: center; width: 24px; padding: 0; }
 .vilaus-provider-filter > .vilaus-provider-mark { width: 10px; height: 10px; margin: 0; }
 .vilaus-provider-filter[aria-pressed="true"] {
@@ -798,6 +799,10 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
   private readonly previews = new Map<string, string>();
   /** The session list's pages, and the session states they were last sent (every session open in it). */
   private readonly listPages = new Map<WebviewImpl, Record<string, unknown>>();
+  /** The sessions the session list was last given, when each was last active and whether it is archived. */
+  private listedSessions: readonly ListedSession[] = [];
+  /** The session lists show only the sessions active within this many days (0: all). */
+  private shownWithinDays = 0;
   /** What the bridge itself posts to pages, which it does not look at again. */
   private readonly ownPosts = new WeakSet<object>();
   /** The conversations at work and waiting, as last reported. */
@@ -863,6 +868,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     if (!isWebviewRequest(message)) {
       return false;
     }
+    this.noteArchiving(message.request);
     switch (message.request.type) {
       case 'open_diff':
         return this.holdDiff(webview, message);
@@ -1005,11 +1011,22 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
       this.observeOutput(webview, inner);
       return undefined;
     }
+    const listed = isRecord(inner) && inner.type === 'response' ? listedSessionsOf(inner.response) : undefined;
+    if (listed) {
+      this.listedSessions = listed;
+      this.postOldSessions([webview, ...this.listPages.keys()]);
+    }
     // The session list's open is answered: panels from now on are not its.
     if (isRecord(inner) && inner.type === 'response' && this.listOpen && inner.requestId === this.listOpen.requestId) {
       this.listOpen = undefined;
     }
     const request = isRecord(inner) && inner.type === 'request' && isRecord(inner.request) ? inner.request : undefined;
+    // A session (un)archived from another list, or by the extension itself (2.1.310:
+    // `{type: 'session_archive_changed', sessionId, archived}`).
+    if (request?.type === 'session_archive_changed' && typeof request.sessionId === 'string') {
+      this.setArchived([request.sessionId], request.archived === true);
+      return undefined;
+    }
     if (request?.type !== 'session_states_update') {
       return undefined;
     }
@@ -1018,7 +1035,13 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
       this.logger.info(`session_states_update shape: ${describeShape(request)}`);
     }
     if (Array.isArray(request.openSessionIds)) {
-      this.openSessions = new Set(request.openSessionIds.flatMap(sessionIdOf));
+      const open = new Set(request.openSessionIds.flatMap(sessionIdOf));
+      const changed = open.size !== this.openSessions.size || [...open].some((id) => !this.openSessions.has(id));
+      this.openSessions = open;
+      if (changed) {
+        // An old session opened from the search shows in the list while it is open.
+        this.postOldSessions(this.listPages.keys());
+      }
     }
     if (Array.isArray(request.liveElsewhereSessions)) {
       this.elsewhereSessions = new Set(request.liveElsewhereSessions.flatMap(sessionIdOf));
@@ -1248,6 +1271,55 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     return kept.length === open.length ? (open as unknown[]) : kept;
   }
 
+  /** The session lists show only the sessions active in the last `days` days (0: all). */
+  setShownWithin(days: number): void {
+    this.shownWithinDays = days;
+    this.postOldSessions(this.listPages.keys());
+  }
+
+  /**
+   * A session list (un)archives sessions (anthropic.claude-code 2.1.310: `{type: 'request',
+   * request: {type: 'archive_session' | 'unarchive_session', sessionId}}`, or `unarchive_sessions`
+   * with `sessionIds`). The extension tells the other lists, not the one that asked, and none
+   * asks for its sessions again: what the lists were given is kept up to date here.
+   */
+  private noteArchiving(request: Record<string, unknown>): void {
+    if ((request.type === 'archive_session' || request.type === 'unarchive_session') && typeof request.sessionId === 'string') {
+      this.setArchived([request.sessionId], request.type === 'archive_session');
+    } else if (request.type === 'unarchive_sessions' && Array.isArray(request.sessionIds)) {
+      this.setArchived(
+        request.sessionIds.filter((id): id is string => typeof id === 'string'),
+        false,
+      );
+    }
+  }
+
+  private setArchived(ids: readonly string[], archived: boolean): void {
+    const changed = new Set(ids);
+    this.listedSessions = this.listedSessions.map((session) => (changed.has(session.id) ? { ...session, archived } : session));
+  }
+
+  archivedSessions(): string[] {
+    return this.listedSessions.filter((session) => session.archived).map((session) => session.id);
+  }
+
+  /** To session lists: the sessions not active within the days shown, unless open here. */
+  private postOldSessions(pages: Iterable<WebviewImpl>): void {
+    const since = Date.now() - this.shownWithinDays * DAY_MS;
+    const ids =
+      this.shownWithinDays > 0
+        ? this.listedSessions
+            .filter((session) => session.lastActive < since && !this.openSessions.has(session.id))
+            .map((session) => session.id)
+        : [];
+    const control: ShellToWebviewControl = { ccwControl: 'oldSessions', ids };
+    for (const page of new Set(pages)) {
+      if (page.viewType === SESSION_LIST_VIEW_TYPE) {
+        void page.postMessage(control);
+      }
+    }
+  }
+
   sessionBusy(sessionId: string): SessionBusy | undefined {
     return this.openSessions.has(sessionId) ? 'open' : this.elsewhereSessions.has(sessionId) ? 'elsewhere' : undefined;
   }
@@ -1403,6 +1475,36 @@ export function conversationStates(sessions: readonly unknown[]): ConversationSt
 }
 
 /** A session in the extension's lists: its id, or a record with a `sessionId`. */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+interface ListedSession {
+  readonly id: string;
+  /** When it was last active (epoch ms). */
+  readonly lastActive: number;
+  readonly archived: boolean;
+}
+
+/**
+ * The sessions a session list is given (anthropic.claude-code 2.1.310: the response to its
+ * `list_sessions_request`, `{type: 'list_sessions_response', sessions: [{id, lastModified,
+ * archived, summary, fileSize, ...}], folderKey}`, the sessions of the window's folder, the
+ * archived ones too; `lastModified` is the transcript's, in epoch ms). Undefined for anything else.
+ */
+export function listedSessionsOf(response: unknown): ListedSession[] | undefined {
+  if (!isRecord(response) || response.type !== 'list_sessions_response' || !Array.isArray(response.sessions)) {
+    return undefined;
+  }
+  return response.sessions.flatMap((session): ListedSession[] => {
+    if (!isRecord(session) || typeof session.id !== 'string') {
+      return [];
+    }
+    const modified = session.lastModified;
+    const lastActive = typeof modified === 'number' ? modified : typeof modified === 'string' ? Date.parse(modified) : Number.NaN;
+    // A time not told is never old.
+    return [{ id: session.id, lastActive: Number.isNaN(lastActive) ? Date.now() : lastActive, archived: session.archived === true }];
+  });
+}
+
 function sessionIdOf(entry: unknown): string[] {
   if (typeof entry === 'string') {
     return [entry];

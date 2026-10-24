@@ -8,9 +8,8 @@
  */
 
 import type { ShellModule } from '../../core/module';
-import { CommandCategory, SettingsSection } from '../../core/messages';
-import { ICommands, IDialogs, IExtensionHost, IKeybindings, ILayout, INative, ISettings, IWebviewFrames } from '../../core/serviceIds';
-import { KEEP_SESSIONS_DEFAULT, KEEP_SESSIONS_SETTING } from '../../platform/defaults';
+import { CommandCategory } from '../../core/messages';
+import { ICommands, IDialogs, IExtensionHost, IKeybindings, ILayout, INative, IWebviewFrames } from '../../core/serviceIds';
 import { t } from './messages';
 
 /** View id registered by anthropic.claude-code 2.1.282 (package.json `views`). */
@@ -111,17 +110,6 @@ export const sessionsModule: ShellModule = {
       }),
     );
     subscriptions.add(keybindings.register({ key: 'ctrl+b', command: 'sessions.toggleSidebar' }));
-    // Main applies it to Claude Code's own settings (host/main/claudeRetention.ts).
-    subscriptions.add(
-      services.get(ISettings).register([
-        {
-          key: KEEP_SESSIONS_SETTING,
-          section: SettingsSection.workbench,
-          order: 11,
-          schema: { type: 'boolean', default: KEEP_SESSIONS_DEFAULT, description: t('keepForeverSetting') },
-        },
-      ]),
-    );
 
     // A session another process runs is not deleted: that process would write it again, or
     // fail. One that a tab here shows is: the tab closes first, which ends its process.

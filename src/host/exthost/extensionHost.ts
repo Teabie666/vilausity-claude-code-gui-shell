@@ -164,6 +164,8 @@ export class ExtensionHost {
     webviews.interceptor = bridge;
     this.bridge = bridge;
     renderer.handle('sessions.busy', ({ sessionId }) => bridge.sessionBusy(sessionId));
+    renderer.handle('sessions.showWithin', ({ days }) => bridge.setShownWithin(days));
+    renderer.handle('sessions.archived', () => bridge.archivedSessions());
     renderer.handle('conversation.insertMention', ({ webviewId, text }) => {
       const panel = webviews.allPanels.find((candidate) => candidate.webview.id === webviewId);
       if (panel) {

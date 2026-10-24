@@ -28,6 +28,7 @@ import { explorerMenuModule } from '../../features/explorerMenu';
 import { localApiModule } from '../../features/localApi';
 import { extensionUpdatesModule } from '../../features/extensionUpdates';
 import { languageModule } from '../../features/language';
+import { sessionManagementModule } from '../../features/sessionManagement';
 import { sessionSearchModule } from '../../features/sessionSearch';
 import { sessionsModule } from '../../features/sessions';
 import { settingsModule } from '../../features/settings';
@@ -51,6 +52,7 @@ const modules: ShellModule[] = [
   settingsModule,
   keybindingsModule,
   sessionsModule,
+  sessionManagementModule,
   sessionSearchModule,
   themesModule,
   fontsModule,

@@ -1,12 +1,13 @@
 /**
  * The sessions worker thread (sessionSearch.ts): holds the search index and the usage index
- * (sessionUsage.ts), answers searches and usage questions, and writes full transcripts
- * (fullTranscripts.ts).
+ * (sessionUsage.ts), answers searches and usage questions, writes full transcripts
+ * (fullTranscripts.ts) and measures the sessions' room on disk (sessionStorage.ts).
  */
 
 import { parentPort, workerData } from 'node:worker_threads';
 import type { SessionSearchRequest } from '../../platform/protocol';
 import { writeFullTranscript, type FullTranscriptRequest } from './fullTranscripts';
+import { sessionStorage } from './sessionStorage';
 import { SessionIndex } from './sessionSearch';
 import { UsageIndex, type UsageRequest } from './sessionUsage';
 
@@ -17,7 +18,8 @@ const usage = new UsageIndex(data.projectsDir, data.tagsFile, data.ledgerFile);
 type WorkerRequest =
   | { id: number; kind: 'search'; request: SessionSearchRequest }
   | { id: number; kind: 'usage'; request: UsageRequest }
-  | { id: number; kind: 'transcript'; request: FullTranscriptRequest };
+  | { id: number; kind: 'transcript'; request: FullTranscriptRequest }
+  | { id: number; kind: 'storage'; request: undefined };
 
 function answer(message: WorkerRequest): Promise<unknown> {
   switch (message.kind) {
@@ -27,6 +29,8 @@ function answer(message: WorkerRequest): Promise<unknown> {
       return usage.answer(message.request);
     case 'transcript':
       return writeFullTranscript(data.projectsDir, message.request);
+    case 'storage':
+      return sessionStorage(data.projectsDir);
   }
 }
 

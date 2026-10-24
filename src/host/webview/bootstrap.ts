@@ -24,6 +24,7 @@ import { DEFAULT_WEBVIEW_STYLES } from './defaultStyles';
 import { FileLinks } from './fileLinks';
 import { InPageFinder } from './find';
 import { MessageMarkers } from './messageMarkers';
+import { OldSessions } from './oldSessions';
 import { OmittedRows } from './omittedRows';
 import { submitPrompt } from './promptSubmit';
 import { ProviderNotice } from './providerNotice';
@@ -182,6 +183,15 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
       marks.set(pendingMarks);
     });
   }
+  // A session list hides the sessions not active for longer than the setting shows.
+  let oldSessions: OldSessions | undefined;
+  let pendingOld: readonly string[] = [];
+  if (sessionRows) {
+    onDomReady(() => {
+      oldSessions = new OldSessions(sessionRows);
+      oldSessions.set(pendingOld);
+    });
+  }
   // A thinking block's summary stays where it was clicked while every thinking block opens.
   const keepInPlace = data.hints?.keepInPlace;
   if (keepInPlace) {
@@ -299,6 +309,13 @@ const THEME_CLASSES = ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'v
             marks.set(control.view);
           } else {
             pendingMarks = control.view;
+          }
+          break;
+        case 'oldSessions':
+          if (oldSessions) {
+            oldSessions.set(control.ids);
+          } else {
+            pendingOld = control.ids;
           }
           break;
         case 'providerNotice':

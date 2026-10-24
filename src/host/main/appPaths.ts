@@ -26,6 +26,8 @@ export interface AppPaths {
   readonly otherShellStateFile: string;
   /** The recently opened folders, the normal and the administrator instance's both (recentFolders.ts). */
   readonly recentFoldersFile: string;
+  /** The period last written into Claude Code's `cleanupPeriodDays` (claudeRetention.ts; both instances). */
+  readonly claudeRetentionFile: string;
   /** The API providers; their keys are stored encrypted. */
   readonly providersFile: string;
   /** Which provider each Claude Code session ran under (sessionProviders.ts). */
@@ -74,6 +76,7 @@ export function createAppPaths(root: string, startedAt = new Date(), elevated = 
     shellStateFile: path.join(instanceRoot, 'state', 'shell.json'),
     otherShellStateFile: path.join(elevated ? root : path.join(root, ADMIN_FOLDER), 'state', 'shell.json'),
     recentFoldersFile: path.join(root, 'state', 'recent-folders.json'),
+    claudeRetentionFile: path.join(root, 'state', 'claude-retention.json'),
     providersFile: path.join(root, 'providers.json'),
     sessionProvidersFile: path.join(root, 'session-providers.jsonl'),
     usageLedgerFile: path.join(root, 'usage-ledger.jsonl'),

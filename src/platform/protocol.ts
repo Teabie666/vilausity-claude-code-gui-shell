@@ -497,6 +497,26 @@ export interface WebviewLabels {
  */
 export type SessionBusy = 'open' | 'elsewhere';
 
+/** Claude Code's own period for keeping sessions (`cleanupPeriodDays`), as Vilausity found it. */
+export interface RetentionDto {
+  /** In days; null when not set, or its settings.json cannot be read. */
+  readonly days: number | null;
+  /** Set outside Vilausity (by hand, say): it is left as it is, and the setting does not apply. */
+  readonly ownValue: boolean;
+  /** Claude Code's settings.json. */
+  readonly file: string;
+}
+
+/** Claude Code's sessions on disk. */
+export interface SessionStorageDto {
+  /** Where they are (Claude Code's `projects` folder). */
+  readonly folder: string;
+  /** How many transcripts. */
+  readonly sessions: number;
+  /** Everything under the folder, what is kept next to the transcripts too. */
+  readonly bytes: number;
+}
+
 /** How deleting a session went; `running`: a Claude Code process still runs it. */
 export type SessionDeleteResult = 'deleted' | 'notFound' | 'running';
 
@@ -974,6 +994,10 @@ export type ExtHostApiForRenderer = {
   'extension.contributions': (p: void) => ExtensionContributions;
   /** Whether a session is in use (as the extension last told its pages); undefined when not. */
   'sessions.busy': (p: { sessionId: string }) => SessionBusy | undefined;
+  /** The session lists show only the sessions active in the last `days` days (0: all). */
+  'sessions.showWithin': (p: { days: number }) => void;
+  /** The archived sessions of the window's folder, as the session list was last told them. */
+  'sessions.archived': (p: void) => string[];
   /**
    * Closes the tabs that show a session (before it is deleted, or opened under another
    * provider); the extension then ends its Claude process. Resolves to how many were closed,
@@ -1160,6 +1184,10 @@ export type MainApiForRenderer = {
    * front. The file's path, or null when there is no such session.
    */
   'sessions.fullTranscript': (p: { sessionId?: string }) => string | null;
+  /** Claude Code's `cleanupPeriodDays` as it is now (brought in line with the setting first). */
+  'sessions.retention': (p: void) => RetentionDto;
+  /** How much room Claude Code's sessions take on disk. */
+  'sessions.storage': (p: void) => SessionStorageDto;
   /** The folders the open windows show (the calling window's too). */
   'window.shownFolders': (p: void) => string[];
   /** Closes the calling window; closing the last one quits. */
@@ -1455,6 +1483,8 @@ export type ShellToWebviewControl =
   | { readonly ccwControl: 'usageView'; readonly view: UsageViewDto | null }
   /** The sessions' providers (session lists: pages with `hints.sessionRows`). */
   | { readonly ccwControl: 'sessionProviders'; readonly view: SessionProvidersDto | null }
+  /** The sessions a session list hides: not active for longer than the setting shows (pages with `hints.sessionRows`). */
+  | { readonly ccwControl: 'oldSessions'; readonly ids: readonly string[] }
   /** The bar above the message input (pages with `commentsAnchor`); null: none. */
   | { readonly ccwControl: 'providerNotice'; readonly notice: ProviderNoticeDto | null }
   /** What to do with a file link's held message: pass it on to the extension (`release`), or drop it. */

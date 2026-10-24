@@ -5,6 +5,7 @@ import {
   ClaudeWebviewBridge,
   conversationSessionId,
   describeShape,
+  listedSessionsOf,
   usageResetsOf,
   withoutExtensionCosts,
 } from '../../../src/host/exthost/bridge';
@@ -969,5 +970,27 @@ describe('ClaudeWebviewBridge and the usage block', () => {
     const hints = makeUsageBridge(true).bridge.pageHints(listPage().page);
     assert.equal(hints?.usageBlock?.root, '.root_djirOA');
     assert.equal(makeUsageBridge(true).bridge.pageHints(fakeWebview('panel', 'claudeVSCodePanel'))?.usageBlock, undefined);
+  });
+});
+
+describe('listedSessionsOf', () => {
+  test('takes each session’s id, when it was last active and whether it is archived; a time not told is now', () => {
+    const now = Date.now();
+    const listed = listedSessionsOf({
+      type: 'list_sessions_response',
+      sessions: [
+        { id: 'a', lastModified: 1000, archived: true },
+        { id: 'b', lastModified: '2026-10-01T00:00:00.000Z' },
+        { id: 'c' },
+        { summary: 'no id' },
+      ],
+    });
+    assert.deepEqual(listed?.slice(0, 2), [
+      { id: 'a', lastActive: 1000, archived: true },
+      { id: 'b', lastActive: Date.parse('2026-10-01T00:00:00.000Z'), archived: false },
+    ]);
+    assert.equal(listed?.length, 3);
+    assert.ok((listed?.[2]?.lastActive ?? 0) >= now);
+    assert.equal(listedSessionsOf({ type: 'get_session_response', messages: [] }), undefined);
   });
 });

@@ -11,7 +11,7 @@ import * as path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { IDisposable } from '../../platform/lifecycle';
 import type { ILogger } from '../../platform/log';
-import type { SessionSearchRequest, SessionSearchResult } from '../../platform/protocol';
+import type { SessionSearchRequest, SessionSearchResult, SessionStorageDto } from '../../platform/protocol';
 import { readAppended, type AppendedState } from '../node/appendedFile';
 import { normalizeForCompare } from '../node/paths';
 import type { FullTranscriptRequest } from './fullTranscripts';
@@ -146,12 +146,17 @@ export class SessionSearch implements IDisposable {
     return ((await this.ask('transcript', request)) as string | null | undefined) ?? undefined;
   }
 
+  /** How much room the sessions take on disk. */
+  async storage(): Promise<SessionStorageDto> {
+    return (await this.ask('storage', undefined)) as SessionStorageDto;
+  }
+
   dispose(): void {
     void this.worker?.terminate();
     this.worker = undefined;
   }
 
-  private ask(kind: 'search' | 'usage' | 'transcript', request: unknown): Promise<unknown> {
+  private ask(kind: 'search' | 'usage' | 'transcript' | 'storage', request: unknown): Promise<unknown> {
     const worker = (this.worker ??= this.start());
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {

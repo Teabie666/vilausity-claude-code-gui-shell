@@ -25,6 +25,4 @@ export const t = defineMessages('sessions', {
     'The session "{0}" is in use elsewhere: in another window, in VS Code or on the command line. Close it there first, then delete it.',
   deleteNotFound: 'The session "{0}" was not found on this computer.',
   deleteFailed: 'The session "{0}" could not be deleted. See the log for details.',
-  keepForeverSetting:
-    "Keep Claude Code's conversations until you delete them. Each time it starts, Claude Code deletes the conversations left alone for longer than its own setting cleanupPeriodDays (30 days unless set). When that is not set, Vilausity sets it to 36500 days in Claude Code's settings (~/.claude/settings.json), so the command line and VS Code keep them too; turned off, it takes that value out again.",
 });

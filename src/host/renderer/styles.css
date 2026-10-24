@@ -1160,6 +1160,29 @@ body.resizing {
   color: var(--vscode-descriptionForeground);
 }
 
+/* The session management section's block (features/sessionManagement): Claude Code's own
+   period when it has one, how much room the transcripts take, and the actions. */
+.session-management {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  line-height: 20px;
+}
+
+.session-management-line {
+  color: var(--vscode-descriptionForeground);
+}
+
+.session-management-line .link-button {
+  font: inherit;
+}
+
+.session-management-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .local-api {
   display: flex;
   flex-direction: column;

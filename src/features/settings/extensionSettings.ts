@@ -1,5 +1,6 @@
 /** The extension's own settings (its `contributes.configuration`) in the settings editor. */
 
+import { SettingsSection } from '../../core/messages';
 import type { SettingDefinition, SettingSchema } from '../../core/settings';
 import type { ExtensionContributions } from '../../platform/protocol';
 
@@ -16,15 +17,25 @@ const NOT_APPLICABLE = new Set([
   'claudeCode.enableReopenClosedSessionShortcut',
 ]);
 
+/**
+ * Settings of the extension listed in a section of the shell's, by the shell's settings of the
+ * same subject, with their order there (anthropic.claude-code 2.1.310).
+ */
+const MOVED: ReadonlyMap<string, { readonly section: () => string; readonly order: number }> = new Map([
+  // Archiving sessions left alone: next to deleting them (features/sessionManagement).
+  ['claudeCode.archiveInactiveSessions', { section: () => SettingsSection.sessions, order: 2 }],
+]);
+
 export function extensionSettingDefinitions(contributions: ExtensionContributions): SettingDefinition[] {
   return contributions.configuration.map((setting, index) => {
     const schema = setting.schema as SettingSchema;
+    const moved = MOVED.get(setting.key);
     return {
       key: setting.key,
       schema,
-      section: setting.section,
+      section: moved?.section() ?? setting.section,
       // The manifest's `order`, else the order of declaration.
-      order: typeof schema.order === 'number' ? schema.order : 1000 + index,
+      order: moved?.order ?? (typeof schema.order === 'number' ? schema.order : 1000 + index),
       hidden: NOT_APPLICABLE.has(setting.key),
       // Their titles say little without it.
       showDescription: true,

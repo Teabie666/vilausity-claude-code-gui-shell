@@ -18,6 +18,7 @@ export const t = defineMessages('core', {
   categoryFile: 'File',
   sectionWorkbench: 'Workbench',
   sectionFonts: 'Fonts',
+  sectionSessions: 'Session Management',
   quickAccess: 'Search and commands',
   searchPlaceholder: 'Search conversations, files and folders (type > for commands)',
 });
@@ -30,6 +31,10 @@ export const SettingsSection = {
   /** Every font: the UI's, the conversation's, the editor's, Markdown's. */
   get fonts(): string {
     return t('sectionFonts');
+  },
+  /** Keeping, archiving and listing Claude Code's sessions (features/sessionManagement). */
+  get sessions(): string {
+    return t('sectionSessions');
   },
 };
 

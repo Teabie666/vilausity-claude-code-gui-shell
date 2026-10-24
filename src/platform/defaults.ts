@@ -34,8 +34,14 @@ export const DEFAULT_FONT_VALUE = 'default';
 export const DEFAULT_THEME_ID = 'dark-modern';
 
 /**
- * Keep Claude Code's conversations: main sets Claude Code's own `cleanupPeriodDays` (30 days
- * unless set) when it is not set (host/main/claudeRetention.ts). On by default.
+ * How long Claude Code keeps conversations nobody goes on with: main writes it into Claude
+ * Code's own `cleanupPeriodDays` (30 days unless set; host/main/claudeRetention.ts). 0, the
+ * default: never deleted.
  */
-export const KEEP_SESSIONS_SETTING = 'vilaus.sessions.keepForever';
-export const KEEP_SESSIONS_DEFAULT = true;
+export const DELETE_SESSIONS_SETTING = 'vilaus.sessions.deleteAfterDays';
+export const DELETE_SESSIONS_CHOICES = [0, 30, 60, 90, 180, 365] as const;
+/** What came before it: on (the default) kept them for good; off left Claude Code's 30 days. */
+export const LEGACY_KEEP_SESSIONS_SETTING = 'vilaus.sessions.keepForever';
+/** The session list shows only the conversations active in the last so many days; 0, the default: all. */
+export const SHOW_SESSIONS_SETTING = 'vilaus.sessions.showWithinDays';
+export const SHOW_SESSIONS_CHOICES = [0, 7, 30, 90, 180, 365] as const;
