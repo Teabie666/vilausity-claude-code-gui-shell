@@ -2494,10 +2494,6 @@ body.resizing {
 }
 
 .quick-input-item {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
   padding: 3px 8px;
   border-radius: 3px;
   line-height: 22px;
@@ -2509,7 +2505,17 @@ body.resizing {
   color: var(--vscode-quickInputList-focusForeground);
 }
 
-/* Label, then its description (dimmed); a keybinding at the far end; a detail line below. */
+/*
+ * Label, then its description (dimmed); a keybinding at the far end; a detail line below. The
+ * first line never wraps (a long conversation title made a row three lines high): the
+ * description gives way first, then the label is cut short, as in VS Code.
+ */
+.quick-input-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
 .quick-input-label {
   flex: 0 1 auto;
   min-width: 0;
@@ -2544,8 +2550,7 @@ body.resizing {
 }
 
 .quick-input-detail {
-  flex-basis: 100%;
-  min-width: 0;
+  margin-top: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

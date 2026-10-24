@@ -259,6 +259,18 @@ await step('the search box finds conversations by title, words and files; > list
   await page.locator('.quick-input-item', { hasText: 'Color Theme' }).waitFor({ timeout: 5000 });
   const row = page.locator('.quick-input-item', { hasText: 'Receipts by month' });
   await row.waitFor({ timeout: 10_000 });
+  // A title longer than the list is wide is cut short on its row's one line: the row is as high as before.
+  const [high, highWithLongTitle] = await row.evaluate((element) => {
+    const label = element.querySelector('.quick-input-label');
+    const title = label.textContent;
+    const before = element.getBoundingClientRect().height;
+    label.textContent =
+      'Sort the receipts in Downloads by month, then make a table of the totals, mail it to me and look for receipts that came twice';
+    const after = element.getBoundingClientRect().height;
+    label.textContent = title;
+    return [before, after];
+  });
+  if (highWithLongTitle !== high) throw new Error(`a long title makes its row ${highWithLongTitle} px high, not ${high}`);
   for (const [query, detail] of [
     ['receipts', undefined],
     ['downloads', 'You: Sort the receipts in Downloads by month'],

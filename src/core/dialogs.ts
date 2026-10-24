@@ -92,22 +92,25 @@ export class Dialogs {
             row.className = 'quick-input-item';
             row.setAttribute('role', 'option');
             row.classList.toggle('focused', position === cursor);
+            const line = document.createElement('div');
+            line.className = 'quick-input-line';
+            row.appendChild(line);
             if (request.canPickMany) {
               const check = document.createElement('input');
               check.type = 'checkbox';
               check.checked = picked.has(index);
               check.tabIndex = -1;
-              row.appendChild(check);
+              line.appendChild(check);
             }
             const label = document.createElement('span');
             label.className = 'quick-input-label';
             label.textContent = item.label;
-            row.appendChild(label);
+            line.appendChild(label);
             if (item.description) {
               const description = document.createElement('span');
               description.className = 'quick-input-description';
               description.textContent = item.description;
-              row.appendChild(description);
+              line.appendChild(description);
             }
             if (item.detail) {
               const detail = document.createElement('div');

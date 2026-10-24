@@ -321,25 +321,28 @@ export class QuickAccess {
     row.setAttribute('role', 'option');
     row.classList.toggle('focused', focused);
     row.setAttribute('aria-selected', String(focused));
+    const line = document.createElement('div');
+    line.className = 'quick-input-line';
+    row.appendChild(line);
     if (item.icon) {
       const icon = document.createElement('span');
       icon.className = 'quick-input-icon';
       icon.style.setProperty('--icon', `var(--icon-${item.icon})`);
       row.classList.add('has-icon');
-      row.appendChild(icon);
+      line.appendChild(icon);
     }
-    row.appendChild(highlighted('quick-input-label', item.label, item.labelHighlights));
+    line.appendChild(highlighted('quick-input-label', item.label, item.labelHighlights));
     if (item.description) {
       const description = document.createElement('span');
       description.className = 'quick-input-description';
       description.textContent = item.description;
-      row.appendChild(description);
+      line.appendChild(description);
     }
     if (item.keybinding) {
       const keybinding = document.createElement('kbd');
       keybinding.className = 'quick-input-keybinding';
       keybinding.textContent = item.keybinding;
-      row.appendChild(keybinding);
+      line.appendChild(keybinding);
     }
     if (item.detail) {
       row.appendChild(highlighted('quick-input-detail', item.detail, item.detailHighlights));
