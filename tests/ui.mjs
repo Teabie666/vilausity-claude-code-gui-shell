@@ -322,17 +322,22 @@ await step(
         ),
       );
     const covered = async (what) => {
+      const searchBox = page.locator('.search-box');
       await page.locator('.search-box-open').click();
       const picker = await page.locator('.overlay-box.quick-input').evaluate((element) => element.getBoundingClientRect().toJSON());
       const { box, controls } = await rects();
+      // Its corners are smaller than the picker's: it hides while open, and comes back after.
+      const hidden = !(await searchBox.isVisible());
       await page.locator('.quick-input-filter').press('Escape');
       await waitFor(async () => (await page.locator('.quick-input-filter').count()) === 0, 3000, 'the picker to close');
+      const back = await waitFor(() => searchBox.isVisible(), 3000, 'the search box back after the picker');
+      if (!hidden) throw new Error(`${what}: the search box shows under the picker`);
       if (picker.left > box.left + 1 || picker.right < box.right - 1 || picker.right > controls.left) {
         throw new Error(
           `${what}: the picker spans ${picker.left}-${picker.right}, the box ${box.left}-${box.right}, the window buttons start at ${controls.left}`,
         );
       }
-      return `${what}: box ${Math.round(box.left)}-${Math.round(box.right)}, picker ${Math.round(picker.left)}-${Math.round(picker.right)}`;
+      return `${what}: box ${Math.round(box.left)}-${Math.round(box.right)} (hidden while open, back after: ${back}), picker ${Math.round(picker.left)}-${Math.round(picker.right)}`;
     };
     const original = await mainWindowBounds();
     const providerLabel = page.locator('.titlebar-provider-label');

@@ -26,6 +26,8 @@ export interface QuickPickOptions {
 
 export class Dialogs {
   private readonly toasts: HTMLElement;
+  /** Quick input boxes open; normally one, but an extension may open one over another. */
+  private quickInputs = 0;
 
   constructor(
     private readonly root: HTMLElement,
@@ -319,6 +321,11 @@ export class Dialogs {
     if (options.quickInput) {
       box.classList.add('quick-input');
       window.addEventListener('resize', place);
+      // The search box would show its smaller corners past the picker's (styles.css); it keeps
+      // its place so the picker still follows it.
+      if (this.quickInputs++ === 0) {
+        document.body.classList.add('quick-input-open');
+      }
     }
     let settled = false;
     const finish = (value: T): void => {
@@ -329,6 +336,9 @@ export class Dialogs {
       backdrop.remove();
       document.removeEventListener('keydown', onKey, true);
       window.removeEventListener('resize', place);
+      if (options.quickInput && --this.quickInputs === 0) {
+        document.body.classList.remove('quick-input-open');
+      }
       resolve(value);
     };
     const onKey = (event: KeyboardEvent): void => {

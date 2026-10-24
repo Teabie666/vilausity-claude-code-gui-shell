@@ -348,6 +348,13 @@ kbd {
   border-color: var(--vscode-commandCenter-activeBorder, var(--vscode-commandCenter-border, transparent));
 }
 
+/* Quick input opens over the box; the picker's corners are larger, so the box's would show
+   past them. It keeps its space and place (visibility, not display), so the picker still
+   follows it (Layout.quickInputLeft). */
+body.quick-input-open .search-box {
+  visibility: hidden;
+}
+
 .search-box-open {
   display: flex;
   align-items: center;
