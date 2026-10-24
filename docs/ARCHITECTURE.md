@@ -120,6 +120,15 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **`vilaus://` 链接**：Windows 打开协议链接时把 URL 当参数传给程序，于是跟别的参数一样走单实例转发。`vilaus://<插件 id>/<路径>?<参数>` 交给那个插件用 `window.registerUriHandler` 注册的处理器（Claude Code 有 `/open?session=&prompt=`），之前照 VS Code 先问用户一次（网页也能放这种链接）。把协议登记进注册表在 M6 的安装包里做。
 - **插件调的 VS Code 内置命令**（`host/exthost/workbenchCommands.ts`）：`vscode.openFolder`（插件的"打开文件夹 / 在新窗口中打开"按钮，没给文件夹就弹选择框）交给渲染进程走上面同一套流程；`workbench.action.openSettings` 打开设置编辑器并填好搜索词；`revealFileInOS` 在资源管理器里选中文件。
 
+## 关窗口和退出时问未保存的文件（M6.6）
+
+- **谁问谁**：主进程不能直接碰页面——`WindowContext.confirmClose` 给页面发 `windowBeforeClose` 事件，`features/windowClose` 存完或问完用户后回 `window.closeConfirmed`（带 id 配对，主进程用 `closeChecks` 表认）。`shellApp` 的 `quit()`（每个窗口依次问，任一 Cancel 就都不关）和 `closeWindow()` 都等这个回答。
+- **自动保存开着时**：基于磁盘的文件（`savable`：非只读且 scheme 是 `file:`）先自己存，还脏的才问。没改过的 Claude 提议不是"未保存"（不算 dirty），而且提议的右边是插件的 `_claude_vscode_fs_right` 文档、scheme 不是 `file:`，`savable` 恒为假——所以自动保存和关机保存都跳过它，不会顺手"接受"一个用户没看过的提议；改过的提议会出现在"保存吗"的列表里（但存不了、只能保存/不保存二选一决定）。
+- **关机 / 注销**（`reason: 'sessionEnd'`）：只存能存的（`savable`），不弹框、不等用户、不拦关机；`sessionEnding()` 把 `endingSession` 置位，随后的 `quit()` 也不再问。提议即使改过也不在这里自动接受（进程要结束了）。
+- **页面没法回答时直接放行**：`confirmClose` 先查 webContents 加载中 / 崩了 / 已经没了（`isLoading` / `isCrashed` / `isDestroyed`），这种直接返回"可以关"。
+- **保存失败**（比如只读）：报错、保持窗口打开，不丢东西。
+- 已知没处理：页面能回答但一直不回（`features/windowClose` 没激活或出错）时，`confirmClose` 没有超时，窗口关不掉。
+
 ## 标题栏搜索框和快速访问（M5.5）
 
 - **标题栏**：左边侧栏开关、logo 和软件名（见"标题栏 logo 和窗口图标"）、设置、API 接口按钮；中间搜索框（照 VS Code 的命令中心，显示"工作区：<文件夹名>"，用户主文件夹后面加"（全局）"——在那里 Claude 能动整台电脑；管理员实例在后面加"[管理员]"）；右边设置、内容面板开关。左右两边平分剩下的宽度，搜索框在窗口正中（左边自带 6px 的左右内边距，不算在平分的份额里，所以右边在靠搜索框那侧补同样多）。搜索框右端两个图标按钮：在文件资源管理器中显示工作区文件夹、在工作区打开终端（`workspace.revealFolder`、`workspace.openTerminal`，没输入时搜索里的"文件夹"一组和命令面板里也有）。终端由主进程起（`host/main/terminal.ts`）：设置 `terminal.external.windowsExec`（VS Code 的键名）填了就用它，没填时装了 Windows Terminal 用它（`-d .`），否则 PowerShell；照 VS Code 的外部终端走 `cmd /c start`，控制台程序才会有自己的窗口；管理员实例开的终端也是管理员的。
@@ -241,6 +250,15 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **界面**（`features/extensionUpdates`）：设置编辑器"插件版本"一节，三个设置项上面是一个自定义块（`SettingsWidget`，`core/settings.ts` 的 `registerWidget`，设置编辑器把它画在所属分节的最前面，搜索按它的关键词过滤）：正在用的版本和来源、待切换的版本和「立即重启」、上一个版本和「退回」、「检查更新」「从 VSIX 安装...」和状态行（进度、结果、按错误码本地化的失败原因）。命令面板里也有这三个动作。
 - **测试**：单元测试用 bsdtar 现做小 `.vsix`、本机起假的 Open VSX（含 302、校验值不符、按版本查询），把下载 → 校验 → 安装 → 下次启动切换 → 回滚 → 清理整个跑一遍，还有第一次更新时备份其他编辑器那份、没有备份时从其他编辑器那份退回。界面测试最后两步：在设置里点"检查更新"（VSCodium 那份被备份成上一个版本）、导入一个别人发布的 VSIX 被拒；重启后用的是新版本，点「退回 X 并重启」，再启动时跑的是备份出来的那份，真插件能激活。界面测试和 smoke 的设置里关了自动更新（不然每个测试实例都会去 Open VSX 下 120 MB），测试结束删掉装的插件。
 
+## 插件用到没实现的接口时提示退回（M6.6）
+
+- **记录在哪**：compat 的 API 缺实现、插件用到了时（`host.reportUnimplemented`，如 `window.registerTerminalProfileProvider`、`command:<id>`、`workspace.applyEdit(file operations)`）→ exthost 按成员去重、记进 `shim-unimplemented.log`、`exthost.unimplemented` 通知主进程；主进程 `unimplementedUsed` 记进 `extensions\unimplemented.json`（按版本、成员去重、可 `muted`）。普通实例和管理员实例共用，写时读磁盘、一次一个，跟 `state.json` 一样。
+- **基准是退回目标**：`unimplementedBaseline` 取 `lastGood`（激活后等于当前版本，于是落到 `previous`），只有它比当前旧、又有记录、且不含这个成员时才提醒。激活成功时 `ensureRecorded` 给这个版本写一条空记录，好让下一个版本有"上一个版本用过什么"可比。
+- **为什么不取所有旧版本的并集**：提醒是为了回答"退回去那个版本行不行"，只看退回目标用没用过这个接口就够了；更老的版本用过、退回目标没用过时，并集反而会漏报。
+- **只管 Vilausity 自己装的那份**（`kind === 'managed'`）：别处（VSCodium / VS Code）那份不在更新/回滚范围里，比了也没有可退回的目标。
+- **提醒**：通知发到最近用的窗口（`extensionUnimplemented`，`features/extensionUpdates` 弹警告），带「退回 X 并重启」（`extension.rollBack`，装好就重启）或「不再提示」（`extension.unimplementedMute`）。同一版本同一次运行只提醒一次（`unimplementedNotified`）。
+- 同一版本在一次运行里只提醒一次，之后用到的别的缺接口照样记下、不再提醒；下次启动它们已在记录里，也不提醒（这个版本缺功能已经说过了）。
+
 ## 首次启动（M4）
 
 - **找不到插件时**（也没给 `--extension-dir`）窗口照常打开，但不起插件进程（`WindowContext.startExtHost` 直接返回）。`features/setup` 在主区域盖一层首次启动页：
@@ -350,6 +368,22 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **显示范围**（`vilaus.sessions.showWithinDays`：全部（默认）/ 7 / 30 / 90 / 180 / 365 天）：bridge 旁听插件给会话列表的会话（`list_sessions_response`，每个有 `lastModified`、`archived`），把超过这个天数没活动、又没在本窗口打开的会话 id 发给列表页（控制消息 `oldSessions`）；页面脚本（`host/webview/oldSessions.ts`）给这些行打 `data-vilaus-old-session`，bridge 的样式藏起来，跟"只看当前接口"一样。只是藏，搜索（Ctrl+P）照样搜得到；从搜索打开的旧对话开着时会出现在列表里。天数由渲染进程在插件进程连上时、设置变了时告诉 exthost（`sessions.showWithin`）。
 - **存储占用**：会话 worker 数 `projects` 下的会话记录、算整个目录的大小（含子代理、工具输出，`host/main/sessionStorage.ts`），打开这一节时算一次。
 - **删除已归档的对话**：只删这个窗口文件夹里的（会话列表里那些），名单是 bridge 记下的列表里 `archived` 的会话。插件归档时只通知"别的"列表页（`session_archive_changed`），发起归档的那页自己改、不再要列表，所以 bridge 也看页面发出去的 `archive_session` / `unarchive_session(s)` 请求（对照 2.1.310）。确认后逐个照删除会话的流程：别处在用的跳过，本窗口开着的先关，再由主进程删；最后说删了几个、留了几个。
+
+## 统计（M6.6）
+
+- **入口**：命令 `stats.show`（查看统计），打开内容面板里 input id 固定的标签页（`features/stats`；`statsView.ts` 直接拼 DOM，把"数字变文字/等级"的纯函数导出给测试，跟设置编辑器一个写法）。范围两个按钮：所有文件夹 / 此文件夹，切换即重读（默认所有文件夹）；加载错误留在标签页里给重试。设置"关于"一节有"统计"按钮。
+- **四块数据**（`StatsDto`，`platform/stats.ts`）：会话记录统计（`transcripts`）、按接口的费用（`costs`）、磁盘占用（`storage`）、Vilausity 自己的计数（`counters`）。主进程 `shellApp.stats()`（`stats.get`）并行问四样拼起来；会话记录和费用都跑在会话 worker（`sessionSearch.stats` → `sessionStats.ts`），跟搜索、用量索引分开存，只留计数不留正文。
+- **会话记录的口径**（`host/main/sessionStats.ts`，对照 Claude Code 2.1.282 / 2.1.291）：
+  - 用户打的消息：排除工具结果（`toolUseResult`）、CLI 自己加的（`isMeta` / `isSidechain` / `isCompactSummary` / `isVisibleInTranscriptOnly`）、IDE/CLI 附的上下文块（`<ide_…>`、`<system-reminder>` 等），只数剩下来的 text 块；字符按码点算（emoji 算一个）。
+  - 回复按 `message.id` 去重（一条回复每个内容块一行，都带同一个 id）；有文字的回复才算一条。子代理只算工具 / 思考 / token，不算消息和增删行（`subagent` 分支）。
+  - 增删行：Edit/MultiEdit 从 `structuredPatch` 每个 hunk 的 `+`/`-` 行来；Write 新建文件（`type:"create"`、patch 空）整份 `content` 算新增；文件按路径规范化去重。
+  - 模型按 `modelKey` 合并（小写、去 `[1m]`）；token 按 `message.id` 去重，CLI 自己造的回复（`<synthetic>`，无 token）不算。"最晚的一次"按 05:00 分日（`NIGHT_ENDS_HOUR`，03:47 比 23:10 晚）；活动热力图周一(行0)…周日 × 24 小时，另有活跃天数、最长连续、当前连续、最忙一天。
+  - 增量读：文件只变长就从上次读到的位置接着读（`readAppended`），每个文件一个累加器，跨次读的回复不会拆成两半；变短了整份重读；RESCAN_MS（1 秒）内的提问用已读的。
+  - 跳过不解析的行（`skipLine`）：类型写在最前的、不是用得到的类型的整行跳过；`{"parentUuid":` 开头的用户行，只有带 `toolUseResult`、又没有 `structuredPatch`、又不是 `"type":"create"` 的才跳过（Read/Grep/Bash 结果这类最大的行正好全跳过），要算增删行的 Edit/MultiEdit/Write 照常解析。
+- **已知的不准**：分叉出来的对话开头是原记录的一份拷贝，拷过来的用户消息、工具、增删行会重复算；token 和模型因为按 id 去重所以不重复。订阅/Anthropic API 的钱是 Claude Code 自己按 API 价算的（`cost-state` 的 `totalCostUSD`），不是实际扣费，界面上标"估算"。
+- **费用按接口分行**：兼容接口用壳的价格（`pricing`，跟"用量和费用"同一套）；Claude 自己的接口（订阅、Anthropic API、Bedrock 等）用 `cost-state` 的 `totalCostUSD` 按会话累加、归到该会话最后用的接口名下（`estimated: true`）；没用到的接口不列。
+- **计数**（`shellCounters.ts`，`state\counters.json`）：普通实例和管理员实例共用（跟 recent-folders 一样）。每个进程内存里攒增量，最多一秒一次 flush（先重读磁盘再合并、原子写）；两个进程同一瞬读到同一份、又都 rename 上去才会丢一次（last writer wins，窗口极小），退出时先 flush、异常退出走 `flushSync`。各项：启动次数、打开文件夹（带去重数）、打开文件、评论、拖入文件、搜索、生成完整记录、本地接口调用。
+- **磁盘占用**（`statsStorage.ts`）：递归数每个目录的字节和文件数；`shellData` 走整个数据目录、去掉别的项（extensions、transcripts、logs、chromium 缓存子目录、管理员实例的 `admin\`），所以不重复算；缓存只数 chromium 下那几个子目录；不存在的目录不列。
 
 ## 加功能该改哪里
 
