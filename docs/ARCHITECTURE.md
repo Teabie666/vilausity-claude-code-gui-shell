@@ -169,6 +169,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 
 - **用量的重置时间**（`usageBars`、`host/webview/usageResets.ts`）：插件只写"Resets in 3h"。bridge 从 `panel_usage_update`（`unifiedWindows.<窗口>.resetsAt`，秒）和 `get_usage_response`（`rate_limits.<窗口>.resets_at`，ISO 日期；`model_scoped[]` 按模型）里取出精确时刻，按用量条的标签（"Session (5hr)"等，`usageResetsOf`）交给页面；页面按标签的英文原文（汉化记着原文）对上，显示"15:42 重置""明天 09:00 重置"。
 - **筛选下拉**（`statusFilter`、`host/webview/statusFilter.ts`）：插件的筛选按钮写上"活跃 · N"（从藏起来的"活跃"开关抄字），有会话在等用户时加"需要输入 · N"（bridge 数 `session_states_update.sessions` 里 `state` 是 `waiting_input` 的，见"标题栏 logo 和窗口图标"；第二块当初按 `waiting` 数，一直没显示过，第六块修了）。
+- **行标题和窄筛选行**（`SESSION_LIST_STYLES`，纯 CSS，对照插件 2.1.310，2.1.302 相同）：每行的时间和按钮叠在同一格（`grid-area: 1/1`），插件把按钮只是 `visibility: hidden`，三个按钮的 76px 一直占着、标题提前截断；桥的样式让按钮在不悬停、没有键盘焦点时 `display: none`，标题排到时间前面，悬停或聚焦时按钮出现、标题再缩短。筛选行按自己的宽度（`@container`，阈值 370 / 260 / 230px）切换：搜索框先缩成只有放大镜的图标按钮（点它照旧打开插件的搜索），状态筛选的文字和计数再依次省略，哪个按钮都不会被裁掉（侧栏最窄 180px 时也一样）。
 
 ## 删除会话（M5.5）
 
