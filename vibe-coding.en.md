@@ -48,6 +48,8 @@ About the dev instance:
 - It shares conversation history with the Vilausity you're using: delete a conversation in the dev instance and it's gone there too (the dev instance is no sandbox! It's just a test build of Vilausity, and whatever it does happens on your computer for real)
 - Don't open a conversation that's busy (the ones with a green dot in the session list) in the dev instance, or things blow up!
 
+**[Cost estimate] With the DeepSeek V4.1 Flash model, measured myself (in CNY): setting up the dev environment ¥0.14, fixing two known bugs in an older version < ¥1.5, building a new feature (the About page in 1.0.0) < ¥1**
+
 ## All done? Switch to your own version
 
 - Have Claude build the installer, and one shows up in the `release` folder. Installing it replaces your old Vilausity like a normal update: settings, API providers and conversations all stay, nothing gets lost
