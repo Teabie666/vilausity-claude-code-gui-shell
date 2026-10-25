@@ -5,9 +5,11 @@
  * is typed: main keeps it encrypted and gives it only to the extension host. Main also lays
  * the provider's accent over the window's theme (platform/accent.ts, the `vilaus.accent`
  * setting in features/themes): the line along the top of the window, and the highlights.
+ * Offers IProviders to other modules.
  */
 
 import type { ShellModule } from '../../core/module';
+import { createServiceId } from '../../core/services';
 import { ICommands, IDialogs, IEditors, IExtensionHost, ILayout, INative, ISettings, IWebviewFrames } from '../../core/serviceIds';
 import { DisposableStore } from '../../platform/lifecycle';
 import { DEFAULT_PROVIDER_SETTING, SUBSCRIPTION_ID, type ProviderSummary } from '../../platform/providers';
@@ -17,9 +19,13 @@ import { IContentPane } from '../contentPane';
 import { IConversations } from '../conversations';
 import { t } from './messages';
 import { PROVIDER_PRESETS } from './presets';
-import { addFromPreset, providerLabel, ProvidersEditorPane, ProvidersModel, typeLabel } from './providersEditor';
+import { providerLabel, typeLabel } from './providerForm';
+import { addFromPreset, ProvidersEditorPane, ProvidersModel } from './providersEditor';
 
 const EDITOR_INPUT = 'providers';
+
+/** The providers as main last reported them, for other modules (the setup guide). */
+export const IProviders = createServiceId<ProvidersModel>('providers');
 
 export const providersModule: ShellModule = {
   id: 'providers',
@@ -33,6 +39,7 @@ export const providersModule: ShellModule = {
     const init = await native.call('app.getInitData', undefined);
     const model = new ProvidersModel(init.providers);
     subscriptions.add(native.on('providersChanged', (state) => model.update(state)));
+    subscriptions.add(services.register(IProviders, model));
 
     // The title bar: [DeepSeek ▾].
     const button = document.createElement('button');

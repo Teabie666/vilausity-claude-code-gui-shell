@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parsePrices, type PriceDraft } from '../../../src/features/providers/providersEditor';
+import { parsePrices, type PriceDraft } from '../../../src/features/providers/providerForm';
 
 const draft = (input: string, output: string, cacheRead = '', cacheWrite = ''): PriceDraft => ({ input, output, cacheRead, cacheWrite });
 
