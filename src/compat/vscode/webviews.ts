@@ -29,7 +29,7 @@ export interface WebviewMessageInterceptor {
   /**
    * Sees what the extension posts to a webview. It may return a message to post in its place:
    * a changed copy, never the message itself changed (the extension may post one object to
-   * several pages). Undefined posts the message as it is.
+   * several pages). Undefined posts the message as it is; null drops it.
    */
   observeToWebview?(webview: WebviewImpl, message: unknown): unknown;
   /** The webview is gone with its panel or view. */
@@ -50,7 +50,7 @@ export class WebviewImpl implements vscode.Webview {
   state: unknown = undefined;
   /** Passed to the shell's script in the page with every document. */
   pageHints: WebviewPageHints | undefined = undefined;
-  /** Sees each message the extension posts (the manager hands them to its interceptor), maybe a replacement. */
+  /** Sees each message the extension posts (the manager hands them to its interceptor), maybe a replacement (null: none). */
   onPost: ((message: unknown) => unknown) | undefined = undefined;
   private readonly messageEmitter = new Emitter<unknown>();
   readonly onDidReceiveMessage: Event<unknown> = this.messageEmitter.event;
@@ -89,6 +89,9 @@ export class WebviewImpl implements vscode.Webview {
       return Promise.resolve(false);
     }
     const replacement = this.onPost?.(message);
+    if (replacement === null) {
+      return Promise.resolve(true);
+    }
     // MessagePort delivery is ordered, so resolving right away keeps the extension's
     // send queue moving without a round trip per message.
     this.backend.postMessage(this.id, replacement === undefined ? message : replacement);

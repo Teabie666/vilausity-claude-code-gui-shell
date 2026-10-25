@@ -7,7 +7,9 @@
  *   webview -> extension  { type: 'request', channelId, requestId, request: { type, ... } }
  *                         { type: 'cancel_request', targetRequestId }
  *                         { type: 'io_message', channelId, message, done }   (user input)
+ *                         { type: 'response', requestId, response }          (to the extension's requests)
  *   extension -> webview  { type: 'from-extension', message: { type: 'response', requestId, response } }
+ *                         { type: 'from-extension', message: { type: 'request', channelId, requestId, request } }
  *
  * Keep this the only place outside compat/ that knows about those shapes, and about the
  * extension's pages (the selectors in the page hints, the state they save).
@@ -81,6 +83,19 @@ const CONVERSATION_ESCAPES: ConversationEscapeHints = {
 const PROMPT_SUBMIT: PromptSubmitHints = { input: CONVERSATION_ESCAPES.input };
 /** How long a page may take to answer `submitPrompt` (it waits for its input to show up first). */
 const SUBMIT_TIMEOUT_MS = 30_000;
+
+/**
+ * Claude Code's notice that auto mode's classifier requests stay billed (anthropic.claude-code
+ * 2.1.310): it comes to the conversation page as `{type: 'from-extension', message: {type:
+ * 'request', channelId, requestId, request: {type: 'user_dialog_request', dialogKind:
+ * 'auto_mode_server_fallback', payload: {title, paragraphs, helpUrl, gatewayHost?}}}}`, a card
+ * with Continue and Stop, answered `{type: 'response', requestId, response: {type:
+ * 'user_dialog_response', result: {behavior: 'completed', result: 'continue' | 'interrupt'}}}`.
+ * It keeps coming up when auto mode runs through another provider's API (DeepSeek's, say), and
+ * Continue changes nothing, so the shell answers it: what Claude Code itself does when no page
+ * can show the dialog.
+ */
+const AUTO_MODE_BILLING_NOTICE = 'auto_mode_server_fallback';
 
 /**
  * What a conversation page gets a token at a time (anthropic.claude-code 2.1.296): Claude
@@ -1115,6 +1130,13 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
       this.listOpen = undefined;
     }
     const request = isRecord(inner) && inner.type === 'request' && isRecord(inner.request) ? inner.request : undefined;
+    if (request?.type === 'user_dialog_request' && request.dialogKind === AUTO_MODE_BILLING_NOTICE) {
+      if (isRecord(inner) && typeof inner.requestId === 'string') {
+        this.continueAutoMode(webview, inner.requestId);
+        return null;
+      }
+      return undefined;
+    }
     // A session (un)archived from another list, or by the extension itself (2.1.310:
     // `{type: 'session_archive_changed', sessionId, archived}`).
     if (request?.type === 'session_archive_changed' && typeof request.sessionId === 'string') {
@@ -1176,6 +1198,18 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     const open = request.openSessionIds;
     const shown = Array.isArray(open) ? this.withoutPreviews(open) : open;
     return shown === open ? undefined : { ...message, message: { ...inner, request: { ...request, openSessionIds: shown } } };
+  }
+
+  /** Answers the auto mode billing notice with Continue, as its page would (see AUTO_MODE_BILLING_NOTICE). */
+  private continueAutoMode(webview: WebviewImpl, requestId: string): void {
+    this.logger.info(`auto mode billing notice ${requestId}: answered Continue`);
+    const answer = {
+      type: 'response',
+      requestId,
+      response: { type: 'user_dialog_response', result: { behavior: 'completed', result: 'continue' } },
+    };
+    // Once the extension's postMessage of the notice has returned.
+    queueMicrotask(() => webview.deliverFromWebview(answer));
   }
 
   /**

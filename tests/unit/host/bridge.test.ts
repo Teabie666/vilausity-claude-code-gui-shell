@@ -19,15 +19,19 @@ import type { WebviewImpl } from '../../../src/compat/vscode/webviews';
 import type { OsBackend } from '../../../src/compat/vscode/host';
 import type { ProviderNoticeDto, SessionProvidersDto, UsageViewDto } from '../../../src/platform/protocol';
 
-function makeWebview(): { webview: WebviewImpl; messages: unknown[] } {
+function makeWebview(): { webview: WebviewImpl; messages: unknown[]; delivered: unknown[] } {
   const messages: unknown[] = [];
+  const delivered: unknown[] = [];
   const webview = {
     postMessage(message: unknown) {
       messages.push(message);
       return Promise.resolve(true);
     },
+    deliverFromWebview(message: unknown) {
+      delivered.push(message);
+    },
   } as unknown as WebviewImpl;
-  return { webview, messages };
+  return { webview, messages, delivered };
 }
 
 function makeOs(): { os: OsBackend; opened: string[] } {
@@ -44,14 +48,14 @@ function makeOs(): { os: OsBackend; opened: string[] } {
 }
 
 function makeBridge(diffEditorAvailable: boolean) {
-  const { webview, messages } = makeWebview();
+  const { webview, messages, delivered } = makeWebview();
   const { os, opened } = makeOs();
   const bridge = new ClaudeWebviewBridge(os, NullLogger, {
     diffEditorAvailable: () => diffEditorAvailable,
     comments: new CommentStore(),
     workspaceFolders: [],
   });
-  return { bridge, webview, messages, opened };
+  return { bridge, webview, messages, delivered, opened };
 }
 
 describe('ClaudeWebviewBridge', () => {
@@ -157,6 +161,30 @@ describe('ClaudeWebviewBridge', () => {
     const { bridge, webview, messages } = makeBridge(false);
     assert.equal(bridge.interceptFromWebview(webview, { type: 'io_message', channelId: 'c1', message: 'hi', done: false }), false);
     assert.deepEqual(messages, []);
+  });
+
+  test("answers auto mode's billing notice with Continue, and the page never sees it", async () => {
+    const { bridge, webview, delivered } = makeBridge(true);
+    const dialog = (requestId: string, dialogKind: string) => ({
+      type: 'from-extension',
+      message: {
+        type: 'request',
+        channelId: 'c1',
+        requestId,
+        request: { type: 'user_dialog_request', dialogKind, payload: { title: 'Auto mode', paragraphs: [] } },
+      },
+    });
+    assert.equal(bridge.observeToWebview(webview, dialog('r1', 'auto_mode_server_fallback')), null);
+    // Other dialogs are the page's.
+    assert.equal(bridge.observeToWebview(webview, dialog('r2', 'refusal_fallback_prompt')), undefined);
+    await Promise.resolve();
+    assert.deepEqual(delivered, [
+      {
+        type: 'response',
+        requestId: 'r1',
+        response: { type: 'user_dialog_response', result: { behavior: 'completed', result: 'continue' } },
+      },
+    ]);
   });
 });
 
