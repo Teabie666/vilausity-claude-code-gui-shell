@@ -25,6 +25,9 @@ export class CommandService {
   private readonly commands = new Map<string, { handler: CommandHandler; info: CommandInfo }>();
   private readonly changeEmitter = new Emitter<void>();
   readonly onDidChange: Event<void> = this.changeEmitter.event;
+  private readonly executeEmitter = new Emitter<string>();
+  /** A command was run (its id), from anywhere: the quick start ticks its steps off with it. */
+  readonly onDidExecute: Event<string> = this.executeEmitter.event;
 
   constructor(
     private readonly contextKeys: ContextKeyService,
@@ -72,6 +75,7 @@ export class CommandService {
     if (!entry) {
       throw new Error(`unknown command ${id}`);
     }
+    this.executeEmitter.fire(id);
     try {
       return await entry.handler(...args);
     } catch (error) {

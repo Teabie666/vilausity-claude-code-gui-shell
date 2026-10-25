@@ -59,6 +59,8 @@ for (const [name, value] of Object.entries(process.env)) {
   if (/^(electron_run_as_node|vilaus_registry_root)$/i.test(name) || /^vscode_/i.test(name)) continue;
   env[name] = value;
 }
+// The installed program is checked with nobody at the screen: no setup guide or quick start.
+env.VILAUS_ONBOARDING = '0';
 
 /** Runs PowerShell; its output as UTF-8. */
 function ps(script) {

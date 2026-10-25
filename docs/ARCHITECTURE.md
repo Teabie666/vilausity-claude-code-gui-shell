@@ -213,6 +213,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
   - **设置** `vilaus.accent`（工作台，"主题色"）：`provider` 跟随 API 接口（默认）、`custom` 用 `vilaus.accent.custom` 的颜色（设置界面里是颜色选择器：schema 的 `format: "color-hex"`，跟 VS Code 一样）、`vscode` 用颜色主题自己的（没有顶部色条）。
   - **插件页面**：插件自己的橙色（发送按钮、输入框的焦点圈、链接、小标签）在 `--app-claude-orange` / `--app-claude-clay-button-orange` 里，bridge 的页面样式把它们指向主题带来的 `--vilaus-accent-line / -fill / -fill-foreground`；auto 和 bypassPermissions 模式下插件把发送按钮和焦点圈换成红色（`--app-error-foreground`），这两处也换成主题色，改由输入框旁的模式按钮带一层底色提醒（bypassPermissions 红色，auto 琥珀色）；没有强调色时这几个变量是 `initial`，回落到插件自己的值。账户用量条不跟主题色，按用掉的比例从绿经黄到红：条的长度是插件写的行内 `width`，引导脚本按页面提示的 `meters` 把它抄成 `--vilaus-meter`，样式再用 `color-mix` 算颜色。
 - **编辑页**是内容面板的标签页（"管理 API 接口"）：左边列表和"添加 API 接口…"（从预设选），右边表单，显式保存。强调色一栏没选时写着"供应商的颜色（默认）"，选了别的可以"恢复默认"；选的跟供应商的一样就不存。"为此接口创建桌面快捷方式"写一个 `.lnk`：`Vilausity.exe --provider <id>`（开发时是 electron.exe 加 app 目录），图标是这个接口的 logo 颜色（见"标题栏 logo 和窗口图标"）。
+- **测试连接**（M6.7）：编辑页"保存"那一行的按钮（只有 compatible 和 anthropic-api），测的是表单里的值（`parsedDraft()`，跟保存同一套解析）加主进程存的 key。请求由 `platform/providerTest.ts` 拼（纯函数）：头跟 `providerEnvironment` 交给 Claude Code 的一样（bearer / x-api-key，兼容接口两个都带，用户的请求头最后叠上、名字不分大小写），有模型就 `POST /v1/messages`、`max_tokens: 1`（模型依次取主模型、Sonnet、Opus、Haiku、Fable，去掉 `[1m]` 这类 Claude Code 自己的后缀），Anthropic API 没填模型就 `GET /v1/models?limit=1`（免费，只验 key）。主进程 `host/main/providerTest.ts` 用 `net.fetch` 发，30 秒超时；回答按状态码和 message 分类（key 被拒、余额不足、地址不对、模型不对、限流、连不上、超时、其他），说余额不足的 message（"Insufficient Balance" 之类）优先于状态码。`net.fetch` 走系统代理而 Claude Code 只认 `HTTPS_PROXY`：`session.resolveProxy` 说这个地址走代理、两边又都没设 `HTTPS_PROXY` 时，结果带上 `proxy`，编辑页多显示一行说明。
 - **测试**：界面测试在 127.0.0.1 起一个假的 Anthropic 接口，切到指向它的接口、重新加载窗口、新对话发一句话，检查假接口收到的 `Authorization: Bearer <key>` 和模型名；不花钱也不联网。
 
 ## 用量和费用（M6）
@@ -259,6 +260,8 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - 同一版本在一次运行里只提醒一次，之后用到的别的缺接口照样记下、不再提醒；下次启动它们已在记录里，也不提醒（这个版本缺功能已经说过了）。
 
 ## 首次启动（M4）
+
+> M6.7 会改成三页的配置引导，见 ROADMAP。已经做好的部分：主进程按 `platform/onboarding.ts` 的 `onboardingDue`（`state/shell.json` 的 `onboardingVersion` 低于 `ONBOARDING_VERSION`、不是管理员实例、没设 `VILAUS_ONBOARDING=0`）在启动时记下待显示的一步（`setup`）；页面用 `onboarding.take` 取（第一个来取的拿走）、`onboarding.defer` 留给下一个载入的页面（换文件夹会重新载入）、`onboarding.done` 写回版本号。测试脚本的公共环境都设了 `VILAUS_ONBOARDING=0`。插件自带的新手清单默认关掉：`platform/extensionDefaults.ts` 的 `EXTENSION_DEFAULT_OVERRIDES` 叠在插件 package.json 的默认值上面（只对这个版本声明了的设置），compat 和设置页都用它。
 
 - **找不到插件时**（也没给 `--extension-dir`）窗口照常打开，但不起插件进程（`WindowContext.startExtHost` 直接返回）。`features/setup` 在主区域盖一层首次启动页：
   - 第 1 步「下载并安装」（走 `extension.check`，进度来自 `extensionStatus`）或「从 VSIX 安装...」；「换一个下载服务器」打开设置的"插件版本"一节。

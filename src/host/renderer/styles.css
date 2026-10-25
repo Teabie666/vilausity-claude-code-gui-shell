@@ -1803,6 +1803,15 @@ body.resizing {
   margin-left: auto;
 }
 
+.providers-test-status.failed {
+  color: var(--vscode-errorForeground);
+}
+
+/* The proxy note under a test's status line: the actions row wraps it onto a line of its own. */
+.providers-test-note {
+  flex-basis: 100%;
+}
+
 .button[disabled] {
   opacity: 0.5;
   cursor: default;

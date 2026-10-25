@@ -16,7 +16,9 @@ import type { ExtensionErrorCode, ManagedExtensions } from './extensionUpdates';
 import type { KeybindingEntry } from './keybindings';
 import type { ApiOperationInfo, ApiParams, ApiStatusDto } from './localApi';
 import type { UiLanguage, UiLanguageSetting } from './nls';
+import type { OnboardingStep } from './onboarding';
 import type { ProviderConfig, ProviderSummary } from './providers';
+import type { ProviderTestResult } from './providerTest';
 import type { ShellCounterName, StatsDto } from './stats';
 
 // ---------------------------------------------------------------------------
@@ -1139,6 +1141,12 @@ export type MainApiForRenderer = {
   'app.quit': (p: void) => void;
   /** Notices to show once; the first window to ask gets them. */
   'app.startupNotices': (p: void) => StartupNotices;
+  /** The onboarding step this page shows now, if any; the first page to ask takes it. */
+  'onboarding.take': (p: void) => OnboardingStep | undefined;
+  /** The next page to load (this window's, after a folder switch, say) shows `step`. */
+  'onboarding.defer': (p: { step: OnboardingStep }) => void;
+  /** Finished or skipped: not shown again until ONBOARDING_VERSION goes up. */
+  'onboarding.done': (p: void) => void;
   /** The latest release on GitHub; `force` skips the hour-long cache (the About section's Retry). */
   'app.latestRelease': (p: { force?: boolean }) => LatestReleaseResult;
   'os.openExternal': (p: { url: string }) => boolean;
@@ -1245,6 +1253,8 @@ export type MainApiForRenderer = {
   'providers.remove': (p: { id: string }) => void;
   /** Stores the key encrypted; no key removes it. */
   'providers.setKey': (p: { id: string; key?: string }) => void;
+  /** Sends a provider (as given, with its stored key) a minimal request: whether it answers. */
+  'providers.test': (p: { provider: ProviderConfig }) => ProviderTestResult;
   /** A desktop shortcut that starts Vilausity with this provider; resolves to its path. */
   'providers.createShortcut': (p: { id: string }) => string;
   /** The models Claude Code's sessions used under a provider (`modelKey`), for its prices. */

@@ -16,6 +16,7 @@ export const t = defineMessages('core', {
   categoryDeveloper: 'Developer',
   categoryPreferences: 'Preferences',
   categoryFile: 'File',
+  categoryHelp: 'Help',
   sectionWorkbench: 'Workbench',
   sectionFonts: 'Fonts',
   sectionSessions: 'Session Management',
@@ -51,5 +52,8 @@ export const CommandCategory = {
   },
   get preferences(): string {
     return t('categoryPreferences');
+  },
+  get help(): string {
+    return t('categoryHelp');
   },
 };

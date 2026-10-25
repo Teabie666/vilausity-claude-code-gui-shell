@@ -23,6 +23,7 @@ import { Disposable, toDisposable } from '../../platform/lifecycle';
 import type { ILogger, LogLevel } from '../../platform/log';
 import { LANGUAGE_SETTING, parseLanguageSetting, resolveUiLanguage, setUiLanguage, type UiLanguage } from '../../platform/nls';
 import { TRANSLATE_EXTENSION_UI_SETTING, translateExtensionUi } from '../../platform/extensionStrings';
+import { ONBOARDING_STATE_KEY, ONBOARDING_VERSION, onboardingDue, type OnboardingStep } from '../../platform/onboarding';
 import {
   IpcChannel,
   type AppInfo,
@@ -80,6 +81,7 @@ import { ExtensionUpdater, type UpdateSettings } from './extensionUpdater';
 import { findGit } from './gitLocator';
 import { t } from './messages';
 import { ProviderStore, type SecretCipher } from './providerStore';
+import { proxyNote, testProvider } from './providerTest';
 import { ReleaseChecker } from './releaseChecker';
 import { deleteSession, waitForSessionEnd } from './sessionFiles';
 import { applyRetention } from './claudeRetention';
@@ -219,6 +221,8 @@ export class ShellApp extends Disposable implements WindowHost {
   /** Versions warned about this run of using APIs the shim lacks: once each. */
   private readonly unimplementedNotified = new Set<string>();
   private unimplementedWarning: { version: string; rollback?: string } | undefined;
+  /** The onboarding step still to show: the first page to ask takes it. */
+  private onboardingPending: OnboardingStep | undefined;
   private updater: ExtensionUpdater | undefined;
   private readonly shellState: StateStore;
   private readonly history: WindowHistory;
@@ -423,6 +427,10 @@ export class ShellApp extends Disposable implements WindowHost {
     };
     app.on('before-quit', onBeforeQuit);
     this.register(toDisposable(() => app.off('before-quit', onBeforeQuit)));
+    // The setup guide and the quick start: once at this version, in the first window that asks.
+    if (onboardingDue(this.shellState.get(ONBOARDING_STATE_KEY), { elevated: this.env.paths.elevated, env: process.env })) {
+      this.onboardingPending = 'setup';
+    }
     const args = this.env.args;
     const folders = foldersToOpen({
       folder: args.folder && !isFile(args.folder) ? resolveWorkspaceFolder(args.folder, this.logger) : undefined,
@@ -1412,6 +1420,12 @@ export class ShellApp extends Disposable implements WindowHost {
       'providers.save': ({ provider }) => this.providers.save(provider),
       'providers.remove': ({ id }) => this.providers.remove(id),
       'providers.setKey': ({ id, key }) => this.providers.setKey(id, key),
+      'providers.test': async ({ provider }) => {
+        const url = provider.baseUrl || 'https://api.anthropic.com';
+        const result = await testProvider(provider, this.providers.key(provider.id), (input, init) => net.fetch(input, init));
+        const proxy = proxyNote(await session.defaultSession.resolveProxy(url).catch(() => 'DIRECT'), process.env, provider);
+        return proxy === undefined ? result : { ...result, proxy };
+      },
       'providers.createShortcut': ({ id }) => this.createShortcut(id),
       'sessions.reopen': async ({ sessionId }, window) => {
         // Its tab was just closed: a second Claude process on it would have to ask first.
@@ -1441,6 +1455,18 @@ export class ShellApp extends Disposable implements WindowHost {
       'extension.takeUnimplementedWarning': () => this.takeUnimplementedWarning(),
       'extension.unimplementedMute': ({ version }) => this.unimplementedStore.mute(version),
       'app.startupNotices': () => this.startupNotices(),
+      'onboarding.take': () => {
+        const step = this.onboardingPending;
+        this.onboardingPending = undefined;
+        return step;
+      },
+      'onboarding.defer': ({ step }) => {
+        this.onboardingPending = step;
+      },
+      'onboarding.done': () => {
+        this.shellState.set(ONBOARDING_STATE_KEY, ONBOARDING_VERSION);
+        this.onboardingPending = undefined;
+      },
       'window.setKeybindings': ({ chords }, window) => window.window.setInterceptedChords(chords),
       'window.zoom': ({ delta }) => {
         // One level for all windows: Chromium zooms pages of the same origin together anyway.

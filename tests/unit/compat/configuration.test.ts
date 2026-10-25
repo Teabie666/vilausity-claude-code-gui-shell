@@ -71,6 +71,18 @@ describe('ConfigurationService', () => {
     assert.deepEqual(Object.keys(record).sort(), ['environmentVariables', 'useTerminal']);
   });
 
+  test("vilaus's own defaults win over the package's, for settings it declares", () => {
+    const { backend } = fakeBackend({});
+    const service = new ConfigurationService(backend, { 'claudeCode.hideOnboarding': false });
+    assert.equal(service.getConfiguration('claudeCode').get('hideOnboarding'), true);
+    const { backend: other } = fakeBackend({ 'claudeCode.hideOnboarding': false });
+    assert.equal(
+      new ConfigurationService(other, { 'claudeCode.hideOnboarding': false }).getConfiguration('claudeCode').get('hideOnboarding'),
+      false,
+      'the user setting wins',
+    );
+  });
+
   test('reads nested keys and merges object values shallowly over the default', () => {
     const { backend } = fakeBackend({ 'files.exclude': { '**/dist': true } });
     const service = new ConfigurationService(backend, {});

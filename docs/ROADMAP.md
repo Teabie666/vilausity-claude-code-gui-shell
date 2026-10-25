@@ -6,7 +6,7 @@
 
 ## 下一步
 
-1. M6.7 快速入门和引导（2026-10-25 研究完，待开工）：三页的配置引导（插件、连接、工作区）、VS Code Get Started 式的快速入门标签页、测试连接、屏蔽插件自带的新手清单，分四块（A–D），做完发 1.0.0
+1. M6.7 快速入门和引导（2026-10-25 研究完，块 A 完成）：三页的配置引导（插件、连接、工作区）、VS Code Get Started 式的快速入门标签页、测试连接、屏蔽插件自带的新手清单，分四块（A–D），做完发 1.0.0
 2. M6.6 0.9.4 试用反馈（块 A–G 都完成了，2026-10-25；F、G 待试用）：会话列表标题、筛选栏、搜索框的角、关于、最近打开的文件夹、搜索的速度和行距、长对话"丢内容"（插件只画最近 600 行，做完整记录和提示）、提问选项可复制、会话管理、统计，加上从 M6 ③ 挪过来的两项和 Edit 不弹 diff 的 bug
 3. M6.5 试用反馈（块 A–F 都完成了，2026-10-22，随 0.9.4 发布）
 4. M6 打包和发布：①② 完成，0.9.0 到 0.9.4 作为测试版发布；③ 剩下的两项（关窗口 / 退出时问未保存的文件、插件新版本缺接口时提示退回）挪进 M6.6；④ 干净环境测试不做了，留作坑（2026-10-24 定）
@@ -634,16 +634,16 @@ Vilausity 多数时候拿来做简单的电脑任务，工作流基本在单个�
 
 ### ① 出现条件和入口
 
-- [ ] 第一次打开 1.0.0 时两样都出（之前装没装过旧版本都一样）：main 在 `state/shell.json` 记 `onboardingVersion`，跟常量 `ONBOARDING_VERSION` 比（引导大改时调高）；只在第一个来取的窗口出（照 `app.startupNotices`）；配置引导走完或跳过后接着开快速入门；都走完或跳过才写入，中途退出下次从头来；管理员实例不自动出
+- [ ] 第一次打开 1.0.0 时两样都出（之前装没装过旧版本都一样；主进程这边做好了：`platform/onboarding.ts`、`onboarding.take / defer / done`，2026-10-25，页面在块 B、C 接上）：main 在 `state/shell.json` 记 `onboardingVersion`，跟常量 `ONBOARDING_VERSION` 比（引导大改时调高）；只在第一个来取的窗口出（照 `app.startupNotices`）；配置引导走完或跳过后接着开快速入门；都走完或跳过才写入，中途退出下次从头来；管理员实例不自动出
 - [ ] 每页都能跳过，另有"退出引导"；插件装好之前插件页不能跳过（没插件就是空窗口）
 - [ ] 入口：设置"关于"一节的按钮行加"配置引导""快速入门"（跟"统计"一起）；命令面板 `Help: Setup Guide`、`Help: Quick Start`（新的 `CommandCategory.help`）；手动打开时从第 1 页开始，每页显示当前状态
-- [ ] 测试用 `VILAUS_ONBOARDING=0` 关掉自动出现（`tests/ui.mjs` 的公共 `env`），首次启动和引导的几步不带它
+- [x] 测试用 `VILAUS_ONBOARDING=0` 关掉自动出现（`tests/ui.mjs` 的公共 `env`），首次启动和引导的几步不带它
 
 ### ② 配置引导第 1 页：插件（有没有都显示）
 
 - [ ] 有插件：版本和来源（Vilausity 自己装的 / VSCodium / VS Code，带路径），下面用现在的值填好自动更新、锁定版本、下载服务器，加"检查更新"；别的编辑器那份说明一句：Vilausity 自己装一份才能自动更新和退回
 - [ ] 没插件：下载并安装（进度）、选择本地文件
-- [ ] 下载服务器：下拉框（Open VSX 官方、镜像、自定义地址），写进 `vilaus.extension.openVsxUrl`；下载失败时提示换服务器，或用浏览器从 Open VSX 网页下 .vsix 再选（给链接）。镜像开工时实测：国内能不能连、API 是否兼容 `/api/anthropic/claude-code/win32-x64`、下载地址是不是也走镜像；没有靠谱的公共镜像就只留"官方 / 自定义"
+- [ ] 下载服务器：下拉框（Open VSX 官方、镜像、自定义地址），写进 `vilaus.extension.openVsxUrl`；下载失败时提示换服务器，或用浏览器从 Open VSX 网页下 .vsix 再选（给链接）。镜像：2026-10-25 查了，没有国内的公共 Open VSX 镜像（官方只说可以自建实例），所以只留"官方 / 自定义地址"，把"电脑上 VS Code、VSCodium 装过的插件会直接用"和"手动选 .vsix"讲清楚
 - [ ] `features/extensionUpdates` 的 `VersionView` 拆成可复用的组件（文案和按钮做成参数），设置页和引导共用，设置页那块的文案跟着调
 
 ### ③ 配置引导第 2 页：连接
@@ -668,13 +668,13 @@ Vilausity 多数时候拿来做简单的电脑任务，工作流基本在单个�
 
 ### ⑥ 测试连接（引导和 API 接口编辑页都有）
 
-- [ ] main `providers.test({ provider })`（`host/main/providerTest.ts`）：用存的 key、接口自己的鉴权（bearer / x-api-key）和自定义请求头，向 `<baseUrl>/v1/messages` 发 `max_tokens: 1` 的请求，主模型去掉 `[1m]` 这类后缀，超时 30 秒，Electron `net.fetch`
-- [ ] 结果分类：成功（耗时、模型名）、key 不对（401 / 403）、余额不足（402）、地址或模型不对（404 / 模型不存在）、限流（429）、连不上 / 超时、其他（状态码和返回的 message）。Electron 走系统代理、Claude Code 认 `HTTPS_PROXY`，通过了对话却连不上时提一句查代理
-- [ ] 只对 compatible 和 anthropic-api 显示；编辑页放在"保存"那一行，有未保存的改动时测表单里的值
+- [x] main `providers.test({ provider })`（`host/main/providerTest.ts`）：用存的 key、接口自己的鉴权（bearer / x-api-key）和自定义请求头，向 `<baseUrl>/v1/messages` 发 `max_tokens: 1` 的请求，主模型去掉 `[1m]` 这类后缀，超时 30 秒，Electron `net.fetch`
+- [x] 结果分类：成功（耗时、模型名）、key 不对（401 / 403）、余额不足（402）、地址或模型不对（404 / 模型不存在）、限流（429）、连不上 / 超时、其他（状态码和返回的 message）。Electron 走系统代理、Claude Code 认 `HTTPS_PROXY`，通过了对话却连不上时提一句查代理
+- [x] 只对 compatible 和 anthropic-api 显示；编辑页放在"保存"那一行，有未保存的改动时测表单里的值（2026-10-25；代理那行只在 `resolveProxy` 说走代理、又没设 `HTTPS_PROXY` 时出；引导页里的在块 B）
 
 ### ⑦ 屏蔽插件自带的新手清单
 
-- [ ] 插件 2.1.310 的清单五项（写代码、选中代码提问、CLAUDE.md、自动接受、计划模式），快速入门都讲到了：compat 的 `configuration.ts` 在插件默认值之后叠一层壳的默认值 `claudeCode.hideOnboarding: true`，`features/settings/extensionSettings.ts` 把这一项 schema 的 default 也改成 true（默认设置 JSON、设置页一致）；设置里还能打开
+- [x] 插件 2.1.310 的清单五项（写代码、选中代码提问、CLAUDE.md、自动接受、计划模式），快速入门都讲到了：compat 的 `configuration.ts` 在插件默认值之后叠一层壳的默认值 `claudeCode.hideOnboarding: true`，`features/settings/extensionSettings.ts` 把这一项 schema 的 default 也改成 true（默认设置 JSON、设置页一致）；设置里还能打开
 
 ### ⑧ 测试
 

@@ -153,6 +153,29 @@ export const t = defineMessages('providers', {
   save: 'Save',
   revert: 'Revert',
   saved: 'Saved.',
+  testConnection: 'Test Connection',
+  testing: 'Testing...',
+  /** {0}: milliseconds, {1}: the model. */
+  testOk: 'Connected in {0} ms ({1}).',
+  testOkNoModel: 'Connected in {0} ms.',
+  testNoKey: 'Save a key first.',
+  testNoUrl: 'Fill in the base URL first.',
+  testNoModel: 'Fill in the main model first.',
+  /** {0}: the HTTP status. */
+  testAuth: 'The key was refused ({0}).',
+  testBalance: 'The account has no balance left.',
+  testNotFound: 'Nothing at this address (404): check the base URL.',
+  /** {0}: what the API said. */
+  testModel: 'The model was refused: {0}',
+  testRateLimit: 'Too many requests (429): try again in a moment.',
+  testNetwork: 'Could not connect: {0}',
+  testTimeout: 'No answer in 30 seconds.',
+  /** {0}: the HTTP status, {1}: what the API said. */
+  testOther: 'Failed ({0}): {1}',
+  testFailed: 'Failed ({0}).',
+  /** Under the status, {0}: what `resolveProxy` said, e.g. "PROXY 127.0.0.1:7890". */
+  testProxyNote:
+    'This test went through the system proxy ({0}); Claude Code does not use it. If conversations cannot connect, add HTTPS_PROXY under Other environment variables.',
   unsavedChanges: 'Save the changes to {0}?',
   dontSave: "Don't Save",
   saveFailed: 'Saving failed: {0}',

@@ -2,6 +2,7 @@
 
 import { SettingsSection } from '../../core/messages';
 import type { SettingDefinition, SettingSchema } from '../../core/settings';
+import { EXTENSION_DEFAULT_OVERRIDES } from '../../platform/extensionDefaults';
 import type { ExtensionContributions } from '../../platform/protocol';
 
 /**
@@ -28,7 +29,10 @@ const MOVED: ReadonlyMap<string, { readonly section: () => string; readonly orde
 
 export function extensionSettingDefinitions(contributions: ExtensionContributions): SettingDefinition[] {
   return contributions.configuration.map((setting, index) => {
-    const schema = setting.schema as SettingSchema;
+    const declared = setting.schema as SettingSchema;
+    // The default the extension runs with (compat applies the same overrides).
+    const schema =
+      setting.key in EXTENSION_DEFAULT_OVERRIDES ? { ...declared, default: EXTENSION_DEFAULT_OVERRIDES[setting.key] } : declared;
     const moved = MOVED.get(setting.key);
     return {
       key: setting.key,

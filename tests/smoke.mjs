@@ -90,6 +90,8 @@ for (const name of Object.keys(env)) {
 // The normal instance even when the run starts from an elevated shell (an administrator
 // instance keeps its state apart and marks its windows).
 env.VILAUS_ELEVATED = '0';
+// No setup guide or quick start popping up in the middle of the steps.
+env.VILAUS_ONBOARDING = '0';
 // File Explorer's menu entries under a key of their own: the packaged program rewrites the
 // real ones when they exist, to point at itself.
 const reg = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'reg.exe');

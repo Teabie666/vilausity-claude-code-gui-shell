@@ -40,6 +40,8 @@ for (const name of Object.keys(env)) {
 // The normal instance even when the run starts from an elevated shell (an administrator
 // instance keeps its state apart and marks its windows).
 env.VILAUS_ELEVATED = '0';
+// No setup guide or quick start popping up: the steps that test them turn it back on.
+env.VILAUS_ONBOARDING = '0';
 // A conversation for the search to find, instead of the real ones in ~/.claude/projects.
 const sessionsDir = path.join(runDir, 'sessions');
 mkdirSync(path.join(sessionsDir, 'project'), { recursive: true });

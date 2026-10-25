@@ -8,6 +8,7 @@
 
 import type * as vscode from 'vscode';
 import { Emitter, type Event } from '../../platform/event';
+import { EXTENSION_DEFAULT_OVERRIDES } from '../../platform/extensionDefaults';
 import type { IDisposable } from '../../platform/lifecycle';
 import type { SettingsBackend } from './host';
 
@@ -99,7 +100,9 @@ export class ConfigurationService implements IDisposable {
     private readonly backend: SettingsBackend,
     extensionDefaults: Readonly<Record<string, unknown>>,
   ) {
-    this.defaults = { ...CORE_DEFAULTS, ...extensionDefaults };
+    // Only over settings this version declares: one it dropped stays gone.
+    const overrides = Object.entries(EXTENSION_DEFAULT_OVERRIDES).filter(([key]) => key in extensionDefaults);
+    this.defaults = { ...CORE_DEFAULTS, ...extensionDefaults, ...Object.fromEntries(overrides) };
     this.defaultTree = toTree(this.defaults);
     this.userTree = toTree(backend.values);
     this.subscription = backend.onDidChange(({ keys }) => {

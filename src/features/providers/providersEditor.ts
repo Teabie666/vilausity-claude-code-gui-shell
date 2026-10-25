@@ -23,6 +23,7 @@ import {
   type ProviderPricing,
 } from '../../platform/pricing';
 import type { ProvidersState } from '../../platform/protocol';
+import type { ProviderTestResult } from '../../platform/providerTest';
 import {
   modelKey,
   providerAccentColor,
@@ -277,6 +278,42 @@ const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 function positiveInteger(text: string): number | undefined {
   const value = Number(text.trim());
   return text.trim() !== '' && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+/** The line beside the test button for what the test answered. */
+function testResultText(result: ProviderTestResult): { text: string; failed: boolean } {
+  if (result.ok) {
+    return { text: result.model ? t('testOk', result.ms, result.model) : t('testOkNoModel', result.ms), failed: false };
+  }
+  const status = String(result.status ?? '?');
+  switch (result.failure) {
+    case 'noKey':
+      return { text: t('testNoKey'), failed: true };
+    case 'noUrl':
+      return { text: t('testNoUrl'), failed: true };
+    case 'noModel':
+      return { text: t('testNoModel'), failed: true };
+    case 'auth':
+      return { text: t('testAuth', status), failed: true };
+    case 'balance':
+      return { text: t('testBalance'), failed: true };
+    case 'notFound':
+      return { text: t('testNotFound'), failed: true };
+    case 'model':
+      return { text: t('testModel', result.message ?? ''), failed: true };
+    case 'rateLimit':
+      return { text: t('testRateLimit'), failed: true };
+    case 'network':
+      return { text: t('testNetwork', result.message ?? ''), failed: true };
+    case 'timeout':
+      return { text: t('testTimeout'), failed: true };
+    case 'other':
+      return {
+        text: result.message === undefined ? t('testFailed', status) : t('testOther', status, result.message),
+        failed: true,
+      };
+  }
+  return { text: t('testFailed', status), failed: true };
 }
 
 export class ProvidersEditorPane implements EditorPane {
@@ -608,6 +645,19 @@ export class ProvidersEditorPane implements EditorPane {
         revert.setAttribute('disabled', '');
       }
       bar.append(save, revert);
+      const draft = this.draft;
+      if (draft?.type === 'compatible' || draft?.type === 'anthropic-api') {
+        const status = doc.createElement('span');
+        status.className = 'providers-test-status';
+        status.setAttribute('role', 'status');
+        // A full line of its own under the status; shown only when the test went through a proxy.
+        const note = this.description('');
+        note.classList.add('providers-test-note');
+        note.hidden = true;
+        const test = this.button(t('testConnection'), 'secondary', () => this.testConnection(test, status, note));
+        test.classList.add('providers-test');
+        bar.append(test, status, note);
+      }
     }
     bar.append(
       this.button(t('createShortcut', providerLabel(provider)), 'secondary', async () => {
@@ -650,24 +700,24 @@ export class ProvidersEditorPane implements EditorPane {
     return bar;
   }
 
-  /** Saves the form; false when it cannot (lines that do not parse, or main refused). */
-  private async save(): Promise<boolean> {
+  /** The form as a provider, as Save writes it; undefined (having said why) when it does not parse. */
+  private parsedDraft(): ProviderConfig | undefined {
     const provider = this.selected;
     const draft = this.draft;
     if (!provider || !draft) {
-      return false;
+      return undefined;
     }
     const headers = parseLines(draft.headers, ':', (name) => HEADER_NAME.test(name));
     const env = parseLines(draft.env, '=', (name) => ENV_NAME.test(name));
     if (headers.bad.length > 0 || env.bad.length > 0) {
       this.toast('error', t('badLines', [...headers.bad, ...env.bad].join(', ')));
-      return false;
+      return undefined;
     }
     const usesKey = draft.type === 'compatible' || draft.type === 'anthropic-api';
     const prices = parsePrices(draft.prices);
     if (draft.type === 'compatible' && prices.bad.length > 0) {
       this.toast('error', t('badPrices', prices.bad.join(', ')));
-      return false;
+      return undefined;
     }
     const config: ProviderConfig = {
       id: provider.id,
@@ -691,12 +741,51 @@ export class ProvidersEditorPane implements EditorPane {
       preset: provider.preset,
       pricing: draft.type === 'compatible' ? draftPricing(draft, prices.models) : provider.pricing,
     };
+    return config;
+  }
+
+  /** Saves the form; false when it cannot (lines that do not parse, or main refused). */
+  private async save(): Promise<boolean> {
+    const config = this.parsedDraft();
+    if (!config) {
+      return false;
+    }
     const saved = await this.call(() => this.context.native.call('providers.save', { provider: config }));
     if (saved) {
       this.dirty = false;
       this.toast('info', t('saved'));
     }
     return saved;
+  }
+
+  /** Tests the provider with the form's values and the key main has stored; the answer shows beside the button. */
+  private async testConnection(button: HTMLButtonElement, status: HTMLElement, note: HTMLElement): Promise<void> {
+    const config = this.parsedDraft();
+    if (!config) {
+      return;
+    }
+    button.textContent = t('testing');
+    button.setAttribute('disabled', '');
+    status.textContent = '';
+    status.classList.remove('failed');
+    note.hidden = true;
+    try {
+      const result = await this.context.native.call('providers.test', { provider: config });
+      const answer = testResultText(result);
+      status.textContent = answer.text;
+      status.classList.toggle('failed', answer.failed);
+      if (result.proxy) {
+        note.textContent = t('testProxyNote', result.proxy);
+        note.hidden = false;
+      }
+    } catch (error) {
+      this.context.logger.error('the provider test failed', error);
+      status.textContent = t('testNetwork', error instanceof Error ? error.message : String(error));
+      status.classList.add('failed');
+    } finally {
+      button.textContent = t('testConnection');
+      button.removeAttribute('disabled');
+    }
   }
 
   /** Runs a call to main; a failure shows as a notification. Resolves to whether it worked. */
