@@ -3370,3 +3370,19 @@ body.resizing {
   margin: 12px 0 0;
   color: var(--vscode-descriptionForeground);
 }
+
+.deepseek-warning {
+  padding: 6px 10px;
+  border-left: 3px solid var(--vscode-editorWarning-foreground, var(--vscode-focusBorder));
+  background: var(--vscode-inputValidation-warningBackground, transparent);
+  font-weight: 600;
+}
+
+.deepseek-shot {
+  display: block;
+  width: 100%;
+  max-width: 640px;
+  height: auto;
+  margin: 8px 0 10px;
+  border: 1px solid var(--vscode-panel-border);
+}

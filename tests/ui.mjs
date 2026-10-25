@@ -1698,6 +1698,16 @@ await step('the quick start: from About, steps ticked off by Try, by hand and by
   await page.locator('.deepseek-guide .deepseek-steps > li').first().waitFor({ timeout: 10_000 });
   const deepSeekButtons = await page.locator('.deepseek-guide button').allInnerTexts();
   if (deepSeekButtons.join() !== 'Open the Platform') throw new Error(`the DeepSeek guide's buttons: ${deepSeekButtons.join(', ')}`);
+  // Its screenshots load (the build copies them beside the page).
+  await waitFor(
+    () =>
+      page.$$eval(
+        '.deepseek-guide img.deepseek-shot',
+        (images) => images.length === 4 && images.every((image) => image.complete && image.naturalWidth > 0),
+      ),
+    10_000,
+    'the four screenshots of the DeepSeek guide to load',
+  );
   await page.locator('.setup-exit').click();
   await waitFor(async () => (await page.locator('.setup-guide').count()) === 0, 5000, 'the guide to close');
   return `ticked off: ${stored.join(', ')}`;

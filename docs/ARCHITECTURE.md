@@ -276,7 +276,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 
 ## 快速入门（M6.7）
 
-- `features/quickStart`：内容面板的两个固定 id 的标签页（照统计页），快速入门（`quickStart`）和获取 DeepSeek API key 的教程（`quickStart.deepSeek`，几步文字，只有一个"打开平台"按钮）。命令 `quickStart.open`（Help: Quick Start，设置"关于"的按钮，配置引导自动出现后接着开）、`quickStart.deepSeekKey`（配置引导第 2 页"我还没有"）。
+- `features/quickStart`：内容面板的两个固定 id 的标签页（照统计页），快速入门（`quickStart`）和获取 DeepSeek API key 的教程（`quickStart.deepSeek`，几步文字配平台页面的截图，只有一个"打开平台"按钮。截图在 `resources/deepseek-guide`，已经标好编号框和箭头、糊掉了 key 和个人信息，文字里的 (1)(2) 对应图上的编号；构建时复制到 `dist/renderer/images/deepseek-guide`，页面按壳的页面地址拼绝对路径，标签页移到独立窗口里也能显示）。命令 `quickStart.open`（Help: Quick Start，设置"关于"的按钮，配置引导自动出现后接着开）、`quickStart.deepSeekKey`（配置引导第 2 页"我还没有"）。
 - **内容是数据**（`steps.ts`）：分组（Claude Code 本来就有的、Vilausity 加的、给折腾的人的，最后一组默认收起），每步有标题、几段说明、`keys`（列出命令和它现在的快捷键：`keybindings.labelFor` 现读，改了快捷键页面跟着变）、`action`（执行壳的命令；开新对话并把示例填进输入框，走 `conversation.open` 的 `prompt`，不替用户发送；或者打开网页）、`extra`（第二个按钮，上面一行小字说明它是做什么的："记忆"那步给非 Claude 模型的补强记忆提示词，让模型往用户级 CLAUDE.md 里写一节主动记事的规矩）、`doneWhen`。插件界面的名字和按键照插件 2.1.310。打开设置某一节用 `settings.openSection`，参数是那一节显示的标题（随界面语言）。
 - **打勾**：点过"试试"、手动勾、或者在任何地方执行了 `doneWhen` 里的命令（`CommandService.onDidExecute`，模块层订阅，标签页没开也算）。主进程存在 `state/shell.json` 的 `quickStartSteps`（`quickStart.progress` / `quickStart.mark`，`platform/onboarding.ts` 的纯函数），普通实例和管理员实例各存各的；页面新建时再读一次（别的窗口可能勾过）。步骤 id 存进了 state，别改名。
 - 视图（`quickStartView.ts`）一次只展开一步，开始时展开第一个没收起的组里第一个没勾的；打勾和快捷键变化只改对应的元素，不重建（保住滚动位置和焦点）。

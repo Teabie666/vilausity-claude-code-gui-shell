@@ -92,6 +92,8 @@ function copyStatic() {
   if (existsSync(themes)) {
     cpSync(themes, path.join(dist, 'themes'), { recursive: true });
   }
+  // Marked-up screenshots of DeepSeek's platform, for the key guide (features/quickStart/deepSeekView.ts).
+  cpSync(path.join(root, 'resources/deepseek-guide'), path.join(dist, 'renderer', 'images', 'deepseek-guide'), { recursive: true });
   // Drawn by scripts/icons.mjs (npm run icons); the window icon in the taskbar and Alt+Tab.
   cpSync(path.join(root, 'resources/icon/icon.ico'), path.join(dist, 'icon.ico'));
   copyFonts();

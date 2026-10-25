@@ -134,15 +134,21 @@ export const t = defineMessages('quickStart', {
   dsVerifyBody: 'The platform may ask for real-name verification before you top up or create a key. Its own page goes through it.',
   dsTopUpTitle: 'Top up',
   dsTopUpBody:
-    'Requests are paid from the balance; with nothing left they fail, and the connection test in the setup guide says the account has no balance. Top up on the Top up page. The pricing page lists what each model costs.',
+    'Requests are paid from the balance; with nothing left they fail, and the connection test in the setup guide says the account has no balance. On the Top up page (1), pick an amount (2) and a way to pay (3), then pay (4). The prices of the models are a link beside the amounts.',
   dsCreateTitle: 'Create an API key',
   dsCreateBody:
-    'On the API keys page, create a key and give it a name you will recognize, such as Vilausity. The key is shown once: copy it right away. If it is lost, delete it there and create another.',
+    'On the API keys page (1), press Create API key (2) and give the key a name you will recognize, such as Vilausity. Then copy it (the second picture). If it is lost, delete it there and create another.',
+  dsCreateWarning:
+    'Copy the key and keep it somewhere safe the moment it is created: it is shown this once only. Once that window is closed, it cannot be seen again, not even on the platform.',
   dsPasteTitle: 'Paste it into Vilausity',
   dsPasteBody:
     'Back in the setup guide, on the Connection page: I have an API key, DeepSeek as the API provider (chosen at first), OK, then paste the key and save it. Test checks it with a request of one token. Vilausity keeps the key encrypted for this Windows user and gives it only to Claude Code.',
   dsUsageTitle: 'Keep an eye on what it costs',
   dsUsageBody:
-    "The usage block above the session list adds up what this window's conversations cost, from the provider's prices. The platform's Usage page has the exact amounts, by day and by model.",
+    "The usage block above the session list adds up what this window's conversations cost, from the provider's prices. The platform's Usage page (1) has the balance (2) and the exact amounts, by day and by model (3).",
   dsKeepSafe: 'Keep the key to yourself: anyone who has it can spend your balance. If it leaks, delete it on the API keys page.',
+  dsShotTopUp: 'The Top up page',
+  dsShotApiKeys: 'The API keys page',
+  dsShotCreateKey: 'The new key, with its Copy button',
+  dsShotUsage: 'The Usage page',
 });
