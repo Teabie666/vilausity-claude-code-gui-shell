@@ -1651,6 +1651,10 @@ await step('the quick start: from About, steps ticked off by Try, by hand and by
   // The first step not ticked off is open; the tinkerers' group is closed.
   if ((await quickStart.locator('.quick-start-step.expanded').count()) !== 1) throw new Error('not exactly one step is open');
   if (await stepOf('stats').isVisible()) throw new Error('the closed group shows its steps');
+  // The memory step has a second button, under a note of its own.
+  if ((await stepOf('memory').locator('.quick-start-extra-note + .quick-start-extra').count()) !== 1) {
+    throw new Error('the memory step has no second button');
+  }
 
   // Try: Session Management opens the settings at that section, and ticks the step off.
   if (await isDone('sessions')) throw new Error('"Manage sessions" is ticked off before it was tried');

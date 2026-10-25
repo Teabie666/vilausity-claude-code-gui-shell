@@ -17,7 +17,7 @@ import { IContentPane } from '../contentPane';
 import { DeepSeekGuideView, type DeepSeekGuideViewOptions } from './deepSeekView';
 import { t } from './messages';
 import { QuickStartView } from './quickStartView';
-import { QUICK_START_GROUPS, type QuickStartGroup, type QuickStartStep } from './steps';
+import { QUICK_START_GROUPS, type QuickStartGroup, type QuickStartStep, type StepAction } from './steps';
 
 const TAB = 'quickStart';
 const DEEPSEEK_TAB = 'quickStart.deepSeek';
@@ -39,7 +39,7 @@ interface QuickStartPaneContext {
   readonly reload: () => Promise<void>;
   readonly onDidChangeDone: Event<void>;
   readonly onDidChangeKeys: Event<void>;
-  readonly onTry: (step: QuickStartStep) => void;
+  readonly onTry: (step: QuickStartStep, action: StepAction) => void;
   readonly onToggle: (step: QuickStartStep, done: boolean) => void;
 }
 
@@ -158,12 +158,8 @@ export const quickStartModule: ShellModule = {
       return info.category === undefined ? title : `${info.category}: ${title}`;
     };
 
-    const runAction = (step: QuickStartStep): void => {
+    const runAction = (step: QuickStartStep, action: StepAction): void => {
       mark(step.id, true);
-      const action = step.action;
-      if (action === undefined) {
-        return;
-      }
       if (action.kind === 'command') {
         void commands.execute(action.command, ...(action.args ?? [])).catch((error: unknown) => {
           logger.error(`quick start step ${step.id}: ${action.command} failed`, error);

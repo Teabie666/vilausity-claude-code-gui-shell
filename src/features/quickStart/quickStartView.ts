@@ -8,7 +8,7 @@
 
 import type { IDisposable } from '../../platform/lifecycle';
 import { t } from './messages';
-import type { QuickStartGroup, QuickStartStep } from './steps';
+import type { QuickStartGroup, QuickStartStep, StepAction } from './steps';
 
 export interface QuickStartViewOptions {
   readonly groups: readonly QuickStartGroup[];
@@ -16,8 +16,8 @@ export interface QuickStartViewOptions {
   readonly keyFor: (command: string) => string | undefined;
   /** The command's title as the palette shows it ("View: Show Statistics"); undefined when unknown. */
   readonly commandTitle: (command: string) => string | undefined;
-  /** The step's button was pressed (the pane runs the action and ticks the step off). */
-  readonly onTry: (step: QuickStartStep) => void;
+  /** One of the step's buttons was pressed (the pane runs the action and ticks the step off). */
+  readonly onTry: (step: QuickStartStep, action: StepAction) => void;
   /** Ticked off or cleared by hand. */
   readonly onToggle: (step: QuickStartStep, done: boolean) => void;
 }
@@ -213,11 +213,21 @@ export class QuickStartView implements IDisposable {
       body.append(keys);
     }
 
-    if (step.action !== undefined) {
+    const action = step.action;
+    if (action !== undefined) {
       const tryButton = this.button('button quick-start-try');
-      tryButton.textContent = step.action.label();
-      tryButton.addEventListener('click', () => this.options.onTry(step));
+      tryButton.textContent = action.label();
+      tryButton.addEventListener('click', () => this.options.onTry(step, action));
       body.append(tryButton);
+    }
+    const extra = step.extra;
+    if (extra !== undefined) {
+      const note = this.el('p', 'quick-start-extra-note');
+      note.textContent = extra.note();
+      const extraButton = this.button('button secondary quick-start-extra');
+      extraButton.textContent = extra.action.label();
+      extraButton.addEventListener('click', () => this.options.onTry(step, extra.action));
+      body.append(note, extraButton);
     }
 
     const view: StepView = { step, item, check, title, body, kbd };

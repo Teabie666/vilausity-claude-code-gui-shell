@@ -29,6 +29,8 @@ export interface QuickStartStep {
   /** Commands whose current shortcuts are listed under the text, with their titles. */
   readonly keys?: readonly string[];
   readonly action?: StepAction & { readonly label: () => string };
+  /** A second button below the first, after a line of its own saying what it is for. */
+  readonly extra?: { readonly note: () => string; readonly action: StepAction & { readonly label: () => string } };
   /**
    * Running one of these, from anywhere, ticks the step off. The action ticks it off too;
    * a step with neither is ticked off by hand.
@@ -89,6 +91,12 @@ export const QUICK_START_GROUPS: readonly QuickStartGroup[] = [
         title: () => t('memoryTitle'),
         body: () => t('memoryBody'),
         action: prompt(() => t('memoryPrompt')),
+        // Other models (DeepSeek) seldom save memories unasked: standing rules in the user's
+        // CLAUDE.md, which every conversation reads first, make them.
+        extra: {
+          note: () => t('memoryBoostNote'),
+          action: { kind: 'prompt', prompt: () => t('memoryBoostPrompt'), label: () => t('memoryBoostAction') },
+        },
       },
       {
         id: 'rewind',

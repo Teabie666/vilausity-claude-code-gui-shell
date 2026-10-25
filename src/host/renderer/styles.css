@@ -3299,6 +3299,12 @@ body.resizing {
   margin-top: 2px;
 }
 
+.quick-start-extra-note {
+  margin: 12px 0 6px;
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}
+
 .quick-start-check:focus-visible,
 .quick-start-step-title:focus-visible,
 .quick-start-group-toggle:focus-visible {
