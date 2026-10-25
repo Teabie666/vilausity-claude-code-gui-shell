@@ -23,7 +23,15 @@ import { Disposable, toDisposable } from '../../platform/lifecycle';
 import type { ILogger, LogLevel } from '../../platform/log';
 import { LANGUAGE_SETTING, parseLanguageSetting, resolveUiLanguage, setUiLanguage, type UiLanguage } from '../../platform/nls';
 import { TRANSLATE_EXTENSION_UI_SETTING, translateExtensionUi } from '../../platform/extensionStrings';
-import { ONBOARDING_STATE_KEY, ONBOARDING_VERSION, onboardingDue, type OnboardingStep } from '../../platform/onboarding';
+import {
+  markQuickStartStep,
+  ONBOARDING_STATE_KEY,
+  ONBOARDING_VERSION,
+  onboardingDue,
+  QUICK_START_STATE_KEY,
+  quickStartSteps,
+  type OnboardingStep,
+} from '../../platform/onboarding';
 import {
   IpcChannel,
   type AppInfo,
@@ -1466,6 +1474,12 @@ export class ShellApp extends Disposable implements WindowHost {
       'onboarding.done': () => {
         this.shellState.set(ONBOARDING_STATE_KEY, ONBOARDING_VERSION);
         this.onboardingPending = undefined;
+      },
+      'quickStart.progress': () => quickStartSteps(this.shellState.get(QUICK_START_STATE_KEY)),
+      'quickStart.mark': ({ step, done }) => {
+        const steps = markQuickStartStep(this.shellState.get(QUICK_START_STATE_KEY), step, done);
+        this.shellState.set(QUICK_START_STATE_KEY, steps);
+        return steps;
       },
       'window.setKeybindings': ({ chords }, window) => window.window.setInterceptedChords(chords),
       'window.zoom': ({ delta }) => {

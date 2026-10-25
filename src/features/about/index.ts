@@ -25,6 +25,7 @@ interface AboutViewOptions {
   readonly openUrl: (url: string) => void;
   readonly retry: () => void;
   readonly setupGuide: () => void;
+  readonly quickStart: () => void;
   readonly statistics: () => void;
 }
 
@@ -105,6 +106,7 @@ class AboutView {
         );
       }),
       button(t('setupGuide'), 'setup-guide', () => this.options.setupGuide()),
+      button(t('quickStart'), 'quick-start', () => this.options.quickStart()),
       button(t('statistics'), 'statistics', () => this.options.statistics()),
       this.status,
     );
@@ -211,6 +213,7 @@ export const aboutModule: ShellModule = {
             retry: () => loadRelease(true),
             // The guide covers the main area, under the settings dialog: close the dialog first.
             setupGuide: () => void commands.execute('settings.close').then(() => commands.execute('setup.open')),
+            quickStart: () => void commands.execute('settings.close').then(() => commands.execute('quickStart.open')),
             statistics: () => void commands.execute('stats.show'),
           });
           const render = (): void => view.render(init, extensionStatus, release);

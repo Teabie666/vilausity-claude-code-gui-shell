@@ -26,3 +26,20 @@ export function onboardingDue(
   // A value that is not a version (none yet, or written by hand) counts as not seen.
   return !isVersion(seen) || compareVersions(seen, ONBOARDING_VERSION) < 0;
 }
+
+/** In state/shell.json: the quick start's steps ticked off, by id. */
+export const QUICK_START_STATE_KEY = 'quickStartSteps';
+
+/** The steps ticked off in a stored value: its strings, once each (anything else is dropped). */
+export function quickStartSteps(stored: unknown): readonly string[] {
+  if (!Array.isArray(stored)) {
+    return [];
+  }
+  return [...new Set(stored.filter((step): step is string => typeof step === 'string' && step.length > 0))];
+}
+
+/** The stored steps with `step` ticked off (added at the end) or cleared. */
+export function markQuickStartStep(stored: unknown, step: string, done: boolean): readonly string[] {
+  const steps = quickStartSteps(stored).filter((id) => id !== step);
+  return done ? [...steps, step] : steps;
+}

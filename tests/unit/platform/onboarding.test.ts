@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ONBOARDING_VERSION, onboardingDue } from '../../../src/platform/onboarding';
+import { markQuickStartStep, ONBOARDING_VERSION, onboardingDue, quickStartSteps } from '../../../src/platform/onboarding';
 
 /** The normal instance, with nothing in the environment. */
 const normal = { elevated: false, env: {} };
@@ -33,5 +33,25 @@ describe('onboardingDue', () => {
   test('VILAUS_ONBOARDING=0 turns it off (tests); any other value leaves it as usual', () => {
     assert.equal(onboardingDue(undefined, { elevated: false, env: { VILAUS_ONBOARDING: '0' } }), false);
     assert.equal(onboardingDue(undefined, { elevated: false, env: { VILAUS_ONBOARDING: '1' } }), true);
+  });
+});
+
+describe('quick start steps', () => {
+  test('a stored value keeps its strings once each, in order', () => {
+    assert.deepEqual(quickStartSteps(['search', 7, 'comments', '', 'search', null]), ['search', 'comments']);
+  });
+  test('anything but an array is no steps', () => {
+    assert.deepEqual(quickStartSteps(undefined), []);
+    assert.deepEqual(quickStartSteps('search'), []);
+    assert.deepEqual(quickStartSteps({ search: true }), []);
+  });
+  test('ticking a step off adds it at the end, once', () => {
+    assert.deepEqual(markQuickStartStep(['search'], 'comments', true), ['search', 'comments']);
+    assert.deepEqual(markQuickStartStep(['search', 'comments'], 'search', true), ['comments', 'search']);
+    assert.deepEqual(markQuickStartStep(undefined, 'search', true), ['search']);
+  });
+  test('clearing a step removes it; clearing one not there changes nothing', () => {
+    assert.deepEqual(markQuickStartStep(['search', 'comments'], 'search', false), ['comments']);
+    assert.deepEqual(markQuickStartStep(['comments'], 'search', false), ['comments']);
   });
 });

@@ -3070,3 +3070,297 @@ body.resizing {
     text-align: left;
   }
 }
+
+/* ---- quick start tab (features/quickStart) -------------------------------- */
+
+/*
+ * The empty circle and the ticked one of a step's tick box, as masks filled with currentColor
+ * like the icons above (the renderer has no codicon font): VS Code's circle-large-outline and
+ * pass-filled shapes.
+ */
+.quick-start {
+  --icon-quick-start-open: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M8 2a6 6 0 0 1 0 12a6 6 0 0 1 0-12zM8 3a5 5 0 0 1 0 10a5 5 0 0 1 0-10z'/%3E%3C/svg%3E");
+  --icon-quick-start-done: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M8 2a6 6 0 0 1 0 12a6 6 0 0 1 0-12zM6.9 11.6 3.3 8 4.4 6.9 6.9 9.4 11.6 4.7 12.7 5.8z'/%3E%3C/svg%3E");
+
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  user-select: text;
+}
+
+/* A column of at most 760px, left-aligned: no wide gutters around a centered page. */
+.quick-start-content {
+  max-width: 760px;
+  padding: 16px 20px 28px;
+  box-sizing: border-box;
+}
+
+.quick-start-heading {
+  margin: 0 0 4px;
+  font-size: 1.6em;
+  font-weight: 600;
+}
+
+.quick-start-intro {
+  margin: 0 0 16px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* The safety notes: a text block quote (a 2px line, no card). */
+.quick-start-safety {
+  margin: 0 0 20px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--vscode-textBlockQuote-border, var(--vscode-focusBorder));
+  background: var(--vscode-textBlockQuote-background);
+  line-height: 1.5;
+}
+
+.quick-start-safety-title {
+  margin: 0 0 4px;
+  font-size: 1em;
+  font-weight: 600;
+}
+
+.quick-start-safety ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.quick-start-safety li + li {
+  margin-top: 4px;
+}
+
+.quick-start-group {
+  margin: 0 0 20px;
+}
+
+.quick-start-group-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 4px 0;
+  font-size: 1.15em;
+  font-weight: 600;
+}
+
+/* A closed group's header row is one button: the name left, the count right. */
+.quick-start-group-toggle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.quick-start-group-toggle:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.quick-start-group-title {
+  min-width: 0;
+}
+
+.quick-start-count {
+  flex: none;
+  font-size: 0.72em;
+  font-weight: 400;
+  color: var(--vscode-descriptionForeground);
+}
+
+.quick-start-group-description {
+  margin: 0 0 6px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.quick-start-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+}
+
+.quick-start-step {
+  border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+}
+
+.quick-start-step-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+}
+
+.quick-start-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--vscode-foreground);
+  cursor: pointer;
+}
+
+.quick-start-check::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  background-color: currentColor;
+  mask: var(--icon-quick-start-open) center / 16px no-repeat;
+}
+
+.quick-start-step.done .quick-start-check {
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+
+.quick-start-step.done .quick-start-check::before {
+  mask-image: var(--icon-quick-start-done);
+}
+
+.quick-start-step-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.quick-start-step-title:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.quick-start-step.done .quick-start-step-title-text {
+  color: var(--vscode-descriptionForeground);
+}
+
+/* An open step's text, with a 2px line down its left. */
+.quick-start-step-body {
+  margin: 0 0 6px 27px;
+  padding: 2px 12px 8px 12px;
+  border-left: 2px solid var(--vscode-focusBorder);
+  line-height: 1.5;
+}
+
+.quick-start-step-body p {
+  margin: 0 0 8px;
+}
+
+.quick-start-keys {
+  max-width: 440px;
+  margin: 0 0 10px;
+}
+
+.quick-start-key-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 22px;
+}
+
+.quick-start-key-command {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* VS Code's keybinding label (the global kbd rule), in the code font and sized for a row. */
+.quick-start-kbd {
+  flex: none;
+  font-family: var(--vscode-editor-font-family, Consolas, monospace);
+  line-height: 15px;
+}
+
+.quick-start-kbd.missing {
+  border-color: transparent;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+}
+
+.quick-start-try {
+  margin-top: 2px;
+}
+
+.quick-start-check:focus-visible,
+.quick-start-step-title:focus-visible,
+.quick-start-group-toggle:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/* The closed group's chevron, before its name. */
+.quick-start-group-toggle {
+  align-items: center;
+}
+
+.quick-start-group-toggle::before {
+  content: '';
+  flex: none;
+  width: 16px;
+  height: 16px;
+  background-color: currentColor;
+  mask: var(--icon-chevron-right) center / 16px no-repeat;
+}
+
+.quick-start-group-toggle[aria-expanded='true']::before {
+  mask-image: var(--icon-chevron-down);
+}
+
+.quick-start-group-toggle .quick-start-group-title {
+  flex: 1 1 auto;
+}
+
+/* The DeepSeek key guide: numbered steps, each a title, a paragraph and its buttons. */
+.deepseek-steps {
+  margin: 0;
+  padding-left: 22px;
+  line-height: 1.5;
+}
+
+.deepseek-steps > li {
+  padding: 6px 0 10px;
+  border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+}
+
+.deepseek-steps > li::marker {
+  font-weight: 600;
+}
+
+.deepseek-step-title {
+  margin: 0 0 2px;
+  font-size: 1em;
+  font-weight: 600;
+}
+
+.deepseek-steps p {
+  margin: 0 0 8px;
+}
+
+.deepseek-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.deepseek-note {
+  margin: 12px 0 0;
+  color: var(--vscode-descriptionForeground);
+}

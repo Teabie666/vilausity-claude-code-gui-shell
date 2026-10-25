@@ -1147,6 +1147,10 @@ export type MainApiForRenderer = {
   'onboarding.defer': (p: { step: OnboardingStep }) => void;
   /** Finished or skipped: not shown again until ONBOARDING_VERSION goes up. */
   'onboarding.done': (p: void) => void;
+  /** The quick start's steps ticked off (their ids), oldest first. */
+  'quickStart.progress': (p: void) => readonly string[];
+  /** Ticks a quick start step off (`done`), or clears it; answers the steps ticked off now. */
+  'quickStart.mark': (p: { step: string; done: boolean }) => readonly string[];
   /** The latest release on GitHub; `force` skips the hour-long cache (the About section's Retry). */
   'app.latestRelease': (p: { force?: boolean }) => LatestReleaseResult;
   'os.openExternal': (p: { url: string }) => boolean;

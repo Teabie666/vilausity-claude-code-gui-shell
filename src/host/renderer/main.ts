@@ -31,6 +31,7 @@ import { languageModule } from '../../features/language';
 import { sessionManagementModule } from '../../features/sessionManagement';
 import { sessionSearchModule } from '../../features/sessionSearch';
 import { statsModule } from '../../features/stats';
+import { quickStartModule } from '../../features/quickStart';
 import { sessionsModule } from '../../features/sessions';
 import { settingsModule } from '../../features/settings';
 import { setupModule } from '../../features/setup';
@@ -58,6 +59,7 @@ const modules: ShellModule[] = [
   sessionManagementModule,
   sessionSearchModule,
   statsModule,
+  quickStartModule,
   themesModule,
   fontsModule,
   languageModule,

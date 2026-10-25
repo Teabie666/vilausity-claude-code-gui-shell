@@ -1622,6 +1622,64 @@ await step('the setup guide opens from About and the command palette; every page
   return 'opened from About and from the palette; skipped to the last page and back';
 });
 
+await step('the quick start: from About, steps ticked off by Try, by hand and by a command; the DeepSeek guide', async () => {
+  await press('Control+,');
+  await page.locator('.settings-dialog .settings-search').fill('about');
+  await page.locator('.settings-dialog .settings-widget[data-widget="about.info"] [data-about="quick-start"]').click({ timeout: 10_000 });
+  await page.locator('.settings-dialog').waitFor({ state: 'detached', timeout: 10_000 });
+  const quickStart = page.locator('.quick-start:not(.deepseek-guide)');
+  await quickStart.waitFor({ timeout: 10_000 });
+  const stepOf = (id) => quickStart.locator(`.quick-start-step[data-step="${id}"]`);
+  const isDone = (id) => stepOf(id).evaluate((node) => node.classList.contains('done'));
+  // The first step not ticked off is open; the tinkerers' group is closed.
+  if ((await quickStart.locator('.quick-start-step.expanded').count()) !== 1) throw new Error('not exactly one step is open');
+  if (await stepOf('stats').isVisible()) throw new Error('the closed group shows its steps');
+
+  // Try: Session Management opens the settings at that section, and ticks the step off.
+  if (await isDone('sessions')) throw new Error('"Manage sessions" is ticked off before it was tried');
+  await stepOf('sessions').locator('.quick-start-step-title').click();
+  await stepOf('sessions').locator('.quick-start-try').click();
+  await page.locator('.settings-dialog').waitFor({ timeout: 10_000 });
+  await waitFor(() => isDone('sessions'), 5000, '"Manage sessions" to be ticked off');
+  await press('Escape');
+  await page.locator('.settings-dialog').waitFor({ state: 'detached', timeout: 10_000 });
+
+  // By hand, both ways.
+  await stepOf('modes').locator('.quick-start-check').click();
+  await waitFor(() => isDone('modes'), 5000, 'the modes step to be ticked off by hand');
+  await stepOf('modes').locator('.quick-start-check').click();
+  await waitFor(async () => !(await isDone('modes')), 5000, 'the modes step to be cleared by hand');
+
+  // A command run from anywhere: the shortcut of the search.
+  await press('Control+P');
+  await page.locator('.quick-input-filter').waitFor({ timeout: 5000 });
+  await press('Escape');
+  await waitFor(() => isDone('search'), 5000, 'the search step to be ticked off by its command');
+  // (Main writes its state file a moment later.)
+  let stored = [];
+  await waitFor(
+    () => {
+      stored = readJson(path.join(dataDir, 'state', 'shell.json'))?.quickStartSteps ?? [];
+      return stored.includes('sessions') && stored.includes('search') && !stored.includes('modes');
+    },
+    10_000,
+    'state/shell.json to have the steps ticked off',
+  );
+
+  // The setup guide's "I don't have one yet" opens the DeepSeek guide beside it.
+  await press('Control+Shift+P');
+  await page.locator('.quick-input-filter').fill('>Setup Guide');
+  await page.locator('.quick-input-filter').press('Enter');
+  await page.locator('.setup-guide').waitFor({ timeout: 10_000 });
+  await page.locator('.setup-skip').click();
+  await page.locator('.setup-connection').waitFor({ timeout: 5000 });
+  await page.locator('.setup-choice', { hasText: "I don't have one yet" }).click();
+  await page.locator('.deepseek-guide .deepseek-steps > li').first().waitFor({ timeout: 10_000 });
+  await page.locator('.setup-exit').click();
+  await waitFor(async () => (await page.locator('.setup-guide').count()) === 0, 5000, 'the guide to close');
+  return `ticked off: ${stored.join(', ')}`;
+});
+
 /** Like press(), for an instance a step started itself. */
 async function pressIn(instance, shortcut) {
   const parts = shortcut.split('+');
@@ -3172,13 +3230,13 @@ function makeVsix(version, publisher = 'Anthropic', main = 'exports.activate = (
 const readExtensionState = () => JSON.parse(readFileSync(path.join(dataDir, 'extensions', 'state.json'), 'utf8'));
 
 /** A JSON file's contents; undefined while it is missing or half-written. */
-const readJson = (file) => {
+function readJson(file) {
   try {
     return JSON.parse(readFileSync(file, 'utf8'));
   } catch {
     return undefined;
   }
-};
+}
 
 /** The workspace window with the settings editor on Extension Version; resolves to the page and the block. */
 async function openExtensionVersion() {
@@ -3386,6 +3444,8 @@ await step(
         10_000,
         'the guide to be gone after the reload',
       );
+      // The quick start follows the guide, in the folder the window switched to.
+      await firstPage.locator('.quick-start:not(.deepseek-guide) .quick-start-step').first().waitFor({ timeout: 10_000 });
       // The Git notice waits for the guide to close (it would sit over the guide's buttons).
       await firstPage.locator('.toast', { hasText: 'Git for Windows was not found' }).waitFor({ timeout: 10_000 });
 

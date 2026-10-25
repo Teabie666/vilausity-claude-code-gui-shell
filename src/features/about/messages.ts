@@ -14,6 +14,7 @@ export const t = defineMessages('about', {
   releases: 'Releases',
   statistics: 'Statistics',
   setupGuide: 'Setup Guide',
+  quickStart: 'Quick Start',
   copy: 'Copy Version Information',
   copied: 'Copied.',
 });

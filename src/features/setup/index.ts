@@ -23,7 +23,7 @@ const GIT_DOWNLOAD_URL = 'https://git-scm.com/downloads/win';
 
 export const setupModule: ShellModule = {
   id: 'setup',
-  dependsOn: ['conversations', 'providers', 'extensionUpdates', 'settings'],
+  dependsOn: ['conversations', 'providers', 'extensionUpdates', 'settings', 'quickStart'],
   async activate({ services, subscriptions, logger }) {
     const native = services.get(INative);
     const dialogs = services.get(IDialogs);
