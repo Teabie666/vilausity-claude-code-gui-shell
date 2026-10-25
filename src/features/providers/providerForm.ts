@@ -312,7 +312,23 @@ export class ProviderForm {
   rows(provider: ProviderSummary, sections: readonly ProviderFormSection[]): HTMLElement[] {
     this.provider = provider;
     this.syncPrices = undefined;
+    this.priceAssist = undefined;
     return sections.flatMap((section) => this.section(section));
+  }
+
+  /**
+   * The prices row's two buttons that get prices from an AI chat (Copy Prompt for AI, Paste
+   * Answer) and the box the second opens, taken out of the row last made by `rows` for the
+   * caller to place on their own (the setup guide shows them above a closed table). Undefined
+   * without a prices row.
+   */
+  takePriceAssist(): { readonly buttons: readonly HTMLElement[]; readonly panel: HTMLElement } | undefined {
+    const assist = this.priceAssist;
+    if (assist !== undefined) {
+      assist.buttons.forEach((button) => button.remove());
+      assist.panel.remove();
+    }
+    return assist;
   }
 
   /** The test button, and beside it the answer and (on a line of its own) the proxy it went through. */
@@ -456,6 +472,8 @@ export class ProviderForm {
 
   /** Adds the price rows the models now named need (set while the prices section is shown). */
   private syncPrices: (() => void) | undefined;
+  /** The prices row's AI chat buttons and paste box (takePriceAssist). */
+  private priceAssist: { readonly buttons: readonly HTMLElement[]; readonly panel: HTMLElement } | undefined;
 
   private keyRow(provider: ProviderSummary): HTMLElement {
     const doc = this.doc;
@@ -780,6 +798,7 @@ export class ProviderForm {
     const accuracy = this.description(t('pricesAccuracy'));
     accuracy.classList.add('providers-prices-accuracy');
     control.append(bar, table, empty, total, accuracy, this.pricingInfo(draft, changed), paste);
+    this.priceAssist = { buttons: [copyPrompt, pasteButton], panel: paste };
 
     // The models its fields name, it has prices for, or its conversations used.
     const wanted = (): string[] => [

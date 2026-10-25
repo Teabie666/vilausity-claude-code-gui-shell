@@ -1,5 +1,6 @@
 /**
- * The setup guide (M6.7): a new version's first run, over the main area. The steps above
+ * The setup guide (M6.7): a new version's first run, in a tab of its own beside the
+ * conversations (its container is the tab's; index.ts makes the tab). The steps above
  * say where the user is (earlier pages can be returned to); the pages are all made in
  * order when the guide opens, one shows at a time, and Back / Skip This Page / Next
  * (Finish on the last page) walk through them. A page's Next saves what it set (goOn);
@@ -21,6 +22,8 @@ export interface SetupGuideOptions {
   readonly pages: readonly GuidePageFactory[];
   /** The guide closed: finished, skipped to the end, or exited. */
   readonly onClose: () => void;
+  /** Whether the guide can be left now (Exit Guide is offered): its tab's close button follows. */
+  readonly onCanExitChange: (canExit: boolean) => void;
 }
 
 /** The shell around the pages: the steps, the page, the buttons. */
@@ -33,7 +36,7 @@ export class SetupGuide implements IDisposable {
   private readonly back: HTMLButtonElement;
   private readonly skip: HTMLButtonElement;
   private readonly next: HTMLButtonElement;
-  private readonly exit: HTMLAnchorElement;
+  private readonly exitLink: HTMLAnchorElement;
   private index = 0;
   /** The page reached furthest: the steps before it can be returned to. */
   private furthest = 0;
@@ -79,13 +82,13 @@ export class SetupGuide implements IDisposable {
       item.appendChild(button);
       list.appendChild(item);
     });
-    this.exit = element('a', 'setup-link setup-exit', t('guideExit'));
-    this.exit.href = '#';
-    this.exit.addEventListener('click', (event) => {
+    this.exitLink = element('a', 'setup-link setup-exit', t('guideExit'));
+    this.exitLink.href = '#';
+    this.exitLink.addEventListener('click', (event) => {
       event.preventDefault();
       this.close();
     });
-    header.append(list, this.exit);
+    header.append(list, this.exitLink);
 
     const body = element('div', 'setup-guide-body');
     this.content = element('div', 'setup-guide-content');
@@ -114,6 +117,13 @@ export class SetupGuide implements IDisposable {
       return;
     }
     this.pages[this.index].focus();
+  }
+
+  /** Exit Guide, from outside (its tab closed); not while the page cannot be left. */
+  exit(): void {
+    if (!this.closed && this.pages[this.index].canSkip) {
+      this.close();
+    }
   }
 
   dispose(): void {
@@ -185,7 +195,8 @@ export class SetupGuide implements IDisposable {
     const last = this.index === this.pages.length - 1;
     this.back.hidden = this.index === 0;
     this.skip.hidden = !page.canSkip;
-    this.exit.hidden = !page.canSkip;
+    this.exitLink.hidden = !page.canSkip;
+    this.options.onCanExitChange(page.canSkip);
     this.next.hidden = page.canGoOn === undefined;
     this.next.textContent = last ? t('guideFinish') : t('guideNext');
     this.back.disabled = this.busy;

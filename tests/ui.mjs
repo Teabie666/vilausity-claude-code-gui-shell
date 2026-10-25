@@ -1570,14 +1570,23 @@ await step('About shows the versions and the latest release from GitHub (a local
   }
 });
 
-await step('the setup guide opens from About and the command palette; every page can be skipped', async () => {
+await step('the setup guide opens in a tab of its own, from About and the command palette; every page can be skipped', async () => {
+  const activePanel = () => page.evaluate(() => document.querySelector('#tabs .tab.active')?.dataset.panelId ?? null);
+  const conversationsOpen = await page.locator('#tabs .tab[data-panel-id]').count();
+  const inFront = await activePanel();
   await press('Control+,');
   await page.locator('.settings-dialog .settings-search').fill('about');
   const fromAbout = page.locator('.settings-dialog .settings-widget[data-widget="about.info"] [data-about="setup-guide"]');
   await fromAbout.click({ timeout: 10_000 });
-  // The dialog closes first: the guide covers the main area, under it.
+  // The dialog closes first: the guide's tab is under it.
   await page.locator('.settings-dialog').waitFor({ state: 'detached', timeout: 10_000 });
   await page.locator('.setup-guide').waitFor({ timeout: 10_000 });
+  // Its own tab, in front; the conversation keeps its tab (and the row shows them both).
+  const guideTab = page.locator('#tabs .tab.shell-tab');
+  if ((await guideTab.innerText()) !== 'Setup Guide') throw new Error(`the guide's tab reads "${await guideTab.innerText()}"`);
+  if (!(await guideTab.evaluate((node) => node.classList.contains('active')))) throw new Error("the guide's tab is not in front");
+  if ((await activePanel()) !== null) throw new Error('a conversation tab is still marked active');
+  if (conversationsOpen > 0 && !(await page.locator('#tabs').isVisible())) throw new Error('the tab row is hidden beside a conversation');
 
   // Page 1: the extension in use, and the update settings the settings editor has.
   const inUse = page.locator('.setup-version .extension-version-current');
@@ -1611,15 +1620,23 @@ await step('the setup guide opens from About and the command palette; every page
   await page.locator('.setup-extension').waitFor({ timeout: 5000 });
   await page.locator('.setup-exit').click();
   await waitFor(async () => (await page.locator('.setup-guide').count()) === 0, 5000, 'the guide to close');
+  if ((await guideTab.count()) !== 0) throw new Error("the guide's tab stays after the guide closed");
+  // (A preview closes once another tab shows: then the one used before it comes back.)
+  const kept = inFront !== null && (await page.locator(`#tabs .tab[data-panel-id="${inFront}"]`).count()) > 0;
+  if (kept && (await activePanel()) !== inFront) throw new Error('the conversation in front before is not back');
 
-  // The command palette opens it too.
+  // The command palette opens it too; its tab's close button exits it.
   await press('Control+Shift+P');
   await page.locator('.quick-input-filter').fill('>Setup Guide');
   await page.locator('.quick-input-filter').press('Enter');
   await page.locator('.setup-guide').waitFor({ timeout: 10_000 });
-  await page.locator('.setup-exit').click();
+  if (conversationsOpen > 0) {
+    await guideTab.locator('.tab-close').click();
+  } else {
+    await page.locator('.setup-exit').click();
+  }
   await waitFor(async () => (await page.locator('.setup-guide').count()) === 0, 5000, 'the guide to close again');
-  return 'opened from About and from the palette; skipped to the last page and back';
+  return `opened from About and from the palette, in a tab of its own (beside ${conversationsOpen} conversations); skipped to the last page and back`;
 });
 
 await step('the quick start: from About, steps ticked off by Try, by hand and by a command; the DeepSeek guide', async () => {
@@ -1675,6 +1692,8 @@ await step('the quick start: from About, steps ticked off by Try, by hand and by
   await page.locator('.setup-connection').waitFor({ timeout: 5000 });
   await page.locator('.setup-choice', { hasText: "I don't have one yet" }).click();
   await page.locator('.deepseek-guide .deepseek-steps > li').first().waitFor({ timeout: 10_000 });
+  const deepSeekButtons = await page.locator('.deepseek-guide button').allInnerTexts();
+  if (deepSeekButtons.join() !== 'Open the Platform') throw new Error(`the DeepSeek guide's buttons: ${deepSeekButtons.join(', ')}`);
   await page.locator('.setup-exit').click();
   await waitFor(async () => (await page.locator('.setup-guide').count()) === 0, 5000, 'the guide to close');
   return `ticked off: ${stored.join(', ')}`;
@@ -3374,7 +3393,9 @@ await step(
       await firstPage.locator('.setup-next').click();
       await firstPage.locator('.setup-connection').waitFor({ timeout: 10_000 });
       await firstPage.locator('.setup-choice').first().click();
-      await firstPage.locator('.setup-deepseek').click();
+      const presetChosen = await firstPage.locator('.setup-provider-select').inputValue();
+      if (presetChosen !== 'deepseek') throw new Error(`the provider list starts on "${presetChosen}"`);
+      await firstPage.locator('.setup-provider-ok').click();
       const provider = await waitFor(
         () => readJson(path.join(firstData, 'providers.json'))?.providers?.[0],
         10_000,
@@ -3387,6 +3408,9 @@ await step(
       });
       await firstPage.locator('.setup-models').waitFor({ timeout: 10_000 });
 
+      // Asking an AI for the prices is offered above the closed table.
+      if (!(await firstPage.locator('.setup-prices-ai .providers-prices-paste').isVisible())) throw new Error('Paste Answer is not shown');
+      if (await firstPage.locator('.setup-prices .providers-prices-table').isVisible()) throw new Error('the price table is open');
       await firstPage.locator('.setup-key .providers-key').fill('sk-first-run');
       await firstPage.locator('.setup-key button', { hasText: 'Save Key' }).click();
       await waitFor(

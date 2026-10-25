@@ -1,6 +1,6 @@
 /**
- * What the setup guide's pages share: the guide (guide.ts) shows one page at a time over the
- * main area, with the steps above it and Back / Skip / Next below it.
+ * What the setup guide's pages share: the guide (guide.ts) shows one page at a time in its
+ * tab, with the steps above it and Back / Skip / Next below it.
  */
 
 import type { ServiceRegistry } from '../../core/services';

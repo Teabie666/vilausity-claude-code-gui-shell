@@ -51,7 +51,7 @@ Electron main ── 窗口、命令行参数、设置和状态存储（唯一�
 
 ## 内容面板（M2）
 
-窗口分三栏：会话侧边栏 | 对话 | 内容面板。对话标签页（`features/conversations`）在对话那一栏的顶上，跟内容面板的标签页同一高度；只有一个对话时不显示这一行（设置 `vilaus.conversations.alwaysShowTabs` 打开后总是显示），因为多数时候只用一个对话。内容面板（`features/contentPane`）只管标签页：打开（含 VS Code 的预览标签页）、切换、脏标记、关闭；有标签页时自动显示，最后一个关掉就隐藏。
+窗口分三栏：会话侧边栏 | 对话 | 内容面板。对话标签页（`features/conversations`）在对话那一栏的顶上，跟内容面板的标签页同一高度；只有一个标签页时不显示这一行（设置 `vilaus.conversations.alwaysShowTabs` 打开后总是显示），因为多数时候只用一个对话。壳也能在这一行放自己的标签页（`ConversationTabs.openShellTab`，配置引导用）：它在前面时没有活动的对话（`active` 是 undefined），`count` 只数对话，切换和这一行显不显示按 `tabCount`（连壳的一起数）。内容面板（`features/contentPane`）只管标签页：打开（含 VS Code 的预览标签页）、切换、脏标记、关闭；有标签页时自动显示，最后一个关掉就隐藏。
 
 - **编辑器贡献点** `core/editors.ts`：一个标签页 = 一个输入（`EditorInput`：类型、URI、语言、给编辑器的数据）+ 一个编辑器（`EditorPane`）。模块按输入类型 / 语言注册 `EditorProvider`，同一输入有多个提供者时取优先级高的（Markdown 预览就是这样盖过普通文本编辑器的）。
 - **插件的 webview 面板**由 `core/panels.ts` 按区域分发：exthost 按面板请求的列决定区域（聊天面板永远在对话区；`ViewColumn.Beside` 或第二列以后进内容面板，插件的计划预览就是这样进来的），对话区由 conversations 模块显示，内容面板由 contentPane 模块显示。
@@ -262,9 +262,9 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 ## 首次启动和配置引导（M4，M6.7 改成引导）
 
 - **出现条件**：主进程按 `platform/onboarding.ts` 的 `onboardingDue`（`state/shell.json` 的 `onboardingVersion` 低于 `ONBOARDING_VERSION`、不是管理员实例、没设 `VILAUS_ONBOARDING=0`）在启动时记下待显示的一步（`setup`）。页面用 `onboarding.take` 取（第一个来取的拿走）、`onboarding.defer` 留给下一个载入的页面、`onboarding.done` 写回版本号；中途关掉窗口不写，下次从头来。测试脚本的公共环境都设了 `VILAUS_ONBOARDING=0`。
-- **配置引导**（`features/setup`）：主区域盖一层，三页，契约是 `setup/page.ts` 的 `GuidePage`（`canSkip`、`canGoOn`、`goOn()`、`show()`），外壳 `guide.ts` 管步骤条、上一步 / 跳过 / 下一步、退出引导。自动出现（取到 `setup`）、插件没在跑、命令 `setup.open`（命令面板 Help: Setup Guide、设置"关于"里的按钮）都会打开；后两种不算自动。
+- **配置引导**（`features/setup`）：对话那一栏里单独一个标签页（"配置引导"，`openShellTab`；已经开着的对话保留自己的标签页，以前是盖在对话上、标签页的标题对不上），三页，契约是 `setup/page.ts` 的 `GuidePage`（`canSkip`、`canGoOn`、`goOn()`、`show()`），外壳 `guide.ts` 管步骤条、上一步 / 跳过 / 下一步、退出引导（标签页的关闭按钮也是退出引导，不能退出时隐藏）。自动出现（取到 `setup`）、插件没在跑、命令 `setup.open`（命令面板 Help: Setup Guide、设置"关于"里的按钮）都会打开；后两种不算自动。
   - 第 1 页 `extensionPage.ts`：有插件时是设置页同一个 `extensionUpdates/versionView.ts`（不带退回），加自动更新、锁定版本、下载服务器（官方 / 自定义地址；没有公开的国内镜像）三个控件；没插件时下载并安装（`extension.check`，进度来自 `extensionStatus`）或从 VSIX 安装，失败时提示换服务器或从 Open VSX 网页手动下 .vsix。没插件不能跳过、不能退出（窗口是空的）。
-  - 第 2 页 `connectionPage.ts`：我有 API key（从预设加接口，用 `providers/providerForm.ts` 的 key、模型、价格几节和测试连接，每节上面一两句说明）、还没有（`quickStart.deepSeekKey` 教程，没有这个命令时打开 DeepSeek 的 key 页面）、用 Claude 账号（切回订阅，登录交给插件）。下一步：保存表单、`providers.select`，勾着"新打开的文件夹默认用这个接口"时写 `vilaus.provider.default`（新文件夹靠它，不写就回到订阅）。
+  - 第 2 页 `connectionPage.ts`：我有 API key（"API 供应商"下拉框选预设，默认 DeepSeek，"确定"后加接口；然后是 `providers/providerForm.ts` 的 key、模型、价格几节和测试连接，每节上面一两句说明。价格表默认收起，问 AI 要价格的两个按钮和粘贴框由 `takePriceAssist` 拿到表外面，配一行用法：预设自带的价格会过时）、还没有（`quickStart.deepSeekKey` 教程，没有这个命令时打开 DeepSeek 的 key 页面）、用 Claude 账号（切回订阅，登录交给插件）。下一步：保存表单、`providers.select`，勾着"设为默认 API 接口"时写 `vilaus.provider.default`（新文件夹靠它，不写就回到订阅）。
   - 第 3 页 `workspacePage.ts`：确认或换这个窗口的文件夹，是用户文件夹时说明这是全局工作区。换文件夹走 `window.openFolder`，页面会重新载入，所以自动出现时先 `onboarding.defer({ step: 'quickStart' })`，载入后 `setup` 模块取到 `quickStart` 再开快速入门。
   - 关闭（走完、跳到最后、退出）后：自动出现的接着开快速入门（`quickStart.open` 带 `{ onboarding: true }`，快速入门标签页打开后由它调 `onboarding.done`）；插件在跑、窗口一个对话都没有时开一个新对话（用账号的人马上看到登录）。
 - 插件自带的新手清单默认关掉：`platform/extensionDefaults.ts` 的 `EXTENSION_DEFAULT_OVERRIDES` 叠在插件 package.json 的默认值上面（只对这个版本声明了的设置），compat 和设置页都用它。
@@ -276,7 +276,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 
 ## 快速入门（M6.7）
 
-- `features/quickStart`：内容面板的两个固定 id 的标签页（照统计页），快速入门（`quickStart`）和获取 DeepSeek API key 的教程（`quickStart.deepSeek`）。命令 `quickStart.open`（Help: Quick Start，设置"关于"的按钮，配置引导自动出现后接着开）、`quickStart.deepSeekKey`（配置引导第 2 页"我还没有"）。
+- `features/quickStart`：内容面板的两个固定 id 的标签页（照统计页），快速入门（`quickStart`）和获取 DeepSeek API key 的教程（`quickStart.deepSeek`，几步文字，只有一个"打开平台"按钮）。命令 `quickStart.open`（Help: Quick Start，设置"关于"的按钮，配置引导自动出现后接着开）、`quickStart.deepSeekKey`（配置引导第 2 页"我还没有"）。
 - **内容是数据**（`steps.ts`）：分组（Claude Code 本来就有的、Vilausity 加的、给折腾的人的，最后一组默认收起），每步有标题、几段说明、`keys`（列出命令和它现在的快捷键：`keybindings.labelFor` 现读，改了快捷键页面跟着变）、`action`（执行壳的命令；开新对话并把示例填进输入框，走 `conversation.open` 的 `prompt`，不替用户发送；或者打开网页）、`doneWhen`。插件界面的名字和按键照插件 2.1.310。打开设置某一节用 `settings.openSection`，参数是那一节显示的标题（随界面语言）。
 - **打勾**：点过"试试"、手动勾、或者在任何地方执行了 `doneWhen` 里的命令（`CommandService.onDidExecute`，模块层订阅，标签页没开也算）。主进程存在 `state/shell.json` 的 `quickStartSteps`（`quickStart.progress` / `quickStart.mark`，`platform/onboarding.ts` 的纯函数），普通实例和管理员实例各存各的；页面新建时再读一次（别的窗口可能勾过）。步骤 id 存进了 state，别改名。
 - 视图（`quickStartView.ts`）一次只展开一步，开始时展开第一个没收起的组里第一个没勾的；打勾和快捷键变化只改对应的元素，不重建（保住滚动位置和焦点）。

@@ -24,7 +24,7 @@ export const t = defineMessages('setup', {
   extExternal:
     "This copy was installed by {0}. Vilausity does not change it; once a new version is out, Vilausity downloads its own copy, and automatic updates and going back are then Vilausity's.",
   extCli: 'This copy was given with --extension-dir. It is used as it is, and no updates are checked for.',
-  extUpdates: 'Updates',
+  extUpdates: 'Claude Code Extension Updates',
   extAutoUpdate: 'Automatic updates',
   extAutoUpdateText: 'A new version is used from the next start; the one before it is kept, to go back to.',
   extPinned: 'Stay on a version',
@@ -47,9 +47,9 @@ export const t = defineMessages('setup', {
   connChoiceAccount: 'Sign in with a Claude account',
   connChoiceAccountText: 'Claude Pro or Max; the sign-in shows up in a conversation',
   connBack: 'Back to the choices',
-  connProvider: 'Provider',
+  connProvider: 'API Provider',
   connProviderText: 'Every provider comes with its address, models and prices filled in.',
-  connMore: 'More...',
+  connProviderOk: 'OK',
   connChange: 'Change',
   connKey: 'API key',
   connKeyText: 'The key is stored encrypted on this computer and given only to Claude Code.',
@@ -59,15 +59,16 @@ export const t = defineMessages('setup', {
     'Main model is what conversations use by default. Opus, Sonnet and Haiku are the three choices of the model picker in a conversation, and Subagents is what Claude sends its own subagents to. A name ending in [1m] has a context of 1 million tokens. The preset has filled these in: leave them as they are unless you know the model names.',
   connPrices: 'Prices',
   connPricesText: 'Prices work out what the conversations on this API cost; the session list shows the total at the top.',
-  connPricesPreset: 'The prices the {0} preset comes with were read on {1}. Default Prices brings them back.',
+  connPricesAi:
+    'Token prices change often. To fill them in, copy the prompt, send it to an AI chat that can search the web, and paste its whole answer back.',
+  connPricesAiDated:
+    'Token prices change often; the ones the {0} preset comes with were read on {1}. To bring them up to date, copy the prompt, send it to an AI chat that can search the web, and paste its whole answer back.',
   connPricesShow: 'Show Prices',
   connPricesHide: 'Hide Prices',
-  connPricesNone:
-    'Copy Prompt for AI has an AI with web access look the prices up; paste its answer back. Or leave the prices out now and fill them in later in API Providers.',
   connTest: 'Test',
   connTestText:
     'Sends a request of one token with this key, to see whether it connects. Save the key first: its row has a button of its own.',
-  connDefaultProvider: 'Use this provider for folders opened from now on',
+  connDefaultProvider: 'Set as default API provider',
   connAddFailed: 'Could not add the provider: {0}',
   connRemoveFailed: 'Could not remove the provider: {0}',
   connSwitchFailed: 'Could not switch to the Claude account: {0}',

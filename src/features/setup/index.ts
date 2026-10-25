@@ -1,5 +1,6 @@
 /**
- * The setup guide (M6.7): a new version's first run, over the main area, in three pages —
+ * The setup guide (M6.7): a new version's first run, in a tab beside the conversations (a
+ * conversation already open keeps its own), in three pages —
  * the Claude Code extension (installed or downloaded), the connection to Claude (an API
  * provider, or a Claude account), and the workspace (the folder this window shows).
  * Main asks for it at startup (onboarding.take); it also opens whenever the extension is
@@ -11,8 +12,9 @@
 
 import { CommandCategory } from '../../core/messages';
 import type { ShellModule } from '../../core/module';
-import { ICommands, IDialogs, ILayout, INative } from '../../core/serviceIds';
+import { ICommands, IDialogs, INative } from '../../core/serviceIds';
 import { IConversations } from '../conversations';
+import type { ShellTab } from '../conversations/conversationTabs';
 import { connectionPage } from './connectionPage';
 import { extensionPage } from './extensionPage';
 import { SetupGuide } from './guide';
@@ -85,26 +87,36 @@ export const setupModule: ShellModule = {
       }
     };
 
-    let guide: SetupGuide | undefined;
+    const conversations = services.get(IConversations);
+    let guide: { readonly view: SetupGuide; readonly tab: ShellTab } | undefined;
     const open = (automatic: boolean): void => {
       if (guide) {
-        guide.focus();
+        guide.tab.reveal();
         return;
       }
-      const created = new SetupGuide(services.get(ILayout).main, {
+      const tab = conversations.openShellTab({
+        title: t('guideLabel'),
+        onClose: () => guide?.view.exit(),
+        onFocus: () => guide?.view.focus(),
+      });
+      const view = new SetupGuide(tab.container, {
         services,
         logger,
         automatic,
         pages: [extensionPage, connectionPage, workspacePage],
+        onCanExitChange: (canExit) => tab.setClosable(canExit),
         onClose: () => {
           guide = undefined;
-          subscriptions.delete(created);
+          subscriptions.delete(view);
+          subscriptions.delete(tab);
           void closed(automatic);
           showNotices();
         },
       });
-      guide = created;
-      subscriptions.add(created);
+      guide = { view, tab };
+      subscriptions.add(view);
+      subscriptions.add(tab);
+      tab.reveal();
     };
 
     subscriptions.add(commands.register('setup.open', () => open(false), { title: t('guideLabel'), category: CommandCategory.help }));

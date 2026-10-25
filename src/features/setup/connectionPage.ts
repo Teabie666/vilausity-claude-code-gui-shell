@@ -20,7 +20,7 @@ import { presetById, presetPricing, PROVIDER_PRESETS, URL_PLACEHOLDER } from '..
 import { t } from './messages';
 import type { GuideContext, GuidePage, GuidePageFactory } from './page';
 
-/** The one provider offered as a button; the rest are behind "More...". */
+/** The provider chosen at first. */
 const DEEPSEEK_PRESET = 'deepseek';
 const DEEPSEEK_KEYS_URL = 'https://platform.deepseek.com/api_keys';
 /** The quick start on getting a DeepSeek key; there may be none (then the page opens in a browser). */
@@ -63,12 +63,14 @@ class ConnectionPage implements GuidePage {
   private view: 'choices' | 'config' = 'choices';
   /** Set Up Another was pressed: the choices show beside the provider this window already uses. */
   private revealed = false;
+  /** The preset chosen in the list, until OK adds a provider from it. */
+  private presetChoice = DEEPSEEK_PRESET;
   /** The provider this page added; undefined while its preset is being chosen. */
   private summary: ProviderSummary | undefined;
   private form: ProviderForm | undefined;
   /** The provider the form was made from (it keeps its draft while it stays the same one). */
   private formFor: string | undefined;
-  /** The checkbox at the end: new folders use this provider too. */
+  /** The checkbox at the end: the default provider, which new folders use too. */
   private defaultForNew = true;
   /** The prices table is shown (it is long, and a preset fills it in). */
   private pricesOpen = false;
@@ -260,31 +262,23 @@ class ConnectionPage implements GuidePage {
 
     section.appendChild(this.make('p', 'setup-text', t('connProviderText')));
     const actions = this.make('div', 'setup-actions');
-    const deepseek = presetById(DEEPSEEK_PRESET);
-    const quick = this.make('button', 'button setup-deepseek', deepseek?.name() ?? 'DeepSeek');
-    quick.type = 'button';
-    quick.addEventListener('click', () => void this.addProvider(DEEPSEEK_PRESET));
-    const more = this.make('select', 'setting-select setup-provider-more');
-    const placeholder = this.make('option', '', t('connMore'));
-    placeholder.value = '';
-    more.appendChild(placeholder);
-    for (const preset of PROVIDER_PRESETS) {
-      if (preset.id === DEEPSEEK_PRESET) {
-        continue;
-      }
+    const select = this.make('select', 'setting-select setup-provider-select');
+    select.setAttribute('aria-label', t('connProvider'));
+    // DeepSeek first: the one the key guide is about.
+    const presets = [...PROVIDER_PRESETS].sort((a, b) => Number(b.id === DEEPSEEK_PRESET) - Number(a.id === DEEPSEEK_PRESET));
+    for (const preset of presets) {
       const option = this.make('option', '', preset.name());
       option.value = preset.id;
-      more.appendChild(option);
+      select.appendChild(option);
     }
-    more.value = '';
-    more.addEventListener('change', () => {
-      const id = more.value;
-      more.value = '';
-      if (id !== '') {
-        void this.addProvider(id);
-      }
+    select.value = this.presetChoice;
+    select.addEventListener('change', () => {
+      this.presetChoice = select.value;
     });
-    actions.append(quick, more);
+    const ok = this.make('button', 'button setup-provider-ok', t('connProviderOk'));
+    ok.type = 'button';
+    ok.addEventListener('click', () => void this.addProvider(select.value));
+    actions.append(select, ok);
     section.appendChild(actions);
     return section;
   }
@@ -373,12 +367,20 @@ class ConnectionPage implements GuidePage {
     if (pricesRow !== undefined) {
       const section = this.make('section', 'setup-section setup-prices');
       section.append(this.make('h3', 'setup-section-title', t('connPrices')), this.make('p', 'setup-text', t('connPricesText')));
-      const shipped = preset === undefined ? undefined : presetPricing(preset.id);
-      const checked = shipped?.sources?.find((source) => source.checked !== undefined)?.checked;
-      if (preset !== undefined && checked !== undefined) {
-        section.appendChild(this.make('p', 'setup-hint', t('connPricesPreset', preset.name(), checked)));
-      } else if (shipped === undefined) {
-        section.appendChild(this.make('p', 'setup-hint', t('connPricesNone')));
+      // Prices change too often for a preset's to be trusted: asking an AI chat comes first,
+      // above the table (closed, the preset's prices in it).
+      const assist = form.takePriceAssist();
+      if (assist !== undefined) {
+        const shipped = preset === undefined ? undefined : presetPricing(preset.id);
+        const checked = shipped?.sources?.find((source) => source.checked !== undefined)?.checked;
+        const actions = this.make('div', 'setup-actions setup-prices-ai');
+        actions.append(...assist.buttons);
+        const hint = this.make(
+          'p',
+          'setup-hint',
+          preset !== undefined && checked !== undefined ? t('connPricesAiDated', preset.name(), checked) : t('connPricesAi'),
+        );
+        section.append(actions, hint, assist.panel);
       }
       const toggle = this.make('button', 'button secondary setup-prices-toggle');
       toggle.type = 'button';

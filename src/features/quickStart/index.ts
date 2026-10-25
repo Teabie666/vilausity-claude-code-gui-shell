@@ -200,9 +200,6 @@ export const quickStartModule: ShellModule = {
     const openLink = (url: string): void => {
       void native.call('os.openExternal', { url }).catch((error: unknown) => logger.error(`opening ${url} failed`, error));
     };
-    const openSetup = (): void => {
-      void commands.execute('setup.open').catch((error: unknown) => logger.error('opening the setup guide failed', error));
-    };
 
     subscriptions.add(
       editors.register({
@@ -215,7 +212,7 @@ export const quickStartModule: ShellModule = {
       editors.register({
         id: 'quickStart.deepSeek.editor',
         accepts: (input) => input.typeId === DEEPSEEK_TAB,
-        create: (container) => new DeepSeekEditorPane(container, { openLink, openSetup }),
+        create: (container) => new DeepSeekEditorPane(container, { openLink }),
       }),
     );
 

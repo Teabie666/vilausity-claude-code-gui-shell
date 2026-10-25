@@ -96,17 +96,19 @@ export const conversationsModule: ShellModule = {
     const updateContext = (): void => {
       contextKeys.set('conversations.count', tabs.count);
       contextKeys.set('conversations.hasActive', tabs.active !== undefined);
-      contextKeys.set('conversations.multiple', tabs.count > 1);
-      emptyState.hidden = tabs.count > 0 || !connection.isConnected;
-      layout.tabs.hidden = tabs.count < (settings.get(ALWAYS_SHOW_TABS, false) ? 1 : 2);
+      // Switching and the tab row count the shell's tabs too (the setup guide).
+      contextKeys.set('conversations.multiple', tabs.tabCount > 1);
+      emptyState.hidden = tabs.tabCount > 0 || !connection.isConnected;
+      layout.tabs.hidden = tabs.tabCount < (settings.get(ALWAYS_SHOW_TABS, false) ? 1 : 2);
     };
     subscriptions.add(tabs.onDidChangeCount(updateContext));
     subscriptions.add(tabs.onDidChangeActive(updateContext));
     subscriptions.add(settings.onDidChange((keys) => keys.includes(ALWAYS_SHOW_TABS) && updateContext()));
     const workspaceName = services.get(IWorkspace).name;
     subscriptions.add(
-      tabs.onDidChangeActive((panel) => {
-        document.title = panel ? `${panel.title} - ${workspaceName} - Vilausity` : `${workspaceName} - Vilausity`;
+      tabs.onDidChangeActive(() => {
+        const title = tabs.activeTitle;
+        document.title = title !== undefined ? `${title} - ${workspaceName} - Vilausity` : `${workspaceName} - Vilausity`;
       }),
     );
     subscriptions.add(themes.onDidChange(() => tabs.refreshIcons()));

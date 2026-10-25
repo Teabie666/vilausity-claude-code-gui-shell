@@ -1,8 +1,8 @@
 /**
  * The guide to a DeepSeek API key (features/quickStart): a tab of its own, opened by
  * `quickStart.deepSeekKey` (the setup guide's "I don't have one yet"). Numbered steps from
- * signing in on DeepSeek's platform to pasting the key into the setup guide, with buttons to
- * the platform's pages. The platform's pages as of 2026-10.
+ * signing in on DeepSeek's platform to pasting the key into the setup guide, and one button,
+ * to the platform. The platform's pages as of 2026-10.
  */
 
 import type { IDisposable } from '../../platform/lifecycle';
@@ -13,8 +13,6 @@ const PLATFORM = 'https://platform.deepseek.com';
 export interface DeepSeekGuideViewOptions {
   /** Opens a web page in the browser. */
   readonly openLink: (url: string) => void;
-  /** Opens the setup guide (or brings the open one forward). */
-  readonly openSetup: () => void;
 }
 
 interface GuideStep {
@@ -51,21 +49,17 @@ export class DeepSeekGuideView implements IDisposable {
   }
 
   private steps(doc: Document): HTMLElement {
-    const link = (label: string, path: string) => ({ label, run: () => this.options.openLink(`${PLATFORM}${path}`) });
     const steps: readonly GuideStep[] = [
-      { title: t('dsSignInTitle'), body: t('dsSignInBody'), buttons: [link(t('dsOpenPlatform'), '/')] },
-      { title: t('dsVerifyTitle'), body: t('dsVerifyBody'), buttons: [] },
       {
-        title: t('dsTopUpTitle'),
-        body: t('dsTopUpBody'),
-        buttons: [
-          link(t('dsTopUp'), '/top_up'),
-          { label: t('dsPricing'), run: () => this.options.openLink('https://api-docs.deepseek.com/quick_start/pricing') },
-        ],
+        title: t('dsSignInTitle'),
+        body: t('dsSignInBody'),
+        buttons: [{ label: t('dsOpenPlatform'), run: () => this.options.openLink(PLATFORM) }],
       },
-      { title: t('dsCreateTitle'), body: t('dsCreateBody'), buttons: [link(t('dsApiKeys'), '/api_keys')] },
-      { title: t('dsPasteTitle'), body: t('dsPasteBody'), buttons: [{ label: t('dsOpenSetup'), run: () => this.options.openSetup() }] },
-      { title: t('dsUsageTitle'), body: t('dsUsageBody'), buttons: [link(t('dsUsage'), '/usage')] },
+      { title: t('dsVerifyTitle'), body: t('dsVerifyBody'), buttons: [] },
+      { title: t('dsTopUpTitle'), body: t('dsTopUpBody'), buttons: [] },
+      { title: t('dsCreateTitle'), body: t('dsCreateBody'), buttons: [] },
+      { title: t('dsPasteTitle'), body: t('dsPasteBody'), buttons: [] },
+      { title: t('dsUsageTitle'), body: t('dsUsageBody'), buttons: [] },
     ];
 
     const list = doc.createElement('ol');
