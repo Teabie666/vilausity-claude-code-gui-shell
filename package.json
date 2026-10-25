@@ -1,7 +1,7 @@
 {
   "name": "vilaus",
   "productName": "Vilausity",
-  "version": "0.9.4",
+  "version": "1.0.0",
   "private": true,
   "description": "A lightweight workbench built around the Claude Code extension.",
   "author": "Teabie",

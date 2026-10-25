@@ -105,11 +105,11 @@ const releasesServer = createServer((request, response) => {
       { tag_name: 'v9.9.9', draft: true, published_at: '2026-10-25T00:00:00Z', html_url: 'https://example.invalid/draft' },
       { tag_name: 'v0.9.3', draft: false, published_at: '2026-09-01T00:00:00Z', html_url: 'https://example.invalid/0.9.3' },
       {
-        tag_name: 'v0.9.5-beta.1',
+        tag_name: 'v1.0.1-beta.1',
         draft: false,
         prerelease: true,
         published_at: '2026-10-23T00:00:00Z',
-        html_url: 'https://example.invalid/0.9.5-beta.1',
+        html_url: 'https://example.invalid/1.0.1-beta.1',
       },
     ]),
   );
@@ -1535,8 +1535,8 @@ await step('About shows the versions and the latest release from GitHub (a local
     await value('retry').click();
     await waitFor(async () => (await release.getAttribute('data-state')) === 'ready', 10_000, 'the latest release after Retry');
     const ready = await release.innerText();
-    if (!ready.includes('0.9.5-beta.1')) throw new Error(`the latest release reads "${ready}"`);
-    if (!ready.includes('A newer version is available: 0.9.5-beta.1')) throw new Error(`no newer-version note in "${ready}"`);
+    if (!ready.includes('1.0.1-beta.1')) throw new Error(`the latest release reads "${ready}"`);
+    if (!ready.includes('A newer version is available: 1.0.1-beta.1')) throw new Error(`no newer-version note in "${ready}"`);
 
     await value('newer').click();
     await value('repository').click();
@@ -1551,7 +1551,7 @@ await step('About shows the versions and the latest release from GitHub (a local
     const repository = 'https://github.com/Teabie666/vilausity-claude-code-gui-shell';
     if (!done.includes(`open ${repository}`)) throw new Error(`GitHub Repository opened ${JSON.stringify(done)}`);
     if (!done.includes(`open ${repository}/releases`)) throw new Error(`Releases opened ${JSON.stringify(done)}`);
-    if (!done.includes('open https://example.invalid/0.9.5-beta.1')) throw new Error(`the newer release opened ${JSON.stringify(done)}`);
+    if (!done.includes('open https://example.invalid/1.0.1-beta.1')) throw new Error(`the newer release opened ${JSON.stringify(done)}`);
     const copied = done.find((entry) => entry.startsWith('copy ')) ?? '';
     for (const expected of [`Vilausity: ${appVersion}`, 'Claude Code extension: ', 'Electron: ', 'Chromium: ', 'Node.js: ', 'OS: ']) {
       if (!copied.includes(expected)) throw new Error(`the copied text lacks "${expected}": ${copied}`);
