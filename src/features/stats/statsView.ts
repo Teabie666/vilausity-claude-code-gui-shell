@@ -107,6 +107,10 @@ function formatDateTime(time: number): string {
   return new Intl.DateTimeFormat(htmlLang(getUiLanguage()), { dateStyle: 'medium', timeStyle: 'short' }).format(time);
 }
 
+function messageCount(count: number): string {
+  return count === 1 ? t('oneMessage') : t('messages', formatInteger(count));
+}
+
 function weekdayLabels(): readonly string[] {
   const format = new Intl.DateTimeFormat(htmlLang(getUiLanguage()), { weekday: 'short' });
   // 2024-01-01 was a Monday, the activity grid's row 0.
@@ -330,13 +334,16 @@ export class StatsView {
     link.className = 'link-button';
     link.textContent = longest.title ?? t('longestNoTitle', longest.sessionId.slice(0, 8));
     link.addEventListener('click', () => this.options.onOpenSession(longest.sessionId, longest.folder));
-    value.append(link, this.doc.createTextNode(` · ${t('messages', formatInteger(longest.userMessages))}`));
+    value.append(link, this.doc.createTextNode(` · ${messageCount(longest.userMessages)}`));
     return row;
   }
 
   private costRow(cost: ProviderCost): HTMLElement {
     const { row, value } = this.rowShell(cost.name);
-    const parts = [t('calls', formatInteger(cost.calls)), t('tokens', formatInteger(totalTokens(cost.tokens)))];
+    const parts = [
+      cost.calls === 1 ? t('oneCall') : t('calls', formatInteger(cost.calls)),
+      t('tokens', formatInteger(totalTokens(cost.tokens))),
+    ];
     parts.push(cost.cost === undefined ? `— ${t('noPrice')}` : `${cost.currency === 'USD' ? '$' : '¥'}${formatCost(cost.cost)}`);
     value.textContent = parts.join(' · ');
     const notes: string[] = [];
@@ -363,7 +370,7 @@ export class StatsView {
     name.textContent = this.storageLabel(item.id);
     const meta = this.doc.createElement('span');
     meta.className = 'stats-storage-meta';
-    meta.textContent = `${formatBytes(item.bytes)} · ${t('files', formatInteger(item.files))}`;
+    meta.textContent = `${formatBytes(item.bytes)} · ${item.files === 1 ? t('oneFile') : t('files', formatInteger(item.files))}`;
     const reveal = this.doc.createElement('button');
     reveal.className = 'icon-button';
     reveal.style.setProperty('--icon', 'var(--icon-folder-opened)');
@@ -456,11 +463,11 @@ export class StatsView {
 
     const time: HTMLElement[] = [this.heatmap(s.activity)];
     if (s.busiestDay !== undefined) {
-      time.push(this.row(t('busiestDay'), `${formatDay(s.busiestDay.date)} · ${t('messages', formatInteger(s.busiestDay.userMessages))}`));
+      time.push(this.row(t('busiestDay'), `${formatDay(s.busiestDay.date)} · ${messageCount(s.busiestDay.userMessages)}`));
     }
     time.push(
-      this.row(t('longestStreak'), t('days', formatInteger(s.longestStreak))),
-      this.row(t('currentStreak'), t('days', formatInteger(s.currentStreak))),
+      this.row(t('longestStreak'), s.longestStreak === 1 ? t('oneDay') : t('days', formatInteger(s.longestStreak))),
+      this.row(t('currentStreak'), s.currentStreak === 1 ? t('oneDay') : t('days', formatInteger(s.currentStreak))),
       this.row(t('latest'), s.latest === undefined ? '—' : formatDateTime(s.latest)),
     );
     sections.push(this.section(t('time'), undefined, ...time));

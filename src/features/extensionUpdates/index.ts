@@ -228,26 +228,30 @@ export const extensionUpdatesModule: ShellModule = {
 
     // The extension running uses an API Vilausity lacks that the version before did not: offer
     // to go back to that one (as the settings' button does), or not to hear of this version again.
-    subscriptions.add(
-      native.on('extensionUnimplemented', ({ version, rollback }) => {
-        const items = rollback === undefined ? [t('notAgain')] : [t('rollBackAndRestart', rollback), t('notAgain')];
-        void dialogs
-          .showMessage({ severity: 'warning', message: t('unimplemented', version), modal: false, items })
-          .then(async (picked) => {
-            if (picked === undefined) {
-              return;
-            }
-            if (rollback !== undefined && picked === 0) {
-              const result = await native.call('extension.rollBack', undefined);
-              if (result.outcome === 'installed') {
-                relaunch();
-              }
-            } else {
-              await native.call('extension.unimplementedMute', { version });
-            }
-          });
-      }),
-    );
+    const showUnimplemented = async (): Promise<void> => {
+      const warning = await native.call('extension.takeUnimplementedWarning', undefined);
+      if (warning === undefined) {
+        return; // none, or another window took it
+      }
+      const { version, rollback } = warning;
+      const items = rollback === undefined ? [t('notAgain')] : [t('rollBackAndRestart', rollback), t('notAgain')];
+      const picked = await dialogs.showMessage({ severity: 'warning', message: t('unimplemented', version), modal: false, items });
+      if (picked === undefined) {
+        return;
+      }
+      if (rollback !== undefined && picked === 0) {
+        const result = await native.call('extension.rollBack', undefined);
+        if (result.outcome === 'installed') {
+          relaunch();
+        }
+      } else {
+        await native.call('extension.unimplementedMute', { version });
+      }
+    };
+    const showFailed = (error: unknown): void => logger.error('showing the unimplemented-API warning failed', error);
+    subscriptions.add(native.on('extensionUnimplemented', () => void showUnimplemented().catch(showFailed)));
+    // It may have come before this page listened.
+    void showUnimplemented().catch(showFailed);
   },
 };
 

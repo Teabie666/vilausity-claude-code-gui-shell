@@ -5,6 +5,7 @@
  * A Windows shutdown or logoff (`reason: 'sessionEnd'`) saves without asking and never blocks.
  */
 
+import { URI } from 'vscode-uri';
 import type { ShellModule } from '../../core/module';
 import { IDialogs, INative, ISettings } from '../../core/serviceIds';
 import type { CloseReason } from '../../platform/protocol';
@@ -13,22 +14,18 @@ import { autoSaveMode, savable } from '../editor/autoSave';
 import type { ModelEntry } from '../editor/textModels';
 import { t } from './messages';
 
-/** A file's label for the dialog's list: its path, or the URI of a user-edited proposal. */
+/** A file's label for the dialog's list: its path (drive letter as Windows writes it), or the URI of a user-edited proposal. */
 function fileLabel(uri: string): string {
-  const decoded = decodeURIComponent(uri);
-  if (!decoded.startsWith('file://')) {
-    return decoded;
+  if (!uri.startsWith('file:')) {
+    return decodeURIComponent(uri);
   }
-  return decoded
-    .slice('file://'.length)
-    .replace(/\//g, '\\')
-    .replace(/^\\(?=[A-Za-z]:)/, '');
+  return URI.parse(uri).fsPath.replace(/^[a-z](?=:)/, (drive) => drive.toUpperCase());
 }
 
 export const windowCloseModule: ShellModule = {
   id: 'windowClose',
   dependsOn: ['editor'],
-  activate({ services, subscriptions }) {
+  activate({ services, subscriptions, logger }) {
     const native = services.get(INative);
     const dialogs = services.get(IDialogs);
     const settings = services.get(ISettings);
@@ -71,7 +68,10 @@ export const windowCloseModule: ShellModule = {
       const choice = await dialogs.showMessage({
         severity: 'warning',
         modal: true,
-        message: t('saveChangesQuestion', dirty.length),
+        message:
+          dirty.length === 1
+            ? t('saveChangesQuestionOne', URI.parse(dirty[0].uri).path.replace(/^.*\//, ''))
+            : t('saveChangesQuestion', dirty.length),
         detail: dirty.map((entry) => fileLabel(entry.uri)).join('\n'),
         items: [t('saveAll'), t('dontSave')],
       });
@@ -91,7 +91,14 @@ export const windowCloseModule: ShellModule = {
 
     subscriptions.add(
       native.on('windowBeforeClose', ({ id, reason }) => {
-        void confirmClose(reason).then((proceed) => void native.call('window.closeConfirmed', { id, proceed }));
+        void native.call('window.closeAcknowledged', { id });
+        // A failure while saving or asking must not keep the window open for good.
+        void confirmClose(reason)
+          .catch((error: unknown) => {
+            logger.error('asking about unsaved files failed', error);
+            return true;
+          })
+          .then((proceed) => void native.call('window.closeConfirmed', { id, proceed }));
       }),
     );
   },

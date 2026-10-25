@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import {
   ClaudeWebviewBridge,
   conversationSessionId,
+  crlfDiffEdits,
   describeShape,
   listedSessionsOf,
   usageResetsOf,
@@ -79,6 +83,44 @@ describe('ClaudeWebviewBridge', () => {
     assert.equal(bridge.interceptFromWebview(webview, { type: 'request', requestId: 'r1', request: { type: 'open_diff' } }), false);
     assert.equal(bridge.interceptFromWebview(webview, { type: 'request', requestId: 'r2', request: { type: 'accept_diff' } }), false);
     assert.deepEqual(messages, []);
+  });
+
+  test("open_diff of a CRLF file gets the file's line breaks, and the CLI its own edits back when accepted unchanged", () => {
+    const { bridge, webview } = makeBridge(true);
+    const dir = mkdtempSync(path.join(tmpdir(), 'vilaus-bridge-'));
+    try {
+      const file = path.join(dir, 'crlf.txt');
+      writeFileSync(file, 'alpha\r\nbeta\r\ngamma\r\n');
+      const edits = [{ oldString: 'alpha\nbeta', newString: 'alpha\ndelta', replaceAll: false }];
+      const request = {
+        type: 'request',
+        requestId: 'r1',
+        request: { type: 'open_diff', originalFilePath: file, newFilePath: file, edits },
+      };
+      assert.equal(bridge.interceptFromWebview(webview, request), false);
+      const sent = [{ oldString: 'alpha\r\nbeta', newString: 'alpha\r\ndelta', replaceAll: false }];
+      assert.deepEqual(request.request.edits, sent);
+
+      const answer = (newEdits: unknown) => ({
+        type: 'from-extension',
+        message: { type: 'response', requestId: 'r1', response: { type: 'open_diff_response', newEdits } },
+      });
+      assert.deepEqual(bridge.observeToWebview(webview, answer(sent)), answer(edits));
+      // Answered once: a later message of the same id is left alone.
+      assert.equal(bridge.observeToWebview(webview, answer(sent)), undefined);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('crlfDiffEdits changes only the edits that need CRLF to be found', () => {
+    const edits = [{ oldString: 'a\nb', newString: 'a\nc', replaceAll: false }];
+    assert.equal(crlfDiffEdits('a\nb\n', edits), undefined);
+    assert.deepEqual(crlfDiffEdits('a\r\nb\r\n', edits), [{ oldString: 'a\r\nb', newString: 'a\r\nc', replaceAll: false }]);
+    // Found as written (one line), not found either way, or a whole new text: left alone.
+    assert.equal(crlfDiffEdits('a\r\nb\r\n', [{ oldString: 'b', newString: 'c\nd', replaceAll: false }]), undefined);
+    assert.equal(crlfDiffEdits('a\r\nb\r\n', [{ oldString: 'x\ny', newString: 'z', replaceAll: false }]), undefined);
+    assert.equal(crlfDiffEdits('a\r\nb\r\n', [{ oldString: '', newString: 'z\nw', replaceAll: true }]), undefined);
   });
 
   test('open_url calls openExternal with the raw url string and replies open_url_response', () => {

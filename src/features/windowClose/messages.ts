@@ -3,7 +3,8 @@
 import { defineMessages } from '../../platform/nls';
 
 export const t = defineMessages('windowClose', {
-  saveChangesQuestion: 'Do you want to save the changes you made to {0} files?',
+  saveChangesQuestionOne: 'Do you want to save the changes you made to {0}?',
+  saveChangesQuestion: 'Do you want to save the changes to the following {0} files?',
   saveAll: 'Save All',
   dontSave: "Don't Save",
   saveFailed: 'Could not save all the changes.',

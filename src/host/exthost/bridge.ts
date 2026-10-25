@@ -14,6 +14,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { CHAT_PANEL_VIEW_TYPE, type WebviewImpl, type WebviewMessageInterceptor } from '../../compat/vscode/webviews';
 import type { OsBackend } from '../../compat/vscode/host';
 import { SHOW_ALL_ROWS_SETTING } from '../../platform/defaults';
@@ -382,6 +383,30 @@ const WINDOW_LABELS: Readonly<Record<string, string>> = {
   seven_day_sonnet: 'Weekly Sonnet',
   seven_day_overage_included: 'Fable limit',
 };
+
+/**
+ * `open_diff`'s edits (`{oldString, newString, replaceAll}`, anthropic.claude-code 2.1.310)
+ * with CRLF line breaks where only that finds `oldString` in `text`, a CRLF file's content;
+ * undefined when none needs it. Each edit is looked for in the original text, as written.
+ */
+export function crlfDiffEdits(text: string, edits: readonly unknown[]): unknown[] | undefined {
+  if (!text.includes('\r\n')) {
+    return undefined;
+  }
+  const crlf = (value: string): string => value.replace(/\r?\n/g, '\r\n');
+  let changed = false;
+  const matched = edits.map((edit) => {
+    if (!isRecord(edit) || typeof edit.oldString !== 'string' || typeof edit.newString !== 'string') {
+      return edit;
+    }
+    if (edit.oldString === '' || text.includes(edit.oldString) || !text.includes(crlf(edit.oldString))) {
+      return edit;
+    }
+    changed = true;
+    return { ...edit, oldString: crlf(edit.oldString), newString: crlf(edit.newString) };
+  });
+  return changed ? matched : undefined;
+}
 
 /**
  * When each usage bar resets (epoch ms) by its label, from a message the extension posts to a
@@ -810,6 +835,8 @@ export interface BridgeOptions {
 const USAGE_REFRESH_MS = 1000;
 
 export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
+  /** `open_diff` requests whose edits got CRLF line breaks (`matchLineEndings`), by requestId. */
+  private readonly lineEndingDiffs = new Map<string, { readonly sent: string; readonly original: unknown[] }>();
   /** `open_diff` requests we are holding, by requestId. */
   private readonly heldDiffs = new Map<string, WebviewImpl>();
   private loggedInputShape = false;
@@ -897,6 +924,7 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     this.noteArchiving(message.request);
     switch (message.request.type) {
       case 'open_diff':
+        this.matchLineEndings(message);
         return this.holdDiff(webview, message);
       case 'accept_diff':
         return this.answerAcceptDiff(webview, message);
@@ -969,6 +997,35 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     return true;
   }
 
+  /**
+   * A proposed Edit of a CRLF file (anthropic.claude-code 2.1.310): the page's `open_diff`
+   * carries `edits: [{oldString, newString, replaceAll}]` with `\n` line breaks, as Claude
+   * writes them, but the extension looks for `oldString` in the document's text, which keeps
+   * the file's `\r\n` (as in VS Code). A multi-line `oldString` is then not found, the
+   * extension answers with an error and no diff tab opens. The edits are matched to the
+   * file's line breaks here; `open_diff_response` hands back `newEdits`, the very edits when
+   * the user accepts them unchanged, so the CLI gets its own back (`observeToWebview`).
+   */
+  private matchLineEndings(message: WebviewRequest): void {
+    const { originalFilePath, edits } = message.request;
+    if (typeof originalFilePath !== 'string' || !Array.isArray(edits)) {
+      return;
+    }
+    let text: string;
+    try {
+      text = readFileSync(originalFilePath, 'utf8');
+    } catch {
+      return; // a new file (Write)
+    }
+    const matched = crlfDiffEdits(text, edits);
+    if (matched) {
+      // The message is this process's own copy, about to go to the extension as it is.
+      (message.request as Record<string, unknown>).edits = matched;
+      this.lineEndingDiffs.set(message.requestId, { sent: JSON.stringify(matched), original: edits });
+      this.logger.debug(`open_diff ${message.requestId}: edits matched to the file's CRLF line breaks`);
+    }
+  }
+
   private releaseHeldDiff(requestId: string): boolean {
     const webview = this.heldDiffs.get(requestId);
     if (!webview) {
@@ -1036,6 +1093,17 @@ export class ClaudeWebviewBridge implements WebviewMessageInterceptor {
     if (isRecord(inner) && inner.type === 'io_message') {
       this.observeOutput(webview, inner);
       return undefined;
+    }
+    const lineEndings =
+      isRecord(message) && isRecord(inner) && inner.type === 'response' && typeof inner.requestId === 'string'
+        ? this.lineEndingDiffs.get(inner.requestId)
+        : undefined;
+    if (lineEndings && isRecord(message) && isRecord(inner) && isRecord(inner.response)) {
+      this.lineEndingDiffs.delete(inner.requestId as string);
+      // Accepted unchanged: the edits as Claude wrote them. Changed: the extension's own, `\n` already.
+      if (inner.response.type === 'open_diff_response' && JSON.stringify(inner.response.newEdits) === lineEndings.sent) {
+        return { ...message, message: { ...inner, response: { ...inner.response, newEdits: lineEndings.original } } };
+      }
     }
     const listed = isRecord(inner) && inner.type === 'response' ? listedSessionsOf(inner.response) : undefined;
     if (listed) {

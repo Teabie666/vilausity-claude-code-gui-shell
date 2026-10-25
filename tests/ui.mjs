@@ -1568,6 +1568,156 @@ await step('About shows the versions and the latest release from GitHub (a local
   }
 });
 
+/** Like press(), for an instance a step started itself. */
+async function pressIn(instance, shortcut) {
+  const parts = shortcut.split('+');
+  const keyCode = parts.pop();
+  const modifiers = parts.map((m) => m.toLowerCase());
+  await instance.evaluate(
+    ({ BrowserWindow }, { keyCode, modifiers }) => {
+      const window = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().startsWith('ccw://app/'));
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers });
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers });
+    },
+    { keyCode, modifiers },
+  );
+}
+
+await step('the statistics tab adds up a made-up conversation, from About, once', async () => {
+  // An instance of its own with exactly one conversation, so every number is known.
+  const statsRoot = path.join(runDir, 'stats');
+  const statsData = path.join(statsRoot, 'data');
+  const statsWorkspace = path.join(statsRoot, 'workspace');
+  const claudeDir = path.join(statsRoot, 'claude');
+  const project = path.join(claudeDir, 'projects', statsWorkspace.replace(/[^a-zA-Z0-9]/g, '-'));
+  for (const dir of [statsData, statsWorkspace, project]) mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    path.join(statsData, 'settings.json'),
+    JSON.stringify({ 'claudeCode.hideOnboarding': true, 'vilaus.language': 'en', 'vilaus.extension.autoUpdate': false }),
+    'utf8',
+  );
+  const id = 'a1a1a1a1-0000-4000-8000-000000000001';
+  const at = new Date(2026, 9, 20, 10, 30).toISOString();
+  const common = { isSidechain: false, sessionId: id, cwd: statsWorkspace, timestamp: at };
+  const usage = { input_tokens: 1000, output_tokens: 500, cache_read_input_tokens: 10, cache_creation_input_tokens: 5 };
+  // One reply in three lines, as Claude Code writes them: its tokens count once.
+  const reply = (content) => ({
+    ...common,
+    parentUuid: 'u1',
+    type: 'assistant',
+    message: { id: 'msg-1', model: 'claude-opus-5-5', content, usage },
+  });
+  writeFileSync(
+    path.join(project, `${id}.jsonl`),
+    [
+      { type: 'ai-title', aiTitle: 'Refactor the parser', sessionId: id },
+      { ...common, parentUuid: null, type: 'user', message: { role: 'user', content: 'Refactor the parser' } },
+      reply([{ type: 'thinking', thinking: '...' }]),
+      reply([{ type: 'tool_use', id: 'call-1', name: 'Frobnicate', input: {} }]),
+      reply([{ type: 'text', text: 'Done.' }]),
+      {
+        ...common,
+        parentUuid: 'u1',
+        type: 'user',
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call-1', content: 'ok' }] },
+        toolUseResult: {
+          filePath: path.join(statsWorkspace, 'parser.ts'),
+          structuredPatch: [{ lines: [' same', '-old', '+new', '+newer'] }],
+        },
+      },
+      { type: 'cost-state', sessionId: id, startTime: 1, totalCostUSD: 1.23, modelUsage: {} },
+    ]
+      .map((line) => `${JSON.stringify(line)}\n`)
+      .join(''),
+    'utf8',
+  );
+
+  const statsApp = await electron.launch({
+    executablePath: executable,
+    args: appArgs('--user-data-dir', statsData, '--folder', statsWorkspace, '--secondary-display'),
+    cwd: root,
+    env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+    timeout: 60_000,
+  });
+  try {
+    const statsPage = await statsApp.firstWindow();
+    await statsPage.locator('.search-box-open').waitFor({ timeout: 60_000 });
+    const openFromAbout = async () => {
+      await pressIn(statsApp, 'Control+,');
+      await statsPage.locator('.settings-dialog .settings-search').fill('about');
+      const button = statsPage.locator('.settings-dialog .settings-widget[data-widget="about.info"] [data-about="statistics"]');
+      await button.click({ timeout: 10_000 });
+      await statsPage
+        .locator('.settings-dialog')
+        .waitFor({ state: 'detached', timeout: 5000 })
+        .catch(() => {});
+      if (await statsPage.locator('.settings-dialog').count()) await statsPage.keyboard.press('Escape');
+    };
+    await openFromAbout();
+    await statsPage.locator('#content-pane .stats-section').first().waitFor({ timeout: 15_000 });
+    await openFromAbout();
+    await statsPage.waitForTimeout(500);
+    const tabs = await statsPage.locator('#content-pane .content-tab').count();
+    if (tabs !== 1) throw new Error(`${tabs} tabs after opening Statistics twice`);
+
+    const read = () =>
+      statsPage.evaluate(() => ({
+        rows: Object.fromEntries(
+          [...document.querySelectorAll('.stats-row')].map((row) => [
+            row.querySelector('.stats-name')?.textContent,
+            row.querySelector('.stats-value')?.firstChild?.textContent ?? '',
+          ]),
+        ),
+        ranked: [...document.querySelectorAll('.stats-ranked-row')].map(
+          (row) => `${row.querySelector('.stats-ranked-name').textContent} ${row.querySelector('.stats-ranked-count').textContent}`,
+        ),
+        busy: document.querySelectorAll('.stats-heat-cell:not([data-level="0"])').length,
+        sections: [...document.querySelectorAll('.stats-section-title > span:first-child')].map((title) => title.textContent),
+      }));
+    const check = (seen) => {
+      const expected = {
+        Conversations: '1',
+        'Messages you sent': '1',
+        "Claude's replies": '1',
+        'Thinking blocks': '1',
+        'Tool calls': '1',
+        'Lines added': '2',
+        'Lines removed': '1',
+        'Files changed': '1',
+        Input: '1,000',
+        Output: '500',
+        'Longest conversation': 'Refactor the parser',
+        Launches: '1',
+      };
+      for (const [name, value] of Object.entries(expected)) {
+        if (seen.rows[name]?.trim() !== value) throw new Error(`${name}: "${seen.rows[name]}", not ${value}`);
+      }
+      for (const entry of ['Frobnicate 1', 'claude-opus-5-5 1']) {
+        if (!seen.ranked.includes(entry)) throw new Error(`the rankings are ${seen.ranked.join(', ')}`);
+      }
+      // Claude Code's own dollar figure, for the subscription.
+      if (!seen.rows['Claude subscription']?.includes('$1.23'))
+        throw new Error(`the subscription costs "${seen.rows['Claude subscription']}"`);
+      if (seen.busy !== 1) throw new Error(`${seen.busy} busy hours in the heatmap`);
+    };
+    const all = await read();
+    check(all);
+    for (const title of ['Overview', 'Tools', 'Code', 'Models and tokens', 'Cost', 'Time', 'Disk usage', 'Vilausity']) {
+      if (!all.sections.includes(title)) throw new Error(`the sections are ${all.sections.join(', ')}`);
+    }
+
+    // This folder: the window's own, which is where the conversation ran.
+    await statsPage.locator('.stats-scope-button', { hasText: 'This folder' }).click();
+    await statsPage.locator('.stats-scope-button.active', { hasText: 'This folder' }).waitFor({ timeout: 5000 });
+    await statsPage.locator('#content-pane .stats-section').first().waitFor({ timeout: 15_000 });
+    check(await read());
+    await statsPage.locator('#content-pane').screenshot({ path: path.join(runDir, 'statistics.png') });
+    return `${all.sections.length} sections; ${all.ranked.join(', ')}; ${all.rows['Claude subscription']}`;
+  } finally {
+    await statsApp.close();
+  }
+});
+
 // ---- M4: windows ----------------------------------------------------------------------------
 
 const second = path.join(runDir, 'second');
@@ -1665,6 +1815,88 @@ await step('Ctrl+Shift+W closes a window; the others stay', async () => {
   await waitFor(() => page.locator('#sidebar').isHidden(), 5000, 'the sidebar to hide');
   await press('Control+B');
   await waitFor(() => page.locator('#sidebar').isVisible(), 5000, 'the sidebar to show');
+});
+
+await step("closing a window with an unsaved file asks: Cancel keeps it, Don't Save and Save All close it", async () => {
+  // Another window than the last, so closing it does not quit (quitting asks the same way).
+  const file = path.join(third, 'close-test.txt');
+  writeFileSync(file, 'before\n', 'utf8');
+  let thirdPage;
+  const openWithChange = async () => {
+    const opened = app.waitForEvent('window');
+    await openFolder(page, third, true);
+    thirdPage = await opened;
+    await waitFor(async () => showsFolder(await thirdPage.title(), third), 30_000, 'the third window');
+    await press('Control+P', third);
+    const filter = thirdPage.locator('.quick-input-filter');
+    const item = thirdPage.locator('.quick-input-item', { hasText: 'close-test.txt' });
+    // The new window's files are listed once its extension host is up: until then, ask again.
+    await waitFor(
+      async () => {
+        await filter.fill('');
+        await filter.fill('close-test.txt');
+        await thirdPage.waitForTimeout(500);
+        return (await item.count()) > 0;
+      },
+      30_000,
+      'close-test.txt in the list',
+    );
+    await item.first().click();
+    const lines = thirdPage.locator('#content-pane .content-editor:not([hidden]) .view-lines');
+    await waitFor(
+      async () => (await lines.count()) === 1 && (await lines.innerText()).includes('before'),
+      15_000,
+      'close-test.txt in the editor',
+    );
+    if (await thirdPage.locator('#content-pane .content-tab.dirty').count()) throw new Error('the file came back with a change');
+    await lines.click();
+    await thirdPage.keyboard.press('Control+End');
+    await thirdPage.keyboard.type('unsaved');
+    await waitFor(async () => (await thirdPage.locator('#content-pane .content-tab.dirty').count()) === 1, 5000, 'the dirty marker');
+  };
+  const askToClose = async () => {
+    await press('Control+Shift+W', third);
+    const dialog = thirdPage.locator('.modal');
+    await dialog.waitFor({ timeout: 10_000 });
+    const message = await dialog.locator('.modal-message').innerText();
+    if (message !== 'Do you want to save the changes you made to close-test.txt?') throw new Error(`the question reads "${message}"`);
+    const detail = await dialog.locator('.modal-detail').innerText();
+    if (detail !== file) throw new Error(`the dialog lists "${detail}"`);
+    return dialog;
+  };
+  const closedAfter = async (button) => {
+    const closed = thirdPage.waitForEvent('close');
+    await (await askToClose()).locator('.button', { hasText: button }).click();
+    await closed;
+    if (shellPages().length !== 1) throw new Error(`${shellPages().length} windows after ${button}`);
+  };
+
+  try {
+    await openWithChange();
+    await (await askToClose()).locator('.button', { hasText: 'Cancel' }).click();
+    await thirdPage.waitForTimeout(1000);
+    if (thirdPage.isClosed() || shellPages().length !== 2) throw new Error('Cancel closed the window');
+    if ((await thirdPage.locator('#content-pane .content-tab.dirty').count()) !== 1) throw new Error('Cancel lost the change');
+
+    await closedAfter("Don't Save");
+    if (readFileSync(file, 'utf8') !== 'before\n') throw new Error(`Don't Save wrote "${readFileSync(file, 'utf8')}"`);
+
+    await openWithChange();
+    await closedAfter('Save All');
+    if (readFileSync(file, 'utf8') !== 'before\nunsaved') throw new Error(`Save All wrote "${readFileSync(file, 'utf8')}"`);
+  } finally {
+    // A failed check must not leave the change behind: quitting at the end of the run would
+    // ask about it, with no one to answer.
+    if (thirdPage && !thirdPage.isClosed()) {
+      const closed = thirdPage.waitForEvent('close').catch(() => {});
+      if ((await thirdPage.locator('.modal').count()) === 0) await press('Control+Shift+W', third);
+      await thirdPage
+        .locator('.modal .button', { hasText: "Don't Save" })
+        .click({ timeout: 10_000 })
+        .catch(() => {});
+      await closed;
+    }
+  }
 });
 
 /** Starts the app again with the same data folder, as a second start would; resolves when that process exits. */
@@ -2521,6 +2753,93 @@ await step("a question's options: dragging over their text selects it, to be cop
   }
 });
 
+await step('a proposed Edit of a CRLF file opens its diff tab; accepted, the file keeps CRLF', async () => {
+  // An instance of its own: Claude Code settings of its own, so no allow rule skips the question.
+  const editRoot = path.join(runDir, 'edit-diff');
+  const editData = path.join(editRoot, 'data');
+  const editWorkspace = path.join(editRoot, 'workspace');
+  const claudeDir = path.join(editRoot, 'claude');
+  for (const dir of [editData, editWorkspace, path.join(claudeDir, 'projects')]) mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    path.join(editData, 'settings.json'),
+    JSON.stringify({
+      'claudeCode.hideOnboarding': true,
+      'claudeCode.initialPermissionMode': 'default',
+      'vilaus.language': 'en',
+      'vilaus.extension.autoUpdate': false,
+    }),
+    'utf8',
+  );
+  const file = path.join(editWorkspace, 'notes.txt');
+  writeFileSync(file, 'alpha\r\nbeta\r\ngamma\r\n', 'utf8');
+  // Claude reads the file (Claude Code edits only what was read), then edits two lines of it.
+  const mock = await startMockApi({
+    toolUse: (body) => {
+      const conversation = JSON.stringify(body?.messages ?? []);
+      if (!conversation.includes('EDIT-THE-NOTES') || !body?.tools?.some((tool) => tool.name === 'Edit')) return undefined;
+      const results = (conversation.match(/"tool_result"/g) ?? []).length;
+      if (results === 0) return { name: 'Read', input: { file_path: file } };
+      if (results === 1) return { name: 'Edit', input: { file_path: file, old_string: 'alpha\nbeta', new_string: 'alpha\ndelta' } };
+      return undefined;
+    },
+  });
+  const editApp = await electron.launch({
+    executablePath: executable,
+    args: appArgs('--user-data-dir', editData, '--folder', editWorkspace, '--secondary-display'),
+    cwd: root,
+    env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+    timeout: 60_000,
+  });
+  try {
+    const editPage = await editApp.firstWindow();
+    await editPage.locator('.search-box-open').waitFor({ timeout: 60_000 });
+    await editPage.evaluate(async (port) => {
+      await window.vilausNative.invoke('providers.save', {
+        provider: {
+          id: 'edit-mock',
+          name: 'Edit Mock',
+          type: 'compatible',
+          baseUrl: `http://127.0.0.1:${port}`,
+          auth: 'bearer',
+          models: { main: 'mock-model', haiku: 'mock-haiku' },
+        },
+      });
+      await window.vilausNative.invoke('providers.setKey', { id: 'edit-mock', key: 'test-key-789' });
+      await window.vilausNative.invoke('providers.select', { id: 'edit-mock' });
+      window.__vilausBeforeReload = true;
+      void window.vilausNative.invoke('window.reload');
+    }, mock.port);
+    await waitFor(async () => !(await editPage.evaluate(() => window.__vilausBeforeReload).catch(() => true)), 30_000, 'the reload');
+    await editPage.locator('.search-box-open').waitFor({ timeout: 60_000 });
+
+    const frame = await waitFor(
+      async () => (await editPage.locator('#main .panel:not([hidden]) .webview-frame').elementHandle())?.contentFrame(),
+      30_000,
+      'the conversation',
+    );
+    const input = frame.locator('[role="textbox"][aria-label="Message input"]');
+    await input.waitFor({ timeout: 30_000 });
+    await input.click();
+    await input.fill('EDIT-THE-NOTES');
+    await frame.locator('button[aria-label="Send message"]').click();
+    const accept = editPage.locator('#content-pane .diff-toolbar [data-action="accept"]');
+    await accept.waitFor({ timeout: 60_000 }).catch((error) => {
+      const asked = mock.requests.map((request) => JSON.stringify(request.body?.messages?.at(-1))?.slice(0, 200));
+      throw new Error(`${error.message}; the last messages asked: ${asked.join(' | ')}`);
+    });
+    const tab = (await editPage.locator('#content-pane .content-tab').allInnerTexts()).join();
+    if (!tab.includes('notes.txt')) throw new Error(`the diff tab reads "${tab}"`);
+    await accept.click();
+    await waitFor(() => readFileSync(file, 'utf8') !== 'alpha\r\nbeta\r\ngamma\r\n', 30_000, 'the edit on disk');
+    const written = readFileSync(file, 'utf8');
+    if (written !== 'alpha\r\ndelta\r\ngamma\r\n') throw new Error(`the file is ${JSON.stringify(written)}`);
+    return tab;
+  } finally {
+    mock.server.close();
+    await editApp.close();
+  }
+});
+
 await step('the providers editor adds a provider from a preset, saves edits and a key, and removes it', async () => {
   await press('Control+Shift+P');
   await page.locator('.quick-input-filter').fill('>Manage API Providers');
@@ -2774,15 +3093,18 @@ await step('started without a folder, the windows open at quit come back', async
   return titles.join(', ');
 });
 
-/** A .vsix like Open VSX's (`extension/` and `extension.vsixmanifest` in a zip); resolves to its path. */
-function makeVsix(version, publisher = 'Anthropic') {
+/**
+ * A .vsix like Open VSX's (`extension/` and `extension.vsixmanifest` in a zip); resolves to its path.
+ * `main`: the extension's script (one that does nothing by default).
+ */
+function makeVsix(version, publisher = 'Anthropic', main = 'exports.activate = () => {};\n') {
   const dir = path.join(runDir, `vsix-${publisher}-${version}`);
   mkdirSync(path.join(dir, 'extension'), { recursive: true });
   writeFileSync(
     path.join(dir, 'extension', 'package.json'),
     JSON.stringify({ publisher, name: 'claude-code', version, main: './extension.js' }),
   );
-  writeFileSync(path.join(dir, 'extension', 'extension.js'), 'exports.activate = () => {};\n');
+  writeFileSync(path.join(dir, 'extension', 'extension.js'), main);
   writeFileSync(
     path.join(dir, 'extension.vsixmanifest'),
     `<PackageManifest><Metadata><Identity Id="claude-code" Version="${version}" Publisher="${publisher}" TargetPlatform="win32-x64"/></Metadata></PackageManifest>`,
@@ -4752,6 +5074,92 @@ await step('after a restart the update runs; Go Back and Restart returns to the 
   const source = await again.widget.locator('.extension-version-source').innerText();
   if (!source.includes(path.join(dataDir, 'extensions'))) throw new Error(`it runs from "${source}"`);
   return `9.0.0 -> ${backup} from ${source}`;
+});
+
+await step("a new version that uses an API Vilausity lacks offers to go back; Don't Show Again keeps it quiet", async () => {
+  // The copy rolled back to has run (and so has a record of what it used): the version to compare with.
+  const before = readExtensionState();
+  const baseline = before.current;
+  const unimplementedFile = path.join(dataDir, 'extensions', 'unimplemented.json');
+  if (!readJson(unimplementedFile)?.[baseline]) throw new Error(`no record of ${baseline}: ${readFileSync(unimplementedFile, 'utf8')}`);
+
+  const vsix = readFileSync(
+    makeVsix('9.1.0', 'Anthropic', "exports.activate = () => { require('vscode').window.thisDoesNotExist?.(); };\n"),
+  );
+  const sha256 = createHash('sha256').update(vsix).digest('hex');
+  let base = '';
+  const openVsx = createServer((request, response) => {
+    if (request.url === '/api/anthropic/claude-code/win32-x64') {
+      response.writeHead(200, { 'content-type': 'application/json' }).end(
+        JSON.stringify({
+          namespace: 'Anthropic',
+          name: 'claude-code',
+          version: '9.1.0',
+          targetPlatform: 'win32-x64',
+          files: { download: `${base}/package.vsix`, sha256: `${base}/package.sha256` },
+        }),
+      );
+    } else if (request.url === '/package.vsix') {
+      response.writeHead(200, { 'content-length': vsix.length }).end(vsix);
+    } else if (request.url === '/package.sha256') {
+      response.end(sha256);
+    } else {
+      response.writeHead(404).end();
+    }
+  });
+  base = `http://127.0.0.1:${await listenOnSafePort(openVsx)}`;
+  try {
+    const { main, widget } = await openExtensionVersion();
+    await main.evaluate((url) => window.vilausNative.invoke('settings.update', { key: 'vilaus.extension.openVsxUrl', value: url }), base);
+    await widget.locator('.extension-version-check').click();
+    await waitFor(
+      async () =>
+        (await widget.locator('.extension-version-pending').isVisible()) &&
+        (await widget.locator('.extension-version-status').innerText()).includes('9.1.0'),
+      60_000,
+      '9.1.0 to be downloaded and installed',
+    );
+  } finally {
+    openVsx.close();
+  }
+
+  const restart = async () => {
+    await app.close();
+    app = await electron.launch({
+      executablePath: executable,
+      args: appArgs('--user-data-dir', dataDir, '--secondary-display'),
+      cwd: root,
+      env,
+      timeout: 60_000,
+    });
+    page = await app.firstWindow();
+  };
+  const warning = async () => {
+    for (const candidate of shellPages()) {
+      const toast = candidate.locator('.toast-warning', { hasText: '9.1.0' });
+      if (await toast.count()) return toast;
+    }
+    return undefined;
+  };
+  // 9.1.0 activates and reaches for window.thisDoesNotExist. The display language is Chinese
+  // by now (English when this step runs alone).
+  await restart();
+  const toast = await waitFor(warning, 60_000, 'the warning about 9.1.0');
+  const buttons = (await toast.locator('.toast-actions .button').allInnerTexts()).join(' | ');
+  if (buttons !== `退回 ${baseline} 并重启 | 不再提示` && buttons !== `Go Back to ${baseline} and Restart | Don't Show Again`) {
+    throw new Error(`the buttons are ${buttons}`);
+  }
+  const record = readJson(unimplementedFile)?.['9.1.0'];
+  if (!record?.members.some((member) => member.includes('thisDoesNotExist'))) throw new Error(`9.1.0's record: ${JSON.stringify(record)}`);
+  await toast.locator('.toast-actions .button').nth(1).click();
+  await waitFor(() => readJson(unimplementedFile)?.['9.1.0']?.muted === true, 10_000, '9.1.0 to be muted');
+
+  // Muted: the next start says nothing.
+  await restart();
+  await waitFor(() => readExtensionState().lastGood === '9.1.0', 60_000, '9.1.0 to activate again');
+  await page.waitForTimeout(3000);
+  if (await warning()) throw new Error("the warning came back after Don't Show Again");
+  return `${baseline} -> 9.1.0: ${record.members.join(', ')}`;
 });
 
 await app.close();

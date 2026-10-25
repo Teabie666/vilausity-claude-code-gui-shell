@@ -42,7 +42,7 @@ Electron main ── 窗口、命令行参数、设置和状态存储（唯一�
 
 插件升级最容易坏的地方，全部集中在这两处，每处都注明对照的插件版本：
 
-- `src/host/exthost/bridge.ts`：在消息层拦截插件 webview 与后端之间的私有请求（比如 `open_diff`、`open_url`）；插件页面的知识也只写在这里（页面提示 `WebviewPageHints`：评论块的锚点、页面里哪些区域是内容、盖在页面自己样式上的样式、页面脚本合并哪些流式消息；页面存的状态里的会话 id）。
+- `src/host/exthost/bridge.ts`：在消息层拦截插件 webview 与后端之间的私有请求（比如 `open_diff`、`open_url`；CRLF 文件的 Edit 提议要先把改动换成文件的换行，插件才找得到要改的那段、开得出 diff，见 `matchLineEndings`）；插件页面的知识也只写在这里（页面提示 `WebviewPageHints`：评论块的锚点、页面里哪些区域是内容、盖在页面自己样式上的样式、页面脚本合并哪些流式消息；页面存的状态里的会话 id）。
 - `src/compat/vscode/`：插件依赖的 VS Code 行为细节（比如 diff 标签页的 `TabInputWebview` viewType 前缀）。
 
 这两处和其他文档只描述跟插件交互时看得到的行为（消息格式、命令 id、设置项）；逆向得来的内部细节不写进仓库。
@@ -125,9 +125,8 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **谁问谁**：主进程不能直接碰页面——`WindowContext.confirmClose` 给页面发 `windowBeforeClose` 事件，`features/windowClose` 存完或问完用户后回 `window.closeConfirmed`（带 id 配对，主进程用 `closeChecks` 表认）。`shellApp` 的 `quit()`（每个窗口依次问，任一 Cancel 就都不关）和 `closeWindow()` 都等这个回答。
 - **自动保存开着时**：基于磁盘的文件（`savable`：非只读且 scheme 是 `file:`）先自己存，还脏的才问。没改过的 Claude 提议不是"未保存"（不算 dirty），而且提议的右边是插件的 `_claude_vscode_fs_right` 文档、scheme 不是 `file:`，`savable` 恒为假——所以自动保存和关机保存都跳过它，不会顺手"接受"一个用户没看过的提议；改过的提议会出现在"保存吗"的列表里（但存不了、只能保存/不保存二选一决定）。
 - **关机 / 注销**（`reason: 'sessionEnd'`）：只存能存的（`savable`），不弹框、不等用户、不拦关机；`sessionEnding()` 把 `endingSession` 置位，随后的 `quit()` 也不再问。提议即使改过也不在这里自动接受（进程要结束了）。
-- **页面没法回答时直接放行**：`confirmClose` 先查 webContents 加载中 / 崩了 / 已经没了（`isLoading` / `isCrashed` / `isDestroyed`），这种直接返回"可以关"。
+- **页面没法回答时直接放行**：`confirmClose` 先查 webContents 加载中 / 崩了 / 已经没了（`isLoading` / `isCrashed` / `isDestroyed`），这种直接返回"可以关"。页面收到 `windowBeforeClose` 先回 `window.closeAcknowledged`，5 秒内没回（`features/windowClose` 没激活或卡住）也当"可以关"；回过之后就一直等用户回答。页面里存 / 问的过程抛错也回"可以关"（宁可丢改动，不能让窗口关不掉）。
 - **保存失败**（比如只读）：报错、保持窗口打开，不丢东西。
-- 已知没处理：页面能回答但一直不回（`features/windowClose` 没激活或出错）时，`confirmClose` 没有超时，窗口关不掉。
 
 ## 标题栏搜索框和快速访问（M5.5）
 
@@ -256,7 +255,7 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **基准是退回目标**：`unimplementedBaseline` 取 `lastGood`（激活后等于当前版本，于是落到 `previous`），只有它比当前旧、又有记录、且不含这个成员时才提醒。激活成功时 `ensureRecorded` 给这个版本写一条空记录，好让下一个版本有"上一个版本用过什么"可比。
 - **为什么不取所有旧版本的并集**：提醒是为了回答"退回去那个版本行不行"，只看退回目标用没用过这个接口就够了；更老的版本用过、退回目标没用过时，并集反而会漏报。
 - **只管 Vilausity 自己装的那份**（`kind === 'managed'`）：别处（VSCodium / VS Code）那份不在更新/回滚范围里，比了也没有可退回的目标。
-- **提醒**：通知发到最近用的窗口（`extensionUnimplemented`，`features/extensionUpdates` 弹警告），带「退回 X 并重启」（`extension.rollBack`，装好就重启）或「不再提示」（`extension.unimplementedMute`）。同一版本同一次运行只提醒一次（`unimplementedNotified`）。
+- **提醒**：插件常在启动时（激活时）就调到没实现的接口，那时页面多半还没开始听，所以主进程把提醒存着（`unimplementedWarning`），给每个窗口发 `extensionUnimplemented` 只是说"有一条"；页面（`features/extensionUpdates`）启动时和收到事件时都去取（`extension.takeUnimplementedWarning`），谁先取到谁弹，只弹一个窗口。警告带「退回 X 并重启」（`extension.rollBack`，装好就重启）或「不再提示」（`extension.unimplementedMute`）。同一版本同一次运行只提醒一次（`unimplementedNotified`）。
 - 同一版本在一次运行里只提醒一次，之后用到的别的缺接口照样记下、不再提醒；下次启动它们已在记录里，也不提醒（这个版本缺功能已经说过了）。
 
 ## 首次启动（M4）

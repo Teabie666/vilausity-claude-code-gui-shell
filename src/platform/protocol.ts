@@ -1221,6 +1221,8 @@ export type MainApiForRenderer = {
   'window.shownFolders': (p: void) => string[];
   /** Closes the calling window; closing the last one quits. */
   'window.close': (p: void) => void;
+  /** The page got `windowBeforeClose` and is saving or asking; `window.closeConfirmed` follows. */
+  'window.closeAcknowledged': (p: { id: number }) => void;
   /** The page's answer to `windowBeforeClose`: whether the window may close. */
   'window.closeConfirmed': (p: { id: number; proceed: boolean }) => void;
   /**
@@ -1265,7 +1267,14 @@ export type MainApiForRenderer = {
   'extension.installFile': (p: void) => ExtensionInstallResult;
   /** Back to the previous version at the next start (`installed`: that version is pending). */
   'extension.rollBack': (p: void) => ExtensionInstallResult;
-  /** Not to hear again about `version` using APIs Vilausity lacks (`extensionUnimplemented`). */
+  /**
+   * The waiting warning, once: the extension version running uses a VS Code API Vilausity
+   * lacks that the version before it did not (platform/extensionUnimplemented.ts);
+   * `rollback`: the version to go back to. Pages ask when they start and on
+   * `extensionUnimplemented` (the extension may use the API before any page listens).
+   */
+  'extension.takeUnimplementedWarning': (p: void) => { version: string; rollback?: string } | undefined;
+  /** Not to hear again about `version` using APIs Vilausity lacks. */
   'extension.unimplementedMute': (p: { version: string }) => void;
   /** The chords main should intercept and send back as `keybinding` events. */
   'window.setKeybindings': (p: { chords: readonly string[] }) => void;
@@ -1327,18 +1336,18 @@ export type MainEventsForRenderer = {
    */
   extensionUpdated: { readonly version: string };
   /**
-   * The extension version running uses a VS Code API Vilausity lacks that the version before
-   * it did not (platform/extensionUnimplemented.ts); `rollback`: the version to go back to.
-   * Sent to the most recently focused window only.
+   * A warning waits (`extension.takeUnimplementedWarning`): the extension running uses a VS
+   * Code API Vilausity lacks. Sent to every window; the first page to take it shows it.
    */
-  extensionUnimplemented: { readonly version: string; readonly rollback?: string };
+  extensionUnimplemented: { readonly version: string };
   /** A program calls one of the page's operations (`api.operations`); answered with `api.respond`. */
   apiRequest: { readonly id: number; readonly name: string; readonly params: ApiParams };
   /** The local API started, stopped or failed to start. */
   apiStatus: ApiStatusDto;
   /**
-   * The window is about to close (`reason`): the page saves or asks about its unsaved files,
-   * and answers with `window.closeConfirmed`.
+   * The window is about to close (`reason`): the page acknowledges at once
+   * (`window.closeAcknowledged`; without it main closes the window after a few seconds),
+   * saves or asks about its unsaved files, and answers with `window.closeConfirmed`.
    */
   windowBeforeClose: { readonly id: number; readonly reason: CloseReason };
 };

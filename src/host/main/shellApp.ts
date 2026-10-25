@@ -218,6 +218,7 @@ export class ShellApp extends Disposable implements WindowHost {
   private readonly unimplementedStore: UnimplementedStore;
   /** Versions warned about this run of using APIs the shim lacks: once each. */
   private readonly unimplementedNotified = new Set<string>();
+  private unimplementedWarning: { version: string; rollback?: string } | undefined;
   private updater: ExtensionUpdater | undefined;
   private readonly shellState: StateStore;
   private readonly history: WindowHistory;
@@ -574,7 +575,18 @@ export class ShellApp extends Disposable implements WindowHost {
     }
     this.unimplementedNotified.add(version);
     const rollback = this.updater?.rollbackTarget()?.version;
-    this.windows.at(-1)?.emit('extensionUnimplemented', { version, ...(rollback === undefined ? {} : { rollback }) });
+    // The extension may get here while the pages still start: it waits to be taken.
+    this.unimplementedWarning = { version, ...(rollback === undefined ? {} : { rollback }) };
+    for (const window of this.windows) {
+      window.emit('extensionUnimplemented', { version });
+    }
+  }
+
+  /** The warning `unimplementedUsed` left, for the first page to ask. */
+  takeUnimplementedWarning(): { version: string; rollback?: string } | undefined {
+    const warning = this.unimplementedWarning;
+    this.unimplementedWarning = undefined;
+    return warning;
   }
 
   /** The version to go back to, when the running one came from an update and has never activated. */
@@ -1387,6 +1399,7 @@ export class ShellApp extends Disposable implements WindowHost {
       'counters.increment': ({ name, by }) => this.counters.increment(name, by ?? 1),
       'window.shownFolders': () => this.windows.map((window) => window.folder),
       'window.close': (_params, window) => this.requestClose(window),
+      'window.closeAcknowledged': ({ id }, window) => window.closeAcknowledged(id),
       'window.closeConfirmed': ({ id, proceed }, window) => window.closeConfirmed(id, proceed),
       'window.openFolderAsAdministrator': ({ folder }) => this.startAdministratorInstance(folder),
       'window.reload': (_params, window) => window.reload(),
@@ -1425,6 +1438,7 @@ export class ShellApp extends Disposable implements WindowHost {
         return file ? this.afterInstall(await this.requireUpdater().installFile(file)) : { outcome: 'cancelled' };
       },
       'extension.rollBack': () => this.requireUpdater().rollBack(),
+      'extension.takeUnimplementedWarning': () => this.takeUnimplementedWarning(),
       'extension.unimplementedMute': ({ version }) => this.unimplementedStore.mute(version),
       'app.startupNotices': () => this.startupNotices(),
       'window.setKeybindings': ({ chords }, window) => window.window.setInterceptedChords(chords),

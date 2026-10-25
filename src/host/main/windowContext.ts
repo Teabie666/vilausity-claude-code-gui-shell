@@ -103,6 +103,12 @@ export interface WindowHost {
 
 /** How long the local API waits for a page to answer a call. */
 const PAGE_CALL_TIMEOUT_MS = 30_000;
+/**
+ * How long a close waits for the page to acknowledge `windowBeforeClose`. Without it (the
+ * windowClose module missing or broken) the window closes; once acknowledged, it waits for the
+ * user's answer however long that takes.
+ */
+const CLOSE_ACK_TIMEOUT_MS = 5000;
 /** How long a send waits for the window's extension to start (a window just opened for it). */
 const SEND_START_TIMEOUT_MS = 60_000;
 
@@ -141,7 +147,7 @@ export class WindowContext extends Disposable {
   private readonly apiCalls = new Map<number, { resolve: (result: unknown) => void; reject: (error: unknown) => void }>();
   private nextApiCall = 1;
   /** Close and quit questions waiting for the page's `window.closeConfirmed`. */
-  private readonly closeChecks = new Map<number, (proceed: boolean) => void>();
+  private readonly closeChecks = new Map<number, { resolve: (proceed: boolean) => void; ackTimer: NodeJS.Timeout | undefined }>();
   private nextCloseCheck = 1;
 
   constructor(
@@ -355,7 +361,8 @@ export class WindowContext extends Disposable {
   /**
    * Asks the page whether the window may close: its unsaved files are saved (auto save, the
    * Windows session ending) or the user answers Save All / Don't Save / Cancel. A page that
-   * cannot answer (loading, gone, crashed) has nothing to keep.
+   * cannot answer (loading, gone, crashed) or does not acknowledge the question has nothing
+   * to keep.
    */
   confirmClose(reason: CloseReason): Promise<boolean> {
     const contents = this.browserWindow.isDestroyed() ? undefined : this.browserWindow.webContents;
@@ -364,16 +371,32 @@ export class WindowContext extends Disposable {
     }
     const id = this.nextCloseCheck++;
     return new Promise((resolve) => {
-      this.closeChecks.set(id, resolve);
+      const ackTimer = setTimeout(() => {
+        this.logger.warn('the page did not acknowledge closing; closing anyway');
+        this.closeConfirmed(id, true);
+      }, CLOSE_ACK_TIMEOUT_MS);
+      this.closeChecks.set(id, { resolve, ackTimer });
       this.window.emit('windowBeforeClose', { id, reason });
     });
   }
 
+  /** The page got `windowBeforeClose`: its answer may wait on the user from here on. */
+  closeAcknowledged(id: number): void {
+    const check = this.closeChecks.get(id);
+    if (check) {
+      clearTimeout(check.ackTimer);
+      check.ackTimer = undefined;
+    }
+  }
+
   /** The page's answer to `confirmClose`. */
   closeConfirmed(id: number, proceed: boolean): void {
-    const resolve = this.closeChecks.get(id);
+    const check = this.closeChecks.get(id);
     this.closeChecks.delete(id);
-    resolve?.(proceed);
+    if (check) {
+      clearTimeout(check.ackTimer);
+      check.resolve(proceed);
+    }
   }
 
   callPage(name: string, params: ApiParams): Promise<unknown> {
@@ -537,8 +560,9 @@ export class WindowContext extends Disposable {
       call.reject(new ApiError(404, 'no_window', `window ${this.id} closed`));
     }
     this.apiCalls.clear();
-    for (const resolve of this.closeChecks.values()) {
-      resolve(true);
+    for (const check of this.closeChecks.values()) {
+      clearTimeout(check.ackTimer);
+      check.resolve(true);
     }
     this.closeChecks.clear();
     if (!this.browserWindow.isDestroyed()) {
