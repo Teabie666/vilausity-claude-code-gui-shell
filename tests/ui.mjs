@@ -1570,6 +1570,58 @@ await step('About shows the versions and the latest release from GitHub (a local
   }
 });
 
+await step('the setup guide opens from About and the command palette; every page can be skipped', async () => {
+  await press('Control+,');
+  await page.locator('.settings-dialog .settings-search').fill('about');
+  const fromAbout = page.locator('.settings-dialog .settings-widget[data-widget="about.info"] [data-about="setup-guide"]');
+  await fromAbout.click({ timeout: 10_000 });
+  // The dialog closes first: the guide covers the main area, under it.
+  await page.locator('.settings-dialog').waitFor({ state: 'detached', timeout: 10_000 });
+  await page.locator('.setup-guide').waitFor({ timeout: 10_000 });
+
+  // Page 1: the extension in use, and the update settings the settings editor has.
+  const inUse = page.locator('.setup-version .extension-version-current');
+  await waitFor(async () => (await inUse.innerText()).startsWith('Claude Code '), 10_000, 'the extension version on the guide');
+  if (!(await page.locator('.setup-skip').isVisible())) throw new Error('Skip This Page is missing on the first page');
+  // This run's settings.json has automatic updates off and the official download server.
+  if (await page.locator('.setup-extension .setting-checkbox').isChecked()) {
+    throw new Error('the guide shows automatic updates on, the settings have them off');
+  }
+  const server = await page.locator('.setup-extension .setting-select').inputValue();
+  if (server !== 'https://open-vsx.org') throw new Error(`the guide's download server is "${server}"`);
+
+  await page.locator('.setup-skip').click();
+  await page.locator('.setup-connection').waitFor({ timeout: 5000 });
+  if (
+    !(await page
+      .locator('.setup-step')
+      .nth(1)
+      .evaluate((node) => node.classList.contains('current')))
+  ) {
+    throw new Error('step 2 is not the current one');
+  }
+
+  await page.locator('.setup-skip').click();
+  await page.locator('.setup-workspace').waitFor({ timeout: 5000 });
+  const next = page.locator('.setup-next');
+  if ((await next.innerText()) !== 'Finish') throw new Error(`the last page's Next reads "${await next.innerText()}"`);
+  await page.locator('.setup-back').click();
+  await page.locator('.setup-connection').waitFor({ timeout: 5000 });
+  await page.locator('.setup-step').first().click();
+  await page.locator('.setup-extension').waitFor({ timeout: 5000 });
+  await page.locator('.setup-exit').click();
+  await waitFor(async () => (await page.locator('.setup-guide').count()) === 0, 5000, 'the guide to close');
+
+  // The command palette opens it too.
+  await press('Control+Shift+P');
+  await page.locator('.quick-input-filter').fill('>Setup Guide');
+  await page.locator('.quick-input-filter').press('Enter');
+  await page.locator('.setup-guide').waitFor({ timeout: 10_000 });
+  await page.locator('.setup-exit').click();
+  await waitFor(async () => (await page.locator('.setup-guide').count()) === 0, 5000, 'the guide to close again');
+  return 'opened from About and from the palette; skipped to the last page and back';
+});
+
 /** Like press(), for an instance a step started itself. */
 async function pressIn(instance, shortcut) {
   const parts = shortcut.split('+');
@@ -3148,102 +3200,224 @@ async function openExtensionVersion() {
   return { main, widget };
 }
 
-await step('first run: no extension, no Git -> install from Open VSX without a restart, then connect with an API provider', async () => {
-  // An instance of its own: a fresh data folder, no VSCodium copy, no Git anywhere it looks.
-  const firstRoot = path.join(runDir, 'first-run');
-  const firstData = path.join(firstRoot, 'data');
-  const firstWorkspace = path.join(firstRoot, 'workspace');
-  for (const dir of [firstData, firstWorkspace]) mkdirSync(dir, { recursive: true });
-  const vsix = readFileSync(makeVsix('9.0.0'));
-  const sha256 = createHash('sha256').update(vsix).digest('hex');
-  let base = '';
-  const openVsx = createServer((request, response) => {
-    if (request.url === '/api/anthropic/claude-code/win32-x64') {
-      response.writeHead(200, { 'content-type': 'application/json' }).end(
-        JSON.stringify({
-          namespace: 'Anthropic',
-          name: 'claude-code',
-          version: '9.0.0',
-          targetPlatform: 'win32-x64',
-          files: { download: `${base}/package.vsix`, sha256: `${base}/package.sha256` },
-        }),
-      );
-    } else if (request.url === '/package.vsix') {
-      response.writeHead(200, { 'content-length': vsix.length }).end(vsix);
-    } else if (request.url === '/package.sha256') {
-      response.end(sha256);
-    } else {
-      response.writeHead(404).end();
+await step(
+  'first run: the setup guide installs the extension from Open VSX, sets up DeepSeek with a tested key, and switches the folder',
+  async () => {
+    // An instance of its own: a fresh data folder, no VSCodium copy, no Git anywhere it looks.
+    const firstRoot = path.join(runDir, 'first-run');
+    const firstData = path.join(firstRoot, 'data');
+    const firstWorkspace = path.join(firstRoot, 'workspace');
+    const otherWorkspace = path.join(firstRoot, 'other');
+    for (const dir of [firstData, firstWorkspace, otherWorkspace]) mkdirSync(dir, { recursive: true });
+    const vsix = readFileSync(makeVsix('9.0.0'));
+    const sha256 = createHash('sha256').update(vsix).digest('hex');
+    let base = '';
+    const openVsx = createServer((request, response) => {
+      if (request.url === '/api/anthropic/claude-code/win32-x64') {
+        response.writeHead(200, { 'content-type': 'application/json' }).end(
+          JSON.stringify({
+            namespace: 'Anthropic',
+            name: 'claude-code',
+            version: '9.0.0',
+            targetPlatform: 'win32-x64',
+            files: { download: `${base}/package.vsix`, sha256: `${base}/package.sha256` },
+          }),
+        );
+      } else if (request.url === '/package.vsix') {
+        response.writeHead(200, { 'content-length': vsix.length }).end(vsix);
+      } else if (request.url === '/package.sha256') {
+        response.end(sha256);
+      } else {
+        response.writeHead(404).end();
+      }
+    });
+    base = `http://127.0.0.1:${await listenOnSafePort(openVsx)}`;
+    // A stand-in for DeepSeek's API: the guide's Test goes to /v1/messages with the key saved below.
+    let apiRequests = 0;
+    let apiAuthorized = 0;
+    const api = createServer((request, response) => {
+      apiRequests += 1;
+      const authorized =
+        request.method === 'POST' && request.url === '/v1/messages' && request.headers.authorization === 'Bearer sk-first-run';
+      if (authorized) apiAuthorized += 1;
+      const answer = authorized
+        ? {
+            id: 'msg_1',
+            type: 'message',
+            role: 'assistant',
+            model: 'deepseek-flash',
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'max_tokens',
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }
+        : { type: 'error', error: { type: 'authentication_error', message: 'bad key' } };
+      response.writeHead(authorized ? 200 : 401, { 'content-type': 'application/json' }).end(JSON.stringify(answer));
+    });
+    const apiBase = `http://127.0.0.1:${await listenOnSafePort(api)}`;
+    writeFileSync(
+      path.join(firstData, 'settings.json'),
+      JSON.stringify({ 'vilaus.language': 'en', 'vilaus.extension.autoUpdate': false, 'vilaus.extension.openVsxUrl': base }),
+      'utf8',
+    );
+    // Claude Code looks for Git on PATH (and CLAUDE_CODE_GIT_BASH_PATH), so does the shell.
+    // Variable names ignore case on Windows: match them whatever their case.
+    const noGit = {};
+    for (const [name, value] of Object.entries(env)) {
+      if (/^claude_code_git_bash_path$/i.test(name)) continue;
+      // This run shows the setup guide: the automatic first run is the point of this step.
+      if (/^vilaus_onboarding$/i.test(name)) continue;
+      noGit[name] = /^path$/i.test(name)
+        ? value
+            .split(';')
+            .filter((dir) => !/git/i.test(dir))
+            .join(';')
+        : value;
     }
-  });
-  base = `http://127.0.0.1:${await listenOnSafePort(openVsx)}`;
-  writeFileSync(
-    path.join(firstData, 'settings.json'),
-    JSON.stringify({ 'vilaus.language': 'en', 'vilaus.extension.autoUpdate': false, 'vilaus.extension.openVsxUrl': base }),
-    'utf8',
-  );
-  // Claude Code looks for Git on PATH (and CLAUDE_CODE_GIT_BASH_PATH), so does the shell.
-  // Variable names ignore case on Windows: match them whatever their case.
-  const noGit = {};
-  for (const [name, value] of Object.entries(env)) {
-    if (/^claude_code_git_bash_path$/i.test(name)) continue;
-    noGit[name] = /^path$/i.test(name)
-      ? value
-          .split(';')
-          .filter((dir) => !/git/i.test(dir))
-          .join(';')
-      : value;
-  }
 
-  const first = await electron.launch({
-    executablePath: executable,
-    args: appArgs('--user-data-dir', firstData, '--folder', firstWorkspace, '--secondary-display', '--ignore-other-editors'),
-    cwd: root,
-    env: noGit,
-    timeout: 60_000,
-  });
-  try {
-    const firstPage = await first.firstWindow();
-    const setup = firstPage.locator('.setup-page');
-    await setup.waitFor({ timeout: 30_000 });
-    await firstPage.locator('.toast', { hasText: 'Git for Windows was not found' }).waitFor({ timeout: 10_000 });
-    // Connecting waits for the extension.
-    if (!(await firstPage.locator('.setup-provider').isDisabled())) throw new Error('step 2 is enabled before the install');
+    let first;
+    let firstClosed = false;
+    try {
+      first = await electron.launch({
+        executablePath: executable,
+        args: appArgs('--user-data-dir', firstData, '--folder', firstWorkspace, '--secondary-display', '--ignore-other-editors'),
+        cwd: root,
+        env: noGit,
+        timeout: 60_000,
+      });
+      const firstPage = await first.firstWindow();
+      const setup = firstPage.locator('.setup-guide');
+      await setup.waitFor({ timeout: 30_000 });
+      // Without an extension there is nothing to skip to (the window would be empty), and nothing to go on with.
+      if (await firstPage.locator('.setup-skip').isVisible()) throw new Error('Skip This Page is offered without an extension');
+      if (await firstPage.locator('.setup-exit').isVisible()) throw new Error('Exit Guide is offered without an extension');
+      if (!(await firstPage.locator('.setup-next').isDisabled())) throw new Error('Next is enabled before the install');
 
-    await firstPage.locator('.setup-download').click();
-    const status = firstPage.locator('.setup-status');
-    await waitFor(
-      async () => (await status.innerText()) === 'Claude Code 9.0.0 is installed.',
-      60_000,
-      'the install and the extension host',
-    );
-    await waitFor(
-      () => readJson(path.join(firstData, 'extensions', 'state.json'))?.lastGood === '9.0.0',
-      30_000,
-      'the new extension to activate',
-    );
-    await firstPage.screenshot({ path: path.join(runDir, 'first-run.png') });
+      // Page 1: the download from the stand-in Open VSX, then the extension host.
+      await firstPage.locator('.setup-download').click();
+      await waitFor(
+        () =>
+          firstPage
+            .locator('.setup-next')
+            .isEnabled()
+            .then((enabled) => enabled || undefined),
+        60_000,
+        'the install and the extension host',
+      );
+      await waitFor(
+        () => readJson(path.join(firstData, 'extensions', 'state.json'))?.lastGood === '9.0.0',
+        30_000,
+        'the new extension to activate',
+      );
+      const inUse = firstPage.locator('.setup-version .extension-version-current');
+      await waitFor(async () => (await inUse.innerText()) === 'Claude Code 9.0.0', 10_000, 'the installed version');
+      await firstPage.screenshot({ path: path.join(runDir, 'first-run-1.png') });
 
-    await firstPage.locator('.setup-provider').click();
-    await firstPage.locator('.quick-input-filter').fill('DeepSeek');
-    await firstPage.locator('.quick-input-filter').press('Enter');
-    await setup.waitFor({ state: 'detached', timeout: 10_000 });
-    const providers = await waitFor(() => readJson(path.join(firstData, 'providers.json'))?.providers, 10_000, 'the new provider');
-    const { id } = providers[0];
-    // The key, as the editor saves it; the window then switches to the provider.
-    await firstPage.evaluate((params) => window.vilausNative.invoke('providers.setKey', params), { id, key: 'sk-first-run' });
-    await waitFor(
-      async () => (await firstPage.locator('.titlebar-provider-label').innerText()) === 'DeepSeek',
-      10_000,
-      'the window to use DeepSeek',
-    );
-    return `installed 9.0.0 from ${base}; provider ${id}`;
-  } finally {
-    await first.close();
-    openVsx.close();
-    rmSync(path.join(firstData, 'extensions'), { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
-  }
-});
+      // Page 2: an API key — DeepSeek from the presets, pointed at the stand-in.
+      await firstPage.locator('.setup-next').click();
+      await firstPage.locator('.setup-connection').waitFor({ timeout: 10_000 });
+      await firstPage.locator('.setup-choice').first().click();
+      await firstPage.locator('.setup-deepseek').click();
+      const provider = await waitFor(
+        () => readJson(path.join(firstData, 'providers.json'))?.providers?.[0],
+        10_000,
+        'the new provider in providers.json',
+      );
+      const { id } = provider;
+      // providers.json holds the ProviderConfig as it is: save it again with the stand-in's address.
+      await firstPage.evaluate((params) => window.vilausNative.invoke('providers.save', { provider: params.provider }), {
+        provider: { ...provider, baseUrl: apiBase },
+      });
+      await firstPage.locator('.setup-models').waitFor({ timeout: 10_000 });
+
+      await firstPage.locator('.setup-key .providers-key').fill('sk-first-run');
+      await firstPage.locator('.setup-key button', { hasText: 'Save Key' }).click();
+      await waitFor(
+        () =>
+          firstPage
+            .locator('.setup-next')
+            .isEnabled()
+            .then((enabled) => enabled || undefined),
+        10_000,
+        'the key to be saved',
+      );
+
+      await firstPage.locator('.providers-test').click();
+      const answer = firstPage.locator('.providers-test-status');
+      await waitFor(async () => (await answer.innerText()).startsWith('Connected in'), 10_000, 'the connection test to pass');
+      if (apiAuthorized === 0) throw new Error('the API stand-in was never asked');
+      await firstPage.screenshot({ path: path.join(runDir, 'first-run-2.png') });
+
+      // Page 3: the provider for this window and for new folders, then the folder.
+      await firstPage.locator('.setup-next').click();
+      await firstPage.locator('.setup-workspace').waitFor({ timeout: 10_000 });
+      await waitFor(
+        async () => (await firstPage.locator('.titlebar-provider-label').innerText()) === 'DeepSeek',
+        10_000,
+        'the window to use DeepSeek',
+      );
+      await waitFor(
+        () => readJson(path.join(firstData, 'settings.json'))?.['vilaus.provider.default'] === id,
+        10_000,
+        'the default provider setting',
+      );
+      const folder = firstPage.locator('.setup-folder');
+      await waitFor(
+        async () => path.resolve((await folder.inputValue()).trim()) === path.resolve(firstWorkspace),
+        10_000,
+        'the workspace page to show the folder',
+      );
+
+      await folder.fill(otherWorkspace);
+      await firstPage.locator('.setup-next').click(); // Finish
+      // The window loads again in the new folder: the guide is gone and the onboarding is done.
+      await waitFor(
+        () => readJson(path.join(firstData, 'state', 'shell.json'))?.onboardingVersion === '1.0.0',
+        30_000,
+        'the onboarding to be finished',
+      );
+      await waitFor(
+        async () => {
+          try {
+            return (await firstPage.locator('.setup-guide').count()) === 0;
+          } catch {
+            return false; // between the two documents
+          }
+        },
+        10_000,
+        'the guide to be gone after the reload',
+      );
+      // The Git notice waits for the guide to close (it would sit over the guide's buttons).
+      await firstPage.locator('.toast', { hasText: 'Git for Windows was not found' }).waitFor({ timeout: 10_000 });
+
+      await first.close();
+      firstClosed = true;
+
+      // Again, with the same data folder: the guide shows once.
+      const again = await electron.launch({
+        executablePath: executable,
+        args: appArgs('--user-data-dir', firstData, '--folder', otherWorkspace, '--secondary-display', '--ignore-other-editors'),
+        cwd: root,
+        env: noGit,
+        timeout: 60_000,
+      });
+      try {
+        const againPage = await again.firstWindow();
+        await againPage.locator('.search-box-open').waitFor({ timeout: 60_000 });
+        await againPage.waitForTimeout(3000);
+        if ((await againPage.locator('.setup-guide').count()) > 0) throw new Error('the setup guide came back on the next start');
+      } finally {
+        await again.close();
+      }
+
+      return `installed 9.0.0 from ${base}; provider ${id}; ${apiAuthorized} test request(s) of ${apiRequests} reached the API stand-in`;
+    } finally {
+      if (!firstClosed) await first?.close();
+      openVsx.close();
+      api.close();
+      rmSync(path.join(firstData, 'extensions'), { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+    }
+  },
+);
 
 await step(
   'the session list: the filters are one drop-down, usage resets show the time, and a row deletes its session after asking, open or not',
@@ -5073,7 +5247,7 @@ await step('after a restart the update runs; Go Back and Restart returns to the 
     `Claude Code ${backup} from the backup to activate`,
   );
   const again = await openExtensionVersion();
-  const source = await again.widget.locator('.extension-version-source').innerText();
+  const source = await again.widget.locator('.extension-version-path').innerText();
   if (!source.includes(path.join(dataDir, 'extensions'))) throw new Error(`it runs from "${source}"`);
   return `9.0.0 -> ${backup} from ${source}`;
 });

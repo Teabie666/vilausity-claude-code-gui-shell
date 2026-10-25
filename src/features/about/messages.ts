@@ -13,6 +13,7 @@ export const t = defineMessages('about', {
   repository: 'GitHub Repository',
   releases: 'Releases',
   statistics: 'Statistics',
+  setupGuide: 'Setup Guide',
   copy: 'Copy Version Information',
   copied: 'Copied.',
 });

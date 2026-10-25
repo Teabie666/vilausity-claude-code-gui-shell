@@ -5,7 +5,7 @@
 ## 环境
 
 - Windows 10/11 x64；Node 24+（npm 11）；Git。`npm install`（依赖安装脚本已在 `package.json` 的 `allowScripts` 批准；Electron 二进制首次运行时下载）。
-- 插件查找顺序：`--extension-dir` → 数据目录 `extensions\` 里自装的 → 本机 VSCodium / VS Code 的；都没有时出首次启动页。
+- 插件查找顺序：`--extension-dir` → 数据目录 `extensions\` 里自装的 → 本机 VSCodium / VS Code 的；都没有时配置引导停在第 1 页（安装插件）。
 
 ## 运行
 

@@ -44,4 +44,10 @@ export const t = defineMessages('extensionUpdates', {
   installFileCommand: 'Install Claude Code Extension from VSIX...',
   rollBackCommand: 'Go Back to the Previous Claude Code Extension and Restart',
   rollBackTooltip: 'Automatic updates then skip the version you leave, until a newer one comes out.',
+  sourceManaged: 'Installed by Vilausity',
+  sourceCli: 'Given with --extension-dir',
+  sourceFrom: 'From {0}',
+  editorVscodium: 'VSCodium',
+  editorVsCode: 'VS Code',
+  editorAnother: 'another editor',
 });

@@ -259,17 +259,20 @@ Monaco、Shiki 和 Markdown 渲染都在第一次用到时才加载（renderer �
 - **提醒**：插件常在启动时（激活时）就调到没实现的接口，那时页面多半还没开始听，所以主进程把提醒存着（`unimplementedWarning`），给每个窗口发 `extensionUnimplemented` 只是说"有一条"；页面（`features/extensionUpdates`）启动时和收到事件时都去取（`extension.takeUnimplementedWarning`），谁先取到谁弹，只弹一个窗口。警告带「退回 X 并重启」（`extension.rollBack`，装好就重启）或「不再提示」（`extension.unimplementedMute`）。同一版本同一次运行只提醒一次（`unimplementedNotified`）。
 - 同一版本在一次运行里只提醒一次，之后用到的别的缺接口照样记下、不再提醒；下次启动它们已在记录里，也不提醒（这个版本缺功能已经说过了）。
 
-## 首次启动（M4）
+## 首次启动和配置引导（M4，M6.7 改成引导）
 
-> M6.7 会改成三页的配置引导，见 ROADMAP。已经做好的部分：主进程按 `platform/onboarding.ts` 的 `onboardingDue`（`state/shell.json` 的 `onboardingVersion` 低于 `ONBOARDING_VERSION`、不是管理员实例、没设 `VILAUS_ONBOARDING=0`）在启动时记下待显示的一步（`setup`）；页面用 `onboarding.take` 取（第一个来取的拿走）、`onboarding.defer` 留给下一个载入的页面（换文件夹会重新载入）、`onboarding.done` 写回版本号。测试脚本的公共环境都设了 `VILAUS_ONBOARDING=0`。插件自带的新手清单默认关掉：`platform/extensionDefaults.ts` 的 `EXTENSION_DEFAULT_OVERRIDES` 叠在插件 package.json 的默认值上面（只对这个版本声明了的设置），compat 和设置页都用它。
-
-- **找不到插件时**（也没给 `--extension-dir`）窗口照常打开，但不起插件进程（`WindowContext.startExtHost` 直接返回）。`features/setup` 在主区域盖一层首次启动页：
-  - 第 1 步「下载并安装」（走 `extension.check`，进度来自 `extensionStatus`）或「从 VSIX 安装...」；「换一个下载服务器」打开设置的"插件版本"一节。
-  - 第 2 步「用 Claude 账号登录」：关掉这页、开一个对话，登录交给插件自己。「用 API 接口」：`providers.add` 从预设添加并打开编辑页；等它有了密钥（要密钥的类型才等）就 `providers.select` 切过去。「以后再说」在插件装好之后才出现，免得留下一个空窗口。
+- **出现条件**：主进程按 `platform/onboarding.ts` 的 `onboardingDue`（`state/shell.json` 的 `onboardingVersion` 低于 `ONBOARDING_VERSION`、不是管理员实例、没设 `VILAUS_ONBOARDING=0`）在启动时记下待显示的一步（`setup`）。页面用 `onboarding.take` 取（第一个来取的拿走）、`onboarding.defer` 留给下一个载入的页面、`onboarding.done` 写回版本号；中途关掉窗口不写，下次从头来。测试脚本的公共环境都设了 `VILAUS_ONBOARDING=0`。
+- **配置引导**（`features/setup`）：主区域盖一层，三页，契约是 `setup/page.ts` 的 `GuidePage`（`canSkip`、`canGoOn`、`goOn()`、`show()`），外壳 `guide.ts` 管步骤条、上一步 / 跳过 / 下一步、退出引导。自动出现（取到 `setup`）、插件没在跑、命令 `setup.open`（命令面板 Help: Setup Guide、设置"关于"里的按钮）都会打开；后两种不算自动。
+  - 第 1 页 `extensionPage.ts`：有插件时是设置页同一个 `extensionUpdates/versionView.ts`（不带退回），加自动更新、锁定版本、下载服务器（官方 / 自定义地址；没有公开的国内镜像）三个控件；没插件时下载并安装（`extension.check`，进度来自 `extensionStatus`）或从 VSIX 安装，失败时提示换服务器或从 Open VSX 网页手动下 .vsix。没插件不能跳过、不能退出（窗口是空的）。
+  - 第 2 页 `connectionPage.ts`：我有 API key（从预设加接口，用 `providers/providerForm.ts` 的 key、模型、价格几节和测试连接，每节上面一两句说明）、还没有（`quickStart.deepSeekKey` 教程，没有这个命令时打开 DeepSeek 的 key 页面）、用 Claude 账号（切回订阅，登录交给插件）。下一步：保存表单、`providers.select`，勾着"新打开的文件夹默认用这个接口"时写 `vilaus.provider.default`（新文件夹靠它，不写就回到订阅）。
+  - 第 3 页 `workspacePage.ts`：确认或换这个窗口的文件夹，是用户文件夹时说明这是全局工作区。换文件夹走 `window.openFolder`，页面会重新载入，所以自动出现时先 `onboarding.defer({ step: 'quickStart' })`，载入后 `setup` 模块取到 `quickStart` 再开快速入门。
+  - 关闭（走完、跳到最后、退出）后：自动出现的接着开快速入门（`quickStart.open`，由它最后调 `onboarding.done`；还没有这个命令时直接 `onboarding.done`）；插件在跑、窗口一个对话都没有时开一个新对话（用账号的人马上看到登录）。
+- 插件自带的新手清单默认关掉：`platform/extensionDefaults.ts` 的 `EXTENSION_DEFAULT_OVERRIDES` 叠在插件 package.json 的默认值上面（只对这个版本声明了的设置），compat 和设置页都用它。
+- **找不到插件时**（也没给 `--extension-dir`）窗口照常打开，但不起插件进程（`WindowContext.startExtHost` 直接返回），配置引导停在第 1 页。
 - **第一次装好不用重启**：这时没有在跑的插件，主进程的 `afterInstall` 立即 `prepare()`（pending 变成 current）、更新 updater 的 `running`，给每个窗口 `startMissingExtensionHost()`。之后的更新照旧是下次启动换上。没插件时不自动检查更新，等用户点。
 - `--extension-dir` 指的目录里没有插件：报错退出（开发时的错，不提供安装）。
-- **Git**：`host/main/gitLocator.ts` 在 Claude Code 找 Git 的地方找：`CLAUDE_CODE_GIT_BASH_PATH`、PATH、`Program Files\Git`、`%LOCALAPPDATA%\Programs\Git`。找不到时，第一个来问的窗口（`app.startupNotices`）弹一条提示：用途、「下载 Git for Windows」「不再提示」。只提示一次，记在 `state\shell.json`，不限于首次启动。
-- **测试**：开关 `--ignore-other-editors` 不找 VSCodium / VS Code 的插件（只给测试用，不写进 `--help`）。界面测试起一个全新数据目录的实例，加这个开关、PATH 里去掉 Git：检查首次启动页和 Git 提示 → 从本机假 Open VSX 下载安装 → 插件不重启就激活 → 第 2 步选 API 接口、从预设加 DeepSeek → 存了密钥后窗口切过去。
+- **Git**：`host/main/gitLocator.ts` 在 Claude Code 找 Git 的地方找：`CLAUDE_CODE_GIT_BASH_PATH`、PATH、`Program Files\Git`、`%LOCALAPPDATA%\Programs\Git`。找不到时，第一个来问的窗口（`app.startupNotices`；配置引导开着时等它关了再问，免得提示盖住引导的按钮）弹一条提示：用途、「下载 Git for Windows」「不再提示」。只提示一次，记在 `state\shell.json`，不限于首次启动。
+- **测试**：开关 `--ignore-other-editors` 不找 VSCodium / VS Code 的插件（只给测试用，不写进 `--help`）。界面测试起一个全新数据目录的实例，加这个开关、PATH 里去掉 Git、不设 `VILAUS_ONBOARDING`：引导自动出现和 Git 提示 → 从本机假 Open VSX 下载安装、插件不重启就激活 → 加 DeepSeek、地址改到本机假 API、存 key、测试连接 → 窗口切到这个接口并写了默认接口 → 第 3 页换文件夹、重新载入后写入引导版本 → 再启动不再出现。另一条从"关于"和命令面板手动打开，每页跳过、上一步、退出。
 
 ## 管理员实例（M4）
 

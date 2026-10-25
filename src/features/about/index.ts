@@ -4,7 +4,8 @@
  * block, the logo beside the versions, with links and Copy Version Information (which adds
  * what the app runs on). The latest release is asked for when the section is first shown;
  * main keeps a successful answer for an hour, and a failed one can be retried by hand
- * (GitHub is often unreachable). The statistics tab adds its entry here later.
+ * (GitHub is often unreachable). The buttons open the Setup Guide too; the statistics tab
+ * adds its entry here later.
  */
 
 import type { ShellModule } from '../../core/module';
@@ -23,6 +24,7 @@ interface AboutViewOptions {
   readonly copy: () => Promise<void>;
   readonly openUrl: (url: string) => void;
   readonly retry: () => void;
+  readonly setupGuide: () => void;
   readonly statistics: () => void;
 }
 
@@ -102,6 +104,7 @@ class AboutView {
           () => undefined,
         );
       }),
+      button(t('setupGuide'), 'setup-guide', () => this.options.setupGuide()),
       button(t('statistics'), 'statistics', () => this.options.statistics()),
       this.status,
     );
@@ -206,6 +209,8 @@ export const aboutModule: ShellModule = {
             copy: () => native.call('os.clipboardWrite', { text: copyText() }),
             openUrl,
             retry: () => loadRelease(true),
+            // The guide covers the main area, under the settings dialog: close the dialog first.
+            setupGuide: () => void commands.execute('settings.close').then(() => commands.execute('setup.open')),
             statistics: () => void commands.execute('stats.show'),
           });
           const render = (): void => view.render(init, extensionStatus, release);
