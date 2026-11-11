@@ -6,11 +6,12 @@
 
 ## 下一步
 
-1. 1.0.0：安装包备好（2026-10-25），等发布（M6 ⑤）
-2. M6.7 快速入门和引导（2026-10-25 完成，待试用）：三页的配置引导（插件、连接、工作区）、VS Code Get Started 式的快速入门标签页、测试连接、屏蔽插件自带的新手清单，分四块（A–D），做完发 1.0.0
-3. M6.6 0.9.4 试用反馈（块 A–G 都完成了，2026-10-25；F、G 待试用）：会话列表标题、筛选栏、搜索框的角、关于、最近打开的文件夹、搜索的速度和行距、长对话"丢内容"（插件只画最近 600 行，做完整记录和提示）、提问选项可复制、会话管理、统计，加上从 M6 ③ 挪过来的两项和 Edit 不弹 diff 的 bug
-4. M6.5 试用反馈（块 A–F 都完成了，2026-10-22，随 0.9.4 发布）
-5. M6 打包和发布：①② 完成，0.9.0 到 0.9.4 作为测试版发布；③ 剩下的两项（关窗口 / 退出时问未保存的文件、插件新版本缺接口时提示退回）挪进 M6.6；④ 干净环境测试不做了，留作坑（2026-10-24 定）
+1. 1.0.1 已知问题（2026-11-11 起收集）：1.0.0 之后自己用和试用者反馈攒下的问题，下一版一起修；先记了接兼容接口时 auto 模式全拒（插件 2.1.319 起）和 CLI 去请求 api.anthropic.com 两条
+2. 1.0.0：已发布（2026-10-25，M6 ⑤）
+3. M6.7 快速入门和引导（2026-10-25 完成，待试用）：三页的配置引导（插件、连接、工作区）、VS Code Get Started 式的快速入门标签页、测试连接、屏蔽插件自带的新手清单，分四块（A–D），做完发 1.0.0
+4. M6.6 0.9.4 试用反馈（块 A–G 都完成了，2026-10-25；F、G 待试用）：会话列表标题、筛选栏、搜索框的角、关于、最近打开的文件夹、搜索的速度和行距、长对话"丢内容"（插件只画最近 600 行，做完整记录和提示）、提问选项可复制、会话管理、统计，加上从 M6 ③ 挪过来的两项和 Edit 不弹 diff 的 bug
+5. M6.5 试用反馈（块 A–F 都完成了，2026-10-22，随 0.9.4 发布）
+6. M6 打包和发布：①② 完成，0.9.0 到 0.9.4 作为测试版发布；③ 剩下的两项（关窗口 / 退出时问未保存的文件、插件新版本缺接口时提示退回）挪进 M6.6；④ 干净环境测试不做了，留作坑（2026-10-24 定）
 
 2026-10-10 把视觉打磨和打包对调了：功能做完不直接发布，先把界面打磨好。
 
@@ -690,6 +691,33 @@ Vilausity 多数时候拿来做简单的电脑任务，工作流基本在单个�
 2. 块 B：②③④（含 `VersionView`、`ProviderForm` 的拆分）
 3. 块 C：⑤ 的框架和全部步骤的文案初稿，试用后调整
 4. 块 D：DeepSeek 教程的内容，跟 1.0.0 的发布说明一起写
+
+## 1.0.1 已知问题（2026-11-11 起收集）
+
+1.0.0 之后自己用和试用者反馈攒下的问题，下一版一起修。动手前先在当时最新的插件上跑一遍完整界面测试和 smoke，看新版插件有没有带来别的问题（2026-11-11 是 2.1.322，`extensions\unimplemented.json` 里没有缺的接口）。
+
+### ① 接 DeepSeek 等兼容接口时，auto 模式什么都不让做（插件 2.1.319 起）
+
+- 现象：权限模式是 Auto 时，凡是要过安全检查的调用（PowerShell、Bash 跑脚本、MCP 工具，比如 Playwright）全被拒，报 `Auto mode is unavailable: its safety check does not run for this session`。在安全名单上的 Read、Grep 这些不受影响，所以看着像"只有部分命令坏了"。`claude -p` 下 CLI 会多说一句："Its safety check runs on the server, and your requests go through api.deepseek.com, which doesn't pass it through"。2.1.318 及以前正常。
+- 原因：auto 模式的安全检查（classifier 分类器）现在优先由 Anthropic 的服务器在模型请求里顺带做（官方文档 [Server-side classifier review](https://code.claude.com/docs/en/permission-modes#server-side-classifier-review)）。兼容接口返回的响应里没有检查结果。2026-11-11 用同一套环境变量对照测试：
+  - 2.1.302 拿不到检查结果时，会改由 Claude Code 自己发分类器请求（用会话的主模型判），日志里写 "auto mode classifies locally for the rest of this session"；
+  - 2.1.319、2.1.322 不再这样退回，直接拒。官方文档写的是"服务器不检查这个会话时会退回自己的分类器请求"，跟实测对不上。
+- 办法：设环境变量 `CLAUDE_CODE_AUTO_MODE_SERVER=0`（官方文档有），意思是不问服务器、一直由 Claude Code 自己发分类器请求。2.1.322 + DeepSeek 实测能用，分类器用的模型是会话的主模型。修好之前，可以在接口编辑页的"其他环境变量"里手动加。
+- [ ] `providerEnvironment`（`platform/providers.ts`）：`compatible` 类型默认带上 `CLAUDE_CODE_AUTO_MODE_SERVER=0`；接口的"其他环境变量"里写了别的值就用它的（`provider.env` 本来就是最后叠上去的）。`anthropic-api` 和订阅不带。这样已经建好的接口也自动生效，不用迁移
+- [ ] 单元测试：`compatible` 带，`anthropic-api` 和订阅不带，`provider.env` 能覆盖
+- [ ] 实测：DeepSeek + auto 模式，让 Claude 跑一条要过检查的命令（不在安全名单上的，比如 `node -e`），能跑
+- 顺带：`b44b1bc` 替用户回答的计费提示（`auto_mode_server_fallback`），2.1.319 之后接 DeepSeek 没再出现过；加了这个变量以后也不会再出。bridge 里那段代码留着，不碍事
+
+### ② 兼容接口没关"非必要流量"时，CLI 每次启动都去请求 api.anthropic.com
+
+- 现象：接 DeepSeek 并且没勾"关闭非必要流量"时，CLI 每次启动都会请求 `https://api.anthropic.com/api/claude_cli/bootstrap`，Anthropic 回 400："This request carries more than one credential: authorization header and x-api-key header"（2.1.302、2.1.319、2.1.322 都这样）。这两个头里具体是什么没有抓包确认；Vilausity 给兼容接口设的 `ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_API_KEY` 和 `x-api-key` 请求头都是接口的 key，多半被一起带过去了。
+- 勾上以后（`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`），实测再没有发往 api.anthropic.com 的请求，auto 模式（配合 ①）照常能用。GLM 预设本来就勾着。
+- [ ] DeepSeek、Kimi 等兼容预设都勾上（`features/providers/presets.ts` 的 `disableNonessentialTraffic: true`）
+- [ ] 已经建好的兼容接口要不要也默认打开（比如 `providerEnvironment` 对 `compatible` 默认设，跟 ① 一样），到时候定。先确认关掉以后有没有别的行为跟着变：拿不到 GrowthBook 开关时，CLI 用的是开关的默认值
+
+### 其他（待收集）
+
+- 自己和试用者攒的清单，开工前排进来
 
 ## 贯穿各阶段（PLAN 的工程规范）
 
