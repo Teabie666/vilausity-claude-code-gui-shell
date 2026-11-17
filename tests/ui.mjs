@@ -17,7 +17,20 @@ const root = path.resolve(import.meta.dirname, '..');
 // this checkout's dist/, and needs the app's folder first.
 const packaged = process.env.VILAUS_EXECUTABLE ? path.resolve(process.env.VILAUS_EXECUTABLE) : undefined;
 const executable = packaged ?? electronPath;
-const appArgs = (...args) => (packaged ? args : ['.', ...args]);
+// VILAUS_TEST_EXTENSION_DIR: test this copy of the Claude Code extension (for example the one an
+// installed Vilausity manages) instead of the one the locator finds, which falls back to VSCodium's.
+// Not for the first-run steps (--ignore-other-editors), which want no extension at all.
+const testExtensionDir = process.env.VILAUS_TEST_EXTENSION_DIR;
+const appArgs = (...args) => {
+  const extra = testExtensionDir && !args.includes('--ignore-other-editors') ? ['--extension-dir', testExtensionDir] : [];
+  // VILAUS_TEST_UNTHROTTLED=1: a window covered by others keeps rendering (Chromium otherwise
+  // stops its animation frames, and Playwright's waits for a stable element time out).
+  if (process.env.VILAUS_TEST_UNTHROTTLED)
+    extra.push('--disable-backgrounding-occluded-windows', '--disable-features=CalculateNativeWinOcclusion');
+  // Ahead of the step's own arguments, which may end in a vilaus:// link.
+  const all = [...extra, ...args];
+  return packaged ? all : ['.', ...all];
+};
 const runDir = path.join(root, '.test-data', `ui-${Date.now()}`);
 const dataDir = path.join(runDir, 'data');
 const workspace = path.join(runDir, 'workspace');
@@ -42,6 +55,26 @@ for (const name of Object.keys(env)) {
 env.VILAUS_ELEVATED = '0';
 // No setup guide or quick start popping up: the steps that test them turn it back on.
 env.VILAUS_ONBOARDING = '0';
+
+/**
+ * The environment of an instance whose Claude Code keeps a folder of its own. That folder trusts
+ * this repository, which holds every test workspace: for a folder Claude Code has no trust record
+ * for, the extension (2.1.323 and later at least) first asks "Trust this folder in Claude Code?"
+ * in a modal, which would cover the window.
+ */
+function ownClaudeEnv(claudeDir) {
+  const config = path.join(claudeDir, '.claude.json');
+  const current = existsSync(config) ? JSON.parse(readFileSync(config, 'utf8')) : {};
+  const projects = { ...current.projects };
+  // Claude Code writes the drive letter either way round; both are trusted.
+  const repository = root.replaceAll('\\', '/');
+  for (const key of [repository[0].toLowerCase() + repository.slice(1), repository[0].toUpperCase() + repository.slice(1)]) {
+    projects[key] = { ...projects[key], hasTrustDialogAccepted: true };
+  }
+  mkdirSync(claudeDir, { recursive: true });
+  writeFileSync(config, JSON.stringify({ ...current, projects }), 'utf8');
+  return { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') };
+}
 // A conversation for the search to find, instead of the real ones in ~/.claude/projects.
 const sessionsDir = path.join(runDir, 'sessions');
 mkdirSync(path.join(sessionsDir, 'project'), { recursive: true });
@@ -1781,7 +1814,7 @@ await step('the statistics tab adds up a made-up conversation, from About, once'
     executablePath: executable,
     args: appArgs('--user-data-dir', statsData, '--folder', statsWorkspace, '--secondary-display'),
     cwd: root,
-    env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+    env: ownClaudeEnv(claudeDir),
     timeout: 60_000,
   });
   try {
@@ -2932,7 +2965,7 @@ await step('a proposed Edit of a CRLF file opens its diff tab; accepted, the fil
     executablePath: executable,
     args: appArgs('--user-data-dir', editData, '--folder', editWorkspace, '--secondary-display'),
     cwd: root,
-    env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+    env: ownClaudeEnv(claudeDir),
     timeout: 60_000,
   });
   try {
@@ -3582,7 +3615,7 @@ await step(
       executablePath: executable,
       args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'),
       cwd: root,
-      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      env: ownClaudeEnv(claudeDir),
       timeout: 60_000,
     });
     try {
@@ -3750,7 +3783,7 @@ await step(
       executablePath: executable,
       args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'),
       cwd: root,
-      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      env: ownClaudeEnv(claudeDir),
       timeout: 60_000,
     });
     try {
@@ -3947,7 +3980,7 @@ await step(
       executablePath: executable,
       args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'),
       cwd: root,
-      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      env: ownClaudeEnv(claudeDir),
       timeout: 60_000,
     });
     try {
@@ -4165,7 +4198,7 @@ await step("a conversation of another folder, found by searching all folders, op
     executablePath: executable,
     args: appArgs('--user-data-dir', ownData, '--folder', here, '--secondary-display'),
     cwd: root,
-    env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+    env: ownClaudeEnv(claudeDir),
     timeout: 60_000,
   });
   try {
@@ -4258,7 +4291,7 @@ await step(
       executablePath: executable,
       args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display', '--session', sessionId),
       cwd: root,
-      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      env: ownClaudeEnv(claudeDir),
       timeout: 60_000,
     });
     try {
@@ -4401,7 +4434,7 @@ await step(
       executablePath: executable,
       args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display', '--session', sessionId),
       cwd: root,
-      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      env: ownClaudeEnv(claudeDir),
       timeout: 60_000,
     });
     try {
@@ -4533,7 +4566,7 @@ await step(
       executablePath: executable,
       args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display', '--session', sessionId),
       cwd: root,
-      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      env: ownClaudeEnv(claudeDir),
       timeout: 60_000,
     });
     try {
@@ -4628,7 +4661,7 @@ await step(
       executablePath: executable,
       args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display', '--session', sessionId),
       cwd: root,
-      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      env: ownClaudeEnv(claudeDir),
       timeout: 60_000,
     });
     try {
@@ -4711,7 +4744,7 @@ await step(
       executablePath: executable,
       args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display'),
       cwd: root,
-      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      env: ownClaudeEnv(claudeDir),
       timeout: 60_000,
     });
     try {
@@ -4839,7 +4872,7 @@ await step(
       executablePath: executable,
       args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display', '--session', sessionId),
       cwd: root,
-      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      env: ownClaudeEnv(claudeDir),
       timeout: 60_000,
     });
     try {
@@ -5045,7 +5078,7 @@ await step(
       executablePath: executable,
       args: appArgs('--user-data-dir', ownData, '--folder', ownWorkspace, '--secondary-display', '--session', sessionId),
       cwd: root,
-      env: { ...env, CLAUDE_CONFIG_DIR: claudeDir, VILAUS_SESSIONS_DIR: path.join(claudeDir, 'projects') },
+      env: ownClaudeEnv(claudeDir),
       timeout: 60_000,
     });
     try {

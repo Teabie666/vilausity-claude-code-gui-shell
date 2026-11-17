@@ -10,6 +10,7 @@
 //   VILAUS_SMOKE_MODEL       optional, default claude-haiku-4-5-20251001
 //   VILAUS_EXECUTABLE        optional, the packaged program (release\win-unpacked\Vilausity.exe)
 //                            instead of electron.exe with this checkout
+//   VILAUS_TEST_EXTENSION_DIR optional, the extension folder to test (default: what the locator finds)
 import { _electron as electron } from 'playwright-core';
 import electronPath from 'electron';
 import { execFileSync } from 'node:child_process';
@@ -20,7 +21,20 @@ import path from 'node:path';
 const packaged = process.env.VILAUS_EXECUTABLE ? path.resolve(process.env.VILAUS_EXECUTABLE) : undefined;
 const executable = packaged ?? electronPath;
 // In development electron.exe needs the app's folder first.
-const appArgs = (...args) => (packaged ? args : ['.', ...args]);
+// VILAUS_TEST_EXTENSION_DIR: test this copy of the Claude Code extension (for example the one an
+// installed Vilausity manages) instead of the one the locator finds, which falls back to VSCodium's.
+// Not for the first-run steps (--ignore-other-editors), which want no extension at all.
+const testExtensionDir = process.env.VILAUS_TEST_EXTENSION_DIR;
+const appArgs = (...args) => {
+  const extra = testExtensionDir && !args.includes('--ignore-other-editors') ? ['--extension-dir', testExtensionDir] : [];
+  // VILAUS_TEST_UNTHROTTLED=1: a window covered by others keeps rendering (Chromium otherwise
+  // stops its animation frames, and Playwright's waits for a stable element time out).
+  if (process.env.VILAUS_TEST_UNTHROTTLED)
+    extra.push('--disable-backgrounding-occluded-windows', '--disable-features=CalculateNativeWinOcclusion');
+  // Ahead of the step's own arguments, which may end in a vilaus:// link.
+  const all = [...extra, ...args];
+  return packaged ? all : ['.', ...all];
+};
 
 // Anthropic's consumer terms allow automated (scripted) access only through an API key, so
 // this test does not drive the signed-in Claude subscription unless told to explicitly.
