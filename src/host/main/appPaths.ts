@@ -48,7 +48,7 @@ export interface AppPaths {
   readonly chromium: string;
   /** The other instance's Chromium profile (normal or administrator): safeStorage shares its key. */
   readonly otherChromium: string;
-  /** The other instance's own folder: `rootdmin` for the normal one, `root` for the administrator's. */
+  /** The other instance's own folder: `root\admin` for the normal one, `root` for the administrator's. */
   readonly otherInstanceRoot: string;
   readonly logsRoot: string;
   /** Logs for this run only. */

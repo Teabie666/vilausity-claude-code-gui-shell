@@ -18,7 +18,7 @@ npm run format       # Prettier 改格式（代码文件；Markdown、JSON 不�
 npm test             # 单元测试（免费），之后顺带跑 npm run nls
 npm run nls          # 语言包检查：没翻译的条目（显示英文）和过时的条目（算失败）；-- --todo 输出待翻译的 JSON
 node tests/ui.mjs    # 界面测试：快捷键、标签页、主题、查找、重启恢复（不发消息，免费）
-npm run smoke        # 端到端：真实 Claude 会话发 3 条消息。条款只允许脚本走 API key，所以默认拒绝运行，M2 接上 API 模式；-- --subscription 强制用登录的账号
+npm run smoke        # 端到端：真实会话里发几条消息、审批改文件（要花钱）。条款只允许脚本走 API key：设 VILAUS_SMOKE_API_KEY 或 VILAUS_SMOKE_AUTH_TOKEN（兼容接口再加 VILAUS_SMOKE_BASE_URL、VILAUS_SMOKE_MODEL），都没设就拒绝运行；-- --subscription 强制用登录的账号
 npm run icons        # 重新生成 resources/icon/ 的图标（SVG + .ico），几何形状和颜色在 scripts/icons.mjs 里改
 npm run package      # 正式构建 + electron-builder：release\win-unpacked\ 和 NSIS 安装包
 npm run package:dir  # 只出 release\win-unpacked\（快，测打包版用）
@@ -27,12 +27,12 @@ run-dev.cmd          # 在资源管理器里双击：构建并启动（用 %APPD
 npm run dev          # 构建并启动独立的开发实例（数据在 .test-data\dev，跟正在用的 Vilausity 互不影响）
 ```
 
-改完代码的顺序：typecheck，`npm run lint`（格式不对就先 `npm run format`），然后 `npm test`，然后 `node tests/ui.mjs`。动了插件私有协议相关的代码（bridge、compat）才跑 smoke。动了打包相关的（electron-builder 配置、构建脚本、读程序文件的路径）就 `npm run package:dir`，再用 `VILAUS_EXECUTABLE=release\win-unpacked\Vilausity.exe` 跑界面测试（smoke 也认）。`npm run package` 之后 `dist/` 是正式构建，`npm run build` 换回开发版。
+改完代码的顺序：typecheck，`npm run lint`（格式不对就先 `npm run format`），然后 `npm test`，然后 `npm run build` 再 `node tests/ui.mjs`（界面测试和 smoke 跑的是 `dist/`，不会自己构建，不 build 测的是旧代码）。动了插件私有协议相关的代码（bridge、compat）才跑 smoke。动了打包相关的（electron-builder 配置、构建脚本、读程序文件的路径）就 `npm run package:dir`，再用 `VILAUS_EXECUTABLE=release\win-unpacked\Vilausity.exe` 跑界面测试（smoke 也认）。`npm run package` 之后 `dist/` 是正式构建，`npm run build` 换回开发版。
 
 ## 必须遵守
 
 - **分层**：`platform` ← `compat` / `host/node` ← `host/*`；`core` ← `features`。依赖只能往下指。跨进程消息只在 `src/platform/protocol.ts` 里定义。
-- **插件私有协议**（webview 和插件后端之间的消息格式）只能出现在 `src/host/exthost/bridge.ts` 和 `src/compat/vscode/`。每处都要注明对照的插件版本（当前是 2.1.282）。
+- **插件私有协议**（webview 和插件后端之间的消息格式）只能出现在 `src/host/exthost/bridge.ts` 和 `src/compat/vscode/`。每处都要注明对照的插件版本：写的是写那处时核对过的版本（各处不一样，从 2.1.282 到 2.1.310 都有），插件升级后重新核对过的地方改成新的版本号。
 - **壳的新功能**做成 `src/features/<名字>/` 模块，只通过 `core` 的服务接入（`ShellContext.services`），然后在 `src/host/renderer/main.ts` 里登记。以后的插件系统会用同一套机制。
 - **视觉**：圆角跟 VS Code 一样不一刀切（骨架偏直角，控件和浮层小圆角，见 `docs/design.md`）、1px 分隔线、颜色只用 `var(--vscode-*)`，不要大圆角卡片、渐变、留白多的"AI 风"。
 - **界面文字**：代码里只写英文，放在模块目录的 `messages.ts` 里（`platform/nls.ts` 的 `defineMessages('<命名空间>', {...})`，命名空间不能重名）。中文放进语言包 `src/nls/zh-cn.json`，可以晚点批量补：`npm run nls -- --todo` 导出待翻译的条目，译好合并进去，再 `npm run nls -- --sort` 排好序。术语规范见 `docs/design.md` 的"文案"。日志不翻译。
@@ -42,6 +42,8 @@ npm run dev          # 构建并启动独立的开发实例（数据在 .test-da
 - **推送**：远程 `origin` 是 GitHub 上的 `Teabie666/vilausity-claude-code-gui-shell`，目前只做备份，不用于协作。需要时就推，大一点的改动可以开分支；不 force push。
 
 ## 踩过的坑（非显而易见）
+
+- **测试实例用的 cc 插件不是正在用的那份**：临时数据目录里没有 Vilausity 自己装的插件，按查找顺序落到本机 VSCodium 里那份（2026-11 是 2.1.302），而正在用的 Vilausity 早已自动更新到新版本。看界面测试、smoke 的结果时要知道测的是哪个版本；要测指定版本，先把那份插件目录交给测试实例（`--extension-dir`）。
 
 - **从 VSCodium 里的 Claude 会话启动 Electron**：环境里带着 `ELECTRON_RUN_AS_NODE=1` 和一堆 `VSCODE_*`，electron.exe 会变成纯 Node。开发时用 `node scripts/launch.mjs` 或 `run-dev.cmd`；程序本身启动 extension host 时会用 `cleanEnvironment()` 清掉这些变量。
 - **Playwright 的模拟按键**走 DevTools 协议，会绕过主进程的 `before-input-event`，测不到我们拦截的快捷键。测试里用 `webContents.sendInputEvent`，见 `tests/ui.mjs` 的 `press()`。**鼠标反过来**：`sendInputEvent` 的鼠标事件只进顶层页面，不会分发进跨进程的 webview iframe，右键会被算到壳的页面上；测右键菜单用 Playwright 的 `page.mouse`（见 `rightClick()`）。

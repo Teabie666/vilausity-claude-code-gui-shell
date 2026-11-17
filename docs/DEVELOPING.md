@@ -11,7 +11,7 @@
 
 | 命令 | 数据目录 | 用途 |
 | --- | --- | --- |
-| `npm run dev [-- 参数]` | `.test-data\dev` | 默认用这个：独立实例，不跟正在用的 Vilausity 争单实例锁和数据。首次运行复制 `%APPDATA%\Vilausity` 的 settings.json、keybindings.json；API 密钥按数据目录加密，不复制，要在开发实例里重填 |
+| `npm run dev [-- 参数]` | `.test-data\dev`（管理员 shell 里是 `.test-data\dev\admin`） | 默认用这个：独立实例，不跟正在用的 Vilausity 争单实例锁和数据。首次运行复制 `%APPDATA%\Vilausity` 的 settings.json、keybindings.json；API 密钥按数据目录加密，不复制，要在开发实例里重填 |
 | `run-dev.cmd` / `npm start` | `%APPDATA%\Vilausity` | 用真实数据试；同数据目录已有实例在跑时参数交给它、自己退出（stdout 提示） |
 | `npm run watch` | — | 保存即重新打包 |
 
@@ -30,7 +30,7 @@
 
 ## 验证
 
-顺序：`npm run typecheck` → `npm run lint`（格式错先 `npm run format`）→ `npm test`（单元 + 语言包）→ `node tests/ui.mjs`（`UI_ONLY=<正则>` 只跑匹配的步骤；第一步等窗口就绪，部分步骤依赖前面的）。动了 `bridge.ts` / `src/compat` 再跑 `npm run smoke`（走 API key，要花钱）。动了打包相关的跑 `npm run package:dir` 后 `VILAUS_EXECUTABLE=release\win-unpacked\Vilausity.exe node tests/ui.mjs`。界面测试窗口在副屏，被遮挡会随机超时。新功能在 `tests/ui.mjs` 照相邻步骤加一步，纯逻辑在 `tests/unit/` 加单元测试。
+顺序：`npm run typecheck` → `npm run lint`（格式错先 `npm run format`）→ `npm test`（单元 + 语言包）→ `npm run build` → `node tests/ui.mjs`（跑的是 `dist/`，smoke 也是；`UI_ONLY=<正则>` 只跑匹配的步骤；第一步等窗口就绪，部分步骤依赖前面的）。动了 `bridge.ts` / `src/compat` 再跑 `npm run smoke`（走 API key，要花钱）。动了打包相关的跑 `npm run package:dir` 后 `VILAUS_EXECUTABLE=release\win-unpacked\Vilausity.exe node tests/ui.mjs`。界面测试窗口在副屏，被遮挡会随机超时。新功能在 `tests/ui.mjs` 照相邻步骤加一步，纯逻辑在 `tests/unit/` 加单元测试。
 
 ## 结构速查
 
@@ -138,7 +138,7 @@ services.get(ILocalApi).emit('myFeature.greeted', { name });   // 事件流里�
 
 ## 插件升级后
 
-1. `npm run smoke` 或手动发消息、审批改文件、权限确认。
+1. `npm run smoke` 或手动发消息、审批改文件、权限确认。测试实例默认用本机 VSCodium 那份插件（临时数据目录里没有自装的），测新版本要让测试实例用新版本的目录（`--extension-dir`）。
 2. 新版本跑起来后看 `shim-unimplemented.log` 的新条目，补实现。
 3. 壳在插件页面加的东西失效 → 多半类名变了：改 `bridge.ts` 对应页面提示的选择器和注明的版本。
 4. 汉化：`npm run nls`（需要本地插件文字清单，见 ARCHITECTURE"插件界面汉化"）。
