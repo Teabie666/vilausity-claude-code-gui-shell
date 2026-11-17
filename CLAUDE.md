@@ -43,7 +43,8 @@ npm run dev          # 构建并启动独立的开发实例（数据在 .test-da
 
 ## 踩过的坑（非显而易见）
 
-- **测试实例用的 cc 插件不是正在用的那份**：临时数据目录里没有 Vilausity 自己装的插件，按查找顺序落到本机 VSCodium 里那份（2026-11 是 2.1.302），而正在用的 Vilausity 早已自动更新到新版本。看界面测试、smoke 的结果时要知道测的是哪个版本；要测指定版本，先把那份插件目录交给测试实例（`--extension-dir`）。
+- **测试实例用的 cc 插件不是正在用的那份**：临时数据目录里没有 Vilausity 自己装的插件，按查找顺序落到本机 VSCodium 里那份（2026-11 是 2.1.302），而正在用的 Vilausity 早已自动更新到新版本。要测指定版本：`VILAUS_TEST_EXTENSION_DIR=<插件目录>`（界面测试和 smoke 都认，给测试实例加 `--extension-dir`；界面测试里插件更新那 3 步要 Vilausity 自己装插件的目录，这时本来就过不了）。
+- **新版插件会先问信任文件夹**（2.1.323 起，至少）：Claude Code 没有信任记录的文件夹，打开时弹"Trust this folder in Claude Code?"模态框，盖住整个窗口。界面测试里给 Claude Code 单独 `CLAUDE_CONFIG_DIR` 的步骤要用 `ownClaudeEnv(claudeDir)`（往那个目录的 `.claude.json` 写上仓库根目录的信任），新加这类步骤照着用。`VILAUS_TEST_UNTHROTTLED=1` 让被盖住的测试窗口照常出画面，是可选开关，没有证据说明它修好过什么。
 
 - **从 VSCodium 里的 Claude 会话启动 Electron**：环境里带着 `ELECTRON_RUN_AS_NODE=1` 和一堆 `VSCODE_*`，electron.exe 会变成纯 Node。开发时用 `node scripts/launch.mjs` 或 `run-dev.cmd`；程序本身启动 extension host 时会用 `cleanEnvironment()` 清掉这些变量。
 - **Playwright 的模拟按键**走 DevTools 协议，会绕过主进程的 `before-input-event`，测不到我们拦截的快捷键。测试里用 `webContents.sendInputEvent`，见 `tests/ui.mjs` 的 `press()`。**鼠标反过来**：`sendInputEvent` 的鼠标事件只进顶层页面，不会分发进跨进程的 webview iframe，右键会被算到壳的页面上；测右键菜单用 Playwright 的 `page.mouse`（见 `rightClick()`）。

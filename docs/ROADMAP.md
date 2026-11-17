@@ -6,7 +6,7 @@
 
 ## 下一步
 
-1. **1.0.1**（最后一节"1.0.1 已知问题"）：1.0.0 之后自己用和试用者反馈攒下的问题，下一版一起修。已记的：接兼容接口时 auto 模式全拒（插件 2.1.319 起）、CLI 去请求 api.anthropic.com、在当前插件版本上重跑全部测试、DeepSeek 下各功能的全面测试（2026-11-17）、加 2027 年的法定节假日。
+1. **1.0.1**（最后一节"1.0.1 已知问题"）：1.0.0 之后自己用和试用者反馈攒下的问题，下一版一起修。已记的：接兼容接口时 auto 模式全拒（插件 2.1.319 起；2.1.326 起新对话默认 Auto，更急）、CLI 去请求 api.anthropic.com、在当前插件版本上重跑测试（2.1.326 跑过了，剩汉化）、DeepSeek 下各功能的全面测试（2026-11-17 做完，剩一条没查的）、加 2027 年的法定节假日。
 2. 以后要做的（没排进版本）：本地接口加读对话、看对话在问什么、回答它三个操作；`npm run dev` 第一次启动时复制正在用的 cc 插件；用户插件系统（M6.5 ⑥ 第 3 条）。见最后一节"以后"。
 
 已完成的：M0–M6.7。1.0.0 在 2026-10-25 发布（M6 ⑤），M6.5、M6.6、M6.7 都在里面；0.9.0–0.9.4 是之前的测试版。M6 ④ 干净环境测试不做了，留作坑（2026-10-24 定）。
@@ -15,7 +15,7 @@
 
 每个阶段结束都要做：typecheck、`npm test`、`node tests/ui.mjs`（动了 bridge / compat 再跑 `npm run smoke`）；看最新一次的 `shim-unimplemented.log`；确认没往 `C:\Program Files\VSCodium` 写任何东西、git 里没有密钥；用屏幕工具截图，跟 VSCodium 里的同一界面对比；用 `run-dev.cmd` 试用。
 
-测试现状（2026-10-25，1.0.0）：单元 775/775，语言包 0 条缺译（插件界面对照表 1748 条），界面 79/79，smoke 14/14（用 DeepSeek 接口跑的）；打包版（`VILAUS_EXECUTABLE`）界面 79/79、smoke 14/14。安装包（`tests/installer.mjs`）上一次跑是 2026-10-13（当前用户 6/6、所有用户 7/7），之后本机一直装着 Vilausity，脚本会拒绝运行。注意：这些界面测试和 smoke 的测试实例用的是本机 VSCodium 里的 cc 插件（当时是 2.1.302），不是正在用的 Vilausity 自动更新到的版本（2026-11-17 是 2.1.325 / 2.1.326），见 1.0.1 ③。
+测试现状（2026-10-25，1.0.0）：单元 775/775，语言包 0 条缺译（插件界面对照表 1748 条），界面 79/79，smoke 14/14（用 DeepSeek 接口跑的）；打包版（`VILAUS_EXECUTABLE`）界面 79/79、smoke 14/14。安装包（`tests/installer.mjs`）上一次跑是 2026-10-13（当前用户 6/6、所有用户 7/7），之后本机一直装着 Vilausity，脚本会拒绝运行。注意：这些界面测试和 smoke 的测试实例用的是本机 VSCodium 里的 cc 插件（当时是 2.1.302），不是正在用的 Vilausity 自动更新到的版本。2026-11-17 用 `VILAUS_TEST_EXTENSION_DIR` 在 2.1.326 上跑：界面 76/79（插件更新那 3 步在 `--extension-dir` 下本来就做不了）、smoke 14/14（DeepSeek），见 1.0.1 ③。
 
 ## M0 技术验证：完成（2026-10-08）
 
@@ -705,6 +705,7 @@ Vilausity 多数时候拿来做简单的电脑任务，工作流基本在单个�
 - [ ] 单元测试：`compatible` 带，`anthropic-api` 和订阅不带，`provider.env` 能覆盖
 - [ ] 实测：DeepSeek + auto 模式，让 Claude 跑一条要过检查的命令（不在安全名单上的，比如 `node -e`），能跑
 - 顺带：`b44b1bc` 替用户回答的计费提示（`auto_mode_server_fallback`），2.1.319 之后接 DeepSeek 没再出现过；加了这个变量以后也不会再出。bridge 里那段代码留着，不碍事
+- **2.1.326 起更急**（2026-11-17）：新对话默认就是 Auto（插件提示 "Auto mode is now Claude Code's default permission mode"），照 DeepSeek 预设新建的接口开箱就什么都跑不了。2.1.326 上复现过：不设这个变量，Auto 拒 Bash 和 MCP（"Auto mode is unavailable"）
 
 ### ② 兼容接口没关"非必要流量"时，CLI 每次启动都去请求 api.anthropic.com
 
@@ -716,14 +717,19 @@ Vilausity 多数时候拿来做简单的电脑任务，工作流基本在单个�
 ### ③ 在当前的插件版本上重跑全部测试
 
 - 1.0.0 的测试结果（"测试现状"那行）是在本机 VSCodium 里的 2.1.302 上跑的：测试实例的临时数据目录里没有自装的插件。正在用的 Vilausity 2026-11-17 已经自动更新到 2.1.325（2.1.326 下好了、下次启动换上）。
-- [ ] 测试脚本能指定插件目录（2026-11-17 在做：`tests/ui.mjs`、`tests/smoke.mjs` 加一个环境变量，给测试实例加 `--extension-dir`）
-- [ ] 在当时最新的插件上跑完整界面测试和 smoke；挂了的先看是不是 `bridge.ts` 页面提示里的类名变了
+- [x] 测试脚本能指定插件目录（`d8a9faf`）：`VILAUS_TEST_EXTENSION_DIR=<插件目录>` 给测试实例加 `--extension-dir`（放在每步自己的参数前面，`vilaus://` 那步要链接是最后一个参数）；首次启动那几步不加（它们要的就是没有插件）。同一个提交里：给 Claude Code 单独配置目录的 13 步先往它的 `.claude.json` 写仓库根目录的信任（`ownClaudeEnv`，2.1.323 起没信任记录的文件夹会弹"Trust this folder in Claude Code?"模态框、盖住窗口）；可选的 `VILAUS_TEST_UNTHROTTLED=1` 让被盖住的窗口照常出画面
+- [x] 在 2.1.326 上跑（2026-11-17）：界面 76/79，挂的 3 步是插件更新那几步（要 Vilausity 自己装插件的目录，`--extension-dir` 时本来就做不了）；smoke 14/14（DeepSeek）。以后插件再升级照这个跑，挂了的先看是不是 `bridge.ts` 页面提示里的类名变了
 - [ ] 汉化：`node tools/extension-strings/extract.mjs <新插件目录>` 后 `npm run nls`，看缺译和过时的条目
 - `extensions\unimplemented.json`：2.1.310 到 2.1.325 都没有缺的接口（2026-11-17 看的）
 
 ### ④ DeepSeek 接口下各功能的全面测试（2026-11-17）
 
-- 用 1.0.0 + 插件 2.1.326 + DeepSeek 接口，CLI 层（各权限模式、工具、MCP、计划模式、记忆这些）和界面层逐项测，确认接 DeepSeek 时都能正常用。结论整理后把要修的排进这一节。
+- 条件：1.0.0 + 插件 2.1.326（2.1.325 只在 CLI 层测过，结果一样）；DeepSeek 预设建的接口（主模型 `deepseek-flash[1m]`，fable 档 `deepseek-v4-pro`），手动加了 `CLAUDE_CODE_AUTO_MODE_SERVER=0`、关了非必要流量。测试脚本在本地的 `.local/lab-h/`：`ds-matrix.mjs` 用同一套环境变量跑 `claude -p`，`ui-ds.mjs` 驱动开发实例。
+- **能用的**：Auto（Bash、PowerShell、MCP、Write；分类器在本地用 deepseek-flash 判，不弹计费提示）、手动模式的权限卡片、自动接受改动、计划批准后接着改、bypass（CLI）、子代理（general-purpose、Explore、自定义、后台）、Workflow 工具、Ultracode 开关、技能（Skill 工具、斜杠菜单、`context: fork`）、AskUserQuestion、`/model`（列出接口的模型）、`/compact`、`/context`（用 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`）、重启恢复、会话标题、接口的价格、WebFetch、WebSearch、后台 Bash、图片（Read、粘贴、拖进来；只有 deepseek-flash 能看）、SessionStart 钩子（startup / resume / compact）。
+- **网络**：DeepSeek 窗口的进程树只连 `api.deepseek.com` 和 `registry.npmjs.org`（Playwright MCP 用 npx 启动），没有发往 Anthropic 的请求，claude.ai 的连接器被关掉（"API-key auth precedence"）。订阅窗口一打开就起 CLI、连 `api.anthropic.com`，不用等发消息。
+- **确认了 ①**：2.1.326 上不设 `CLAUDE_CODE_AUTO_MODE_SERVER=0` 时 Auto 拒 Bash 和 MCP；而且新对话默认就是 Auto，照预设建的接口开箱就坏（① 里补了一条）。
+- **限制**：`deepseek-v4-pro` 看不了图（DeepSeek 文档也这么写）。2.1.326 里不管什么模型都没有 TodoWrite 工具。
+- [ ] 没查的：2.1.326 上，全新的 `CLAUDE_CONFIG_DIR` + 界面测试 CRLF 那步的假接口，曾经在发出任何请求前卡住；写上信任记录以后就没再出现。全新配置目录第一次运行的情况可以再看看。
 
 ### ⑤ 2027 年的法定节假日
 
